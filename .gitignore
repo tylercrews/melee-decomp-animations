@@ -29,6 +29,7 @@ Makefile
 cmake_install.cmake
 
 # Original files
+*.iso
 orig/*/*
 !orig/*/sys
 orig/*/sys/*
