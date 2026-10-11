@@ -494,7 +494,7 @@ def main():
     # Keep one center/scale for the whole clip. Knockdown centers the fighter
     # in the selected view, then fits the complete visible impact at that pivot.
     center, scale = (fit_knockdown_camera if knockdown else fit_camera)(cloud, view, args.size)
-    if effect:
+    if effect and args.ground_effects=='on':
         bounds = effect.visible_bounds(fit_times or source_times,anchors,view)
         if len(bounds):
             extent = max(np.abs((cloud-center)@view)[:,:2].max(),
@@ -560,7 +560,8 @@ def main():
         manifest['ground_effect'] = effect.provenance() if effect else None
         manifest['effect_anchors'] = anchors if effect else []
         manifest['ground_effect_display_scale'] = 1.0 if effect else None
-        manifest['framing_policy'] = 'fighter-centered whole-motion fit with complete visible impact alpha; shared source scale'
+        manifest['framing_policy'] = ('fighter-centered whole-motion fit with complete visible impact alpha; shared source scale'
+                                      if manifest['ground_effects_enabled'] else 'visible fighter-only projected whole-motion bounds')
         manifest['fighter_flash'] = flash.provenance() if flash else None
     if model['fighter_kind']==4:
         manifest['kirby_power']=args.kirby_power
