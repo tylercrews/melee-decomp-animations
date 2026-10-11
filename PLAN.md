@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status at the user's 2026-10-10 stopping point: extraction and the requested all-character/costume investigation are complete. A neutral Mario model exporter and NumPy/Pillow CPU renderer now produce actual PNG/GIF animations and an offline playback page. The first 12 completed clips cover five clapping costumes, three victories, their three waits, and a taunt. Full roster rendering, native fidelity, Blender integration, and MP4 remain open. Read `AGENTS.md`'s immediate handoff before continuing.
+Current status, 2026-10-10: extraction and the requested all-character/costume investigation are complete. Mario now has all eight animation/section choices in all five costumes: 40 GIFs/2,975 PNG masters, an offline player with separate color selection, and verified individual/bulk downloads. Full roster rendering, native fidelity, Blender integration, and MP4 remain open. Read `AGENTS.md`'s updated handoff before continuing.
 
 ## Recommendation
 
@@ -169,3 +169,5 @@ The runnable commands at the current stage are `extract_iso.py`, `inspect_motion
 Additional implemented commands are `catalog`, `export_model`, `preview`, `preview_batch`, and `preview_gallery`. The current job inventory includes all 26 forms/123 costumes with primary victory waits and both taunt facings (1,123 jobs including stage sequences). Rendering is presently Mario-only; Fox's extra `Win2Wait2` exists in the motion report but is not a job in that inventory yet.
 
 Resume priorities are bounded prototype fixes, manifest-driven FFmpeg encoding, game-reference comparison, and one-family-at-a-time renderer expansion. Honor source culling, report timing-grid/terminal hold behavior, and avoid stale PNG sequence files before calling the pilot a production exporter. Keep native and explicitly edited loops separate.
+
+Mario color coverage/download update (2026-10-10): the batch can now generate all eight available animation/section choices in all five costumes, with resume and concurrent workers. The viewer separates animation and color selection, keeps the selected color when changing animation, and exposes individual GIF saving plus per-animation and full-collection ZIPs. `preview_gallery --require-all` verifies the 40-pair matrix before finalizing it. Each ZIP uses stable unique filenames and a SHA-256 inventory. All generated data remains ignored; no Blender/FFmpeg install is needed for these GIF downloads.

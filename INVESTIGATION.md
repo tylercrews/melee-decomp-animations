@@ -479,7 +479,7 @@ Runtime caveats remain concrete: Young Link's milk and Dr. Mario's randomized pi
 
 [preview.py](tools/melee_anim/preview.py) evaluates source channels, HSD scale/matrix rules, palette skinning, textures, depth, and approximate lighting, then writes PNG masters and GIFs. Mario's taunt uses type 0 scaling and intentionally grows around 2.25x; results use type 1. The renderer preserves the native finger-channel seam, rather than silently modifying the motion. Timed scripts/props/particles/dynamics/audio and exact TEV/reflection are not implemented.
 
-Completed outputs under `build/melee_anim/preview/mario`:
+The first pilot produced these outputs under `build/melee_anim/preview/mario` (subsequently expanded to all colors in section 13):
 
 - Clapping in costume IDs 0-4: five 15-frame GIFs, each 300 ms at the explicit 50 fps / nominal 60 source-tick/s preset.
 - Default costume victories 1-3: three one-shot sequences, 101 frames each including the terminal pose.
@@ -504,3 +504,15 @@ Open local `build/melee_anim/preview/player.html` in a normal browser. It has cl
 ### Stopping point and next implementation
 
 The user requested an immediate handoff to a lighter model. See `AGENTS.md`'s immediate handoff and the top of `TODO.md`. First fix source culling, timing-grid/terminal hold, stale-frame handling, and owning-container bounds. Then add manifest-driven FFmpeg encoding/reference checks and extend renderer/runtime support by fighter family. `TODO.md` includes optional Blender and FFmpeg installation steps for later; no dependency installation was performed here. Do not re-extract or restart the completed catalog investigation.
+
+## 13. Mario animation/color downloads
+
+The next user request was to fill the missing costume variants for the other Mario animations and provide straightforward GIF saving. The implemented batch now supports the full matrix: clapping, taunt, victory entrances 1-3, and their three authored waits, each in Mario's five actual model costumes. Rendering uses the original costume models/textures rather than applying arbitrary tints.
+
+`preview_batch --action all --section all --costume all --resume --jobs 3` generates/reuses those 40 jobs. Resume verifies complete intervals, model hash, size, FPS/camera settings, and exact PNG file sets. Extra stale frames are rejected rather than accidentally included in an encode. Existing clap outputs retain 320-square resolution; the other animations retain 256-square resolution unless `--size` overrides it.
+
+`preview_gallery --require-all` checks the complete action/color matrix and builds the offline player and download packages. Animation and Costume have separate selectors. The selected GIF receives a descriptive filename such as `mario-victory2-source-costume-03-blue.gif`; an animation ZIP contains its five colors, and the full ZIP contains the entire collection. ZIP manifests record filenames, costume/action identity, and hashes. These packages contain generated GIFs/metadata and remain under the ignored `build/melee_anim/preview/downloads` directory.
+
+The player's repeat control remains preview-only: saved GIFs retain their authored one-shot/loop behavior. Explicit wait-loop choices are available independently from victory entrances. The existing CPU shading/script/seam/timing limitations remain unchanged. Regression tests cover selected-color retention, GIF/ZIP link targets, unique saved color filenames, archive hash identity, complete action enumeration, and rejecting incomplete/stale resume data.
+
+Completion checks passed for all **40 GIFs and 2,975 PNG masters**, with five distinct GIF hashes per animation/section. All eight per-animation ZIPs contain five color GIFs, and the full ZIP contains 40; filenames are unique and every stored hash matches its archive entry. GIF decoding, durations, authored loop flags, manifest/frame counts, and all 3,156 generated files' Git exclusion were checked. Sixty Python tests and the Node player/download tests pass. The browser connector is unavailable, so these results do not claim a live browser click test; the download attributes, filenames, paths, and bundle contents are verified.

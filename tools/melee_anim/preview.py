@@ -212,6 +212,10 @@ def main():
     if args.max_frames:
         source_times = source_times[:args.max_frames]
     args.output.mkdir(parents=True, exist_ok=True)
+    expected_frames = {f"frame_{i:04d}.png" for i in range(len(source_times))}
+    stale = {p.name for p in args.output.glob("frame_*.png")} - expected_frames
+    if stale:
+        parser.error(f"Output has extra frame files; choose a fresh output directory: {sorted(stale)[:5]}")
     textures = {t["image_file"]: np.asarray(Image.open(args.model.parent/t["image_file"]).convert("RGBA"))
                 for m in model["materials"] for t in m["textures"] if t.get("image_file")}
     view = camera_basis(args.yaw)
@@ -251,6 +255,8 @@ def main():
         draw.text((i*args.size+8, 8), f"source frame {source_times[frame_id]:.2f}", fill="white")
     strip.save(args.output/"contact_sheet.png")
     manifest = {"prototype": "Mario CPU textured pose preview; approximate shading, scripts not executed",
+                "character": model["character"], "costume_id": model["costume_id"],
+                "source_model_archive": model["source_archive"],
                 "action": args.action, "section": args.section, "source_symbol": motion["symbol"],
                 "source_period_frames": period, "authored_loop": looping, "sample_source_times": source_times,
                 "fps": args.fps, "nominal_ticks_per_second": args.ticks_per_second,

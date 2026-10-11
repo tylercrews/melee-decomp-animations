@@ -4,9 +4,23 @@ Updated 2026-10-10 at the user's requested stopping point. Requested animations 
 
 ## Next session: bounded fixes before expanding
 
+- [x] Expand batch selection to all eight Mario animation/section choices for every actual costume ID, including taunt and victory waits.
+- [x] Add independent animation/color selectors that preserve the chosen color.
+- [x] Add uniquely named single-GIF downloads, per-animation color ZIPs, and a full GIF ZIP.
+- [x] Add validated resume and strict full-matrix gallery checks; regression tests cover color/file identity and ZIP contents.
+
+Rebuild all Mario GIFs and download bundles with:
+
+```powershell
+python -m tools.melee_anim.preview_batch --action all --section all --costume all --resume --jobs 3
+python -m tools.melee_anim.preview_gallery --require-all
+```
+
+The target is 40 GIFs: clapping, taunt, three victories, and their three authored wait loops, each in red/yellow/black/blue/green. The viewer provides Download GIF for the selected pair, Download this animation for its color bundle, and Download all GIFs for the full collection.
+
 - [ ] Honor exported front/back PObj culling flags in `preview.render_frame`, then review existing reference poses.
 - [ ] Make source/output duration rounding explicit and decide one-shot terminal hold behavior. Current 50-frame waits become 42 GIF frames at 50 fps (0.84s); taunt includes one final frame (3.02s).
-- [ ] Detect stale owned PNG frames when rerendering a shorter sequence; reject conflicting outputs or remove only verified generated files, never the original assets or unrelated files.
+- [x] Reject stale extra PNG frames before rendering, and refuse them in resume/gallery validation; preserve unrelated files.
 - [ ] Bound pilot results clip reads to their owning public region before Popo/Nana support.
 - [ ] Run the 57 current Python tests plus player logic tests, adding only meaningful tests for these fixes.
 - [ ] Add manifest-driven MP4 encoding and `ffprobe` validation after FFmpeg is available.
@@ -191,4 +205,4 @@ Done when: both isolated character assets and a composed results scene can be ex
 
 Avoid expanding GUI, packaging, full game porting, or complete results UI work ahead of the first verified clapping MP4/GIF.
 
-Current reviewable output: `build/melee_anim/preview/player.html` with 12 Mario clips and play/pause/seek controls. Regenerate with `python -m tools.melee_anim.preview_gallery`. Native shader/scripts and loop perfection remain unverified. Resume with the bounded fixes at the top and the explicit `AGENTS.md` handoff; avoid repeating extraction/catalog work.
+Current reviewable output: `build/melee_anim/preview/player.html` with 40 Mario animation/color choices, play/pause/seek, selected-GIF saving, per-animation color ZIPs, and the full GIF ZIP. All 40 jobs/2,975 PNG masters and nine ZIPs were verified; 60 Python tests and Node control/download tests pass. Regenerate with `python -m tools.melee_anim.preview_gallery --require-all`. Native shader/scripts and loop perfection remain unverified. Continue with the remaining bounded fixes and MP4 work; avoid repeating extraction/catalog work.
