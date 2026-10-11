@@ -49,7 +49,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label id="actionlabel">Animation <select id="action" aria-label="Animation"></select></label>
 <label>Costume <select id="costume" aria-label="Costume color"></select></label>
 <button id="play">Pause</button><button id="restart">Restart</button>
-<label><input id="loop" type="checkbox"> Repeat preview</label></div>
+<label><input id="loop" type="checkbox" checked autocomplete="off"> Repeat preview</label></div>
 <fieldset id="clapmodes" class="controls"><legend>Clapping mode</legend>
 <label><input id="fullcycle" type="radio" name="clapmode" value="full" checked> Full animation</label>
 <label><input id="minimumcycle" type="radio" name="clapmode" value="minimum" disabled> Minimum cycle</label>
@@ -235,7 +235,7 @@ if(current<0){playing=false;play.textContent='Play';frame.hidden=true;gif.hidden
 still.hidden=true;framezip.hidden=true;
 document.getElementById('meta').textContent='This animation/color has not been rendered yet.';return}
 let c=clips[current];frame.hidden=false;gif.hidden=false;open.hidden=false;scrub.max=c.frames.length-1;
-loop.checked=c.authored_loop;playing=true;play.textContent='Pause';
+loop.checked=true;playing=true;play.textContent='Pause';
 gif.href=c.gif;gif.download=c.download_name;gif.textContent=`Download GIF / ${c.costume_label}`;open.href=c.gif;
 updateCycleInfo();
 c.frames.forEach(src=>{let image=new Image();image.src=src});if(render)loadRotation()}

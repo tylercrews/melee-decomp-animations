@@ -4,6 +4,8 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Default Repeat preview to on for every animation; retain manual stop-at-end behavior and explicit handoff overrides without changing saved GIF loop flags.
+
 - [x] Add Keep character centered for full/short hops: fixed zoom with per-frame camera follow, same source timing/poses and shared hop scale; carry through powers, pairs, angles, paused/native saving and selected/all-color/five-size GIF/PNG exports. Default unchecked, hidden for other actions, placed above the Movement description beside the other options. Verified 128 Python tests / Node controls, seven live previews, 14 exact exports, two five-color ZIPs, five PNG sizes and a visual comparison. See investigation section 39.
 
 - [x] Zoom Knockdown previews and GIF/PNG downloads to stable fighter-only bounds when ground impacts are off; restore full-impact framing when on. Retain paused frame, pivot, timing, fighter flash, Kirby powers, paired fighters and rotations. Verified 24 Python tests / Node controls, ten live on/off pairs, 40 selected exports and two five-color ZIPs; reviewed the comparison. See investigation section 38.
