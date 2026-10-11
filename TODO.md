@@ -206,3 +206,6 @@ Done when: both isolated character assets and a composed results scene can be ex
 Avoid expanding GUI, packaging, full game porting, or complete results UI work ahead of the first verified clapping MP4/GIF.
 
 Current reviewable output: `build/melee_anim/preview/player.html` with 40 Mario animation/color choices, play/pause/seek, selected-GIF saving, per-animation color ZIPs, and the full GIF ZIP. All 40 jobs/2,975 PNG masters and nine ZIPs were verified; 60 Python tests and Node control/download tests pass. Regenerate with `python -m tools.melee_anim.preview_gallery --require-all`. Native shader/scripts and loop perfection remain unverified. Continue with the remaining bounded fixes and MP4 work; avoid repeating extraction/catalog work.
+
+
+[ ] want to be able to rotate the images around a 3d axis
