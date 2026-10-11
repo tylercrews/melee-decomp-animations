@@ -32,6 +32,7 @@ python -m tools.melee_anim.export_model --costume 0
 python -m tools.melee_anim.preview_batch --action results-clap --costume all
 python -m tools.melee_anim.preview --action taunt --size 256 --output build/melee_anim/preview/mario/costume_00/taunt_source
 python -m tools.melee_anim.roster_batch --resume --jobs 8
+python -m tools.melee_anim.cycles
 python -m tools.melee_anim.preview_gallery --require-all
 python -m tools.melee_anim.verify_previews
 python -m tools.melee_anim.player_server
@@ -103,9 +104,15 @@ Leave existing user changes intact, keep the checklist current, and describe bac
 
 ## Current handoff after full-roster rendering
 
+Newest feature: **Minimum cycle** is an opt-in checkbox for repeat/seam-checked clapping intervals, with full authored loops default. Across every actual costume, approved intervals are Luigi 100→20 frames / 0.40s / original PNGs `[61,81)`, Kirby 134→34 / 0.68s / `[17,51)`, and Link 50→12 / 0.24s / `[26,38)`, all zero-based at 50fps. These are edited repeats; subtle finger/body motion may differ. The other 23 families retain full loops under conservative checks; this does not prove no other manual edit is possible.
+
+`cycles.py` scans every costume in all 26 clapping families, writes ignored `minimum-cycles.json`, and selects the smallest qualifying rendered-image recurrence lag with a common best seam phase. It checks the real unwrapped next image, closing step, and velocity rather than a wrapped endpoint. Constant/slow/one-shot or incompatible-costume samples are rejected. Manifest/PNG size+mtime fingerprints disable stale approvals after regeneration. Run `cycles` after changing masters, regenerate the gallery, and restart the service.
+
+Playback, every GIF size/color bundle, and mapped paused PNGs share that interval. GIF names include `minimum-cycle`; aggregate GIF exports shorten only approved claps. Ticks stay 20ms; no endpoint duplicate, retiming, or blended frame is introduced. The UI shows count/FPS/duration for computing common repeat lengths. GIF compression can merge identical images into holds; use displayed uniform timeline counts for combining loops. 72 Python tests and Node tests pass. All 15 approved costumes were decoded at all four sizes with exact 400/680/240ms looping duration, and first-frame all-color PNG bytes matched the original masters. Default-costume closing seams were visually inspected, without game-reference or perfect-seam claims.
+
 Latest addition: the player has Download size options **Extra small 128, Small 256 (default), Medium 512, Large 1024**, applying to GIFs, paused PNGs, all-costume bundles, and the full GIF collection. Larger sizes resample the existing 256px exports with Lanczos; they are not new higher-detail renders. Size changes preserve playback/pause state, output frame index, action, and costume. Saved filenames include `-128px` / `-256px` / `-512px` / `-1024px`.
 
-Run `python -m tools.melee_anim.player_server`, then open `http://127.0.0.1:8765/player.html`. The local service is running in the current session (exec session 56802). It binds only to 127.0.0.1, serves the preview directory, and uses the already installed Pillow. Direct `player.html` file use still supports the original 256px downloads; other sizes use that local service. Restart the service after regenerating/changing the clip catalog. No new dependency was installed.
+Run `python -m tools.melee_anim.player_server`, then open `http://127.0.0.1:8765/player.html`. The local service is running in the current session. It binds only to 127.0.0.1, serves the preview directory, and uses the already installed Pillow. Direct `player.html` file use still supports the original 256px downloads; other sizes use that local service. Restart the service after regenerating/changing the clip catalog. No new dependency was installed.
 
 `downloads.py` resizes an existing GIF while preserving decoded frame delays and loop metadata, and resizes the exact selected PNG master. Cache keys include source bytes, size, format, and a resizer version; cache/bundle writes are atomic under ignored `build/melee_anim/preview/downloads/resized`. All-color PNG bundles use the same zero-based frame index for every actual costume. The HTTP service validates fixed catalog identities/options and serializes exports to bound 1024px GIF memory. It generates/caches files on demand; do not eagerly generate four complete PNG datasets. 68 Python tests and Node player tests pass, plus real Mario victory-3 GIF/still/all-color downloads at all four sizes, Game & Watch's four 128px looping GIFs, and paired Ice Climbers at 512px.
 

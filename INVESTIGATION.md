@@ -549,6 +549,8 @@ Completion results: **984/984 jobs, zero missing**, 81,369 PNG masters, 209 GIF 
 
 ## 15. Sized GIF and still downloads
 
+Subsequent clapping-cycle investigation and the minimum-cycle toggle are documented in section 16 below.
+
 The player now offers Extra small **128×128**, Small **256×256** (default/current), Medium **512×512**, and Large **1024×1024**. The selection affects individual GIFs, paused PNGs, all-costume GIF/PNG bundles, and the full GIF collection. Changing size keeps the selected action, costume, and paused frame. Filenames include the chosen pixel size.
 
 [downloads.py](tools/melee_anim/downloads.py) resamples the existing exports using Pillow Lanczos. Medium/Large are enlargements of the current 256px renders; they do not add model-render detail. GIFs preserve source palette colors, decoded delays, and authored loop metadata; resizing can combine visually identical frames while preserving duration. PNGs retain RGBA and use the exact selected original output frame. Source-byte/version/size/format fingerprints invalidate changed exports; caches and ZIPs use atomic replacement under ignored `downloads/resized`.
@@ -556,3 +558,23 @@ The player now offers Extra small **128×128**, Small **256×256** (default/curr
 [player_server.py](tools/melee_anim/player_server.py) provides on-demand sizing at `http://127.0.0.1:8765/player.html`. Start it with `python -m tools.melee_anim.player_server`. It binds only to loopback and uses the existing Python/Pillow installation. The offline file still provides direct original-size downloads; resized downloads require this service. Serial generation limits memory for long 1024px GIFs and avoids storing every frame at four sizes. The same HTTP options support every cataloged character/costume, including paired exports; invalid identities, sizes, or frame indices are rejected.
 
 Verification: 68 Python tests and Node player/download tests pass. Synthetic checks cover all four dimensions, PNG alpha, GIF delays/one-shot/loop metadata, frame identity across color ZIPs, source-change cache invalidation, and HTTP attachment/error responses. Real Mario victory 3 exports at 68/101 were verified for selected PNGs, five-color PNG ZIPs, and GIFs at all sizes; GIF duration stays 2020ms and remains a one-shot. Four Game & Watch 128px color GIFs retain 500ms looping playback; a paired Ice Climbers 512px GIF retains its loop. The service is running for the current session. No native browser click test or higher-resolution model render is claimed.
+
+## 16. Shorter clapping cycles
+
+Luigi's 120-source-tick / 100-output-frame clapping loop contains approximately five repeated claps with small finger/body differences; the skeleton is not exactly periodic every 24 source ticks. The new Minimum cycle toggle therefore exposes an explicitly edited contiguous repeat while leaving the full authored loop as default.
+
+[cycles.py](tools/melee_anim/cycles.py) inspected all 26 families across every actual costume. It compares rendered RGB recurrence at 64px, requires a local repeat minimum with at least 35% improvement over intervening motion and error at most 0.9 times motion variation, then checks the actual unwrapped next image, closing step, and discrete velocity. Endpoint error is limited to 0.8 times mean adjacent-frame change, closing change to 1.25 times the 90th-percentile ordinary step, and velocity mismatch to twice mean change. These heuristic checks select visually close edits, not mathematically perfect periods. The shortest passing length uses a common best seam phase for all costumes; static/gradual/one-shot/poor-repeat candidates are rejected.
+
+| Character | Full frames | Minimum frames | Duration at 50fps | Original PNG interval (zero-based) |
+| --- | ---: | ---: | ---: | --- |
+| Luigi | 100 | 20 | 0.40s | `[61,81)` |
+| Kirby | 134 | 34 | 0.68s | `[17,51)` |
+| Link | 50 | 12 | 0.24s | `[26,38)` |
+
+The remaining 23 families retain full loops under these checks; that does not prove no further manually edited cycle exists. Manifest/master size+mtime fingerprints invalidate stale approval after rerendering. The ignored report `minimum-cycles.json` records every family's outcome, source interval, duration, and error metrics. There is no duplicate endpoint, retiming, or blended frame.
+
+The player uses the interval for playback/scrubbing and displays timeline count, FPS, and duration for computing common repeat lengths. [downloads.py](tools/melee_anim/downloads.py) encodes the exact original PNG interval at each chosen size, preserving palette and 20ms ticks with infinite looping. Filenames identify `minimum-cycle`. Individual/color/full GIF ZIPs respect the toggle; unsupported clips retain full intervals in aggregate exports. Paused PNGs map the shortened index to the original master, including all colors. GIF encoders can combine identical pictures into longer holds; displayed uniform timeline counts are the useful basis for combining loops.
+
+Verification: 72 Python tests and Node controls tests passed, including rejection of held/drifting/one-shot or incompatible-costume false repeats, shortened bounds and wrapping, GIF/PNG interval identity, and full-loop fallback. All four Luigi, six Kirby, and five Link costumes were decoded at all four GIF sizes with exact 400/680/240ms looping durations. First-frame all-color 256px PNG downloads match original master bytes. Last-two/first-two closing contact sheets were visually inspected for default costumes. No native browser click test, game-reference comparison, or perfect-loop claim is made.
+
+After changing masters run `python -m tools.melee_anim.cycles`, regenerate `preview_gallery`, and restart `player_server`.

@@ -46,10 +46,13 @@ def make_server(root, port=8765, catalog=None):
                 return super().do_GET()
             try:
                 values = parse_qs(url.query, strict_parsing=True)
-                allowed = {'character', 'action', 'costume', 'size', 'kind', 'scope', 'frame'}
+                allowed = {'character', 'action', 'costume', 'size', 'kind', 'scope', 'frame', 'cycle', 'view'}
                 if set(values)-allowed or any(len(v) != 1 for v in values.values()):
                     raise ValueError('Unknown or repeated download option')
                 options = {k: v[0] for k, v in values.items()}
+                view = options.pop('view', '0')
+                if view not in ('0', '1') or view == '1' and (options.get('kind', 'gif') != 'gif' or options.get('scope', 'costume') != 'costume'):
+                    raise ValueError('Inline viewing requires one GIF')
                 for key in ('costume', 'size', 'frame'):
                     if key in options:
                         options[key] = int(options[key])
@@ -66,7 +69,7 @@ def make_server(root, port=8765, catalog=None):
                 return
             self.send_response(200)
             self.send_header('Content-Type', mime)
-            self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+            self.send_header('Content-Disposition', f'{"inline" if view == "1" else "attachment"}; filename="{filename}"')
             self.send_header('Content-Length', str(target.stat().st_size))
             self.end_headers()
             try:

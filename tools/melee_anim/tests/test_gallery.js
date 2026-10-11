@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -96,6 +96,33 @@ elements.downloadsize.value='256';elements.downloadsize.onchange();
 assert.match(elements.still.href,/frame_0067.png$/);
 assert(html.includes('download="melee-all-characters-all-animations.zip"'));
 assert(fs.existsSync(path.join(path.dirname(page), 'downloads/melee-all-characters-all-animations.zip')));
+for (const [slug,length] of [['luigi',20],['kirby',34],['link',12]]) {
+  elements.character.value=slug;elements.character.onchange();
+  elements.action.value='results-clap_source';elements.action.onchange();
+  elements.scrub.value='3';elements.scrub.oninput();
+  assert.equal(elements.minimumcycle.disabled,false);
+  elements.minimumcycle.checked=true;elements.minimumcycle.onchange();
+  const start=data('clips[current].minimum_cycle.start');
+  assert.equal(data('playing'),false);
+  assert.equal(data('frameCount()'),length);
+  assert.equal(elements.scrub.max,length-1);
+  assert.equal(elements.frame.src,data(`clips[current].frames[${start}]`));
+  assert.equal(new URL(elements.gif.href).searchParams.get('cycle'),'minimum');
+  assert.equal(new URL(elements.open.href).searchParams.get('cycle'),'minimum');
+  assert.equal(new URL(elements.open.href).searchParams.get('view'),'1');
+  assert.match(elements.gif.download,/-minimum-cycle-256px.gif$/);
+  elements.scrub.value=String(length-1);elements.scrub.oninput();
+  assert.equal(new URL(elements.still.href).searchParams.get('frame'),String(length-1));
+  elements.play.onclick();context.nextFrame(20);
+  assert.equal(data('index'),0,'short loops wrap without an extra endpoint');
+  elements.minimumcycle.checked=false;elements.minimumcycle.onchange();
+  assert.equal(data('frameCount()'),data('clips[current].frames.length'));
+  assert.equal(elements.gif.href,data('clips[current].gif'));
+}
+elements.character.value='mario';elements.character.onchange();
+elements.action.value='taunt_source';elements.action.onchange();
+assert.equal(elements.minimumcycle.disabled,true);
+assert.equal(elements.minimumcycle.checked,false);
 // Served pages use their own origin, including a user-selected server port.
 const servedElements=Object.fromEntries(Object.keys(elements).map(id=>[id,
   {value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));

@@ -6,6 +6,8 @@ Download sizes are implemented as 128/256/512/1024px presets for GIFs, exact pau
 
 ## Recommendation
 
+The opt-in Minimum cycle mode now shortens checked clapping repeats: Luigi 20 frames, Kirby 34, Link 12 at 50fps. Full loops remain default. Use one original PNG interval across all actual costumes, with rendered recurrence and unwrapped seam checks, preserving 20ms ticks and labeling these as edited repeats. Other clips keep full intervals until a shorter candidate passes. Playback, sized GIF/bundle exports, and mapped paused PNGs share interval metadata. Show timeline count/FPS/duration for combining loops; do not base common lengths on GIF compression's merged-image count. Regenerate analysis after master changes and invalidate stale cuts through source fingerprints.
+
 The full-roster preview milestone uses [roster_batch.py](tools/melee_anim/roster_batch.py), followed by the offline gallery and [verify_previews.py](tools/melee_anim/verify_previews.py). Its saved PNGs are the still-image source; the gallery packages the same frame across actual costume IDs rather than rerendering a different pose. Precomputed ZIPs support direct local-file use. A temporary-file replacement and byte-checked reuse make still packaging resumable, with eight bounded worker threads.
 
 The Windows memory-bitmap backend is a speed improvement for the prototype, not a new requirement to port the game engine. Preserve the neutral model/pose interface for a later Blender renderer. Initial visibility defaults, source near-zero scale handling, node/branch visibility, and owning packed-container bounds are implemented. Native material/lighting fidelity, timed appearance/props, exact Ice Climbers placement, and game-reference validation remain separate milestones.

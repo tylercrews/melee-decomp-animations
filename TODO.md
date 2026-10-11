@@ -4,6 +4,16 @@ Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 2
 
 ## Current workflow and remaining work
 
+- [x] Investigate repeated claps across all 26 character families and every actual costume.
+- [x] Add opt-in Minimum cycle playback/download mode, keeping authored loops default.
+- [x] Approve shared edited intervals: Luigi 20 frames / 0.40s, Kirby 34 / 0.68s, Link 12 / 0.24s, at 50fps.
+- [x] Apply shortened intervals to all GIF sizes/bundles and map paused PNGs to exact original masters.
+- [x] Show count/FPS/duration, preserve tick spacing, and omit a duplicate endpoint.
+- [x] Invalidate stale analysis after master/manifest changes and record outcomes in ignored `minimum-cycles.json`.
+- [x] Verify every approved costume at all four sizes and exact all-color still bytes; 72 Python tests and Node controls pass.
+- [ ] Evaluate further edited clap cycles manually or with improved source-space checks; the other 23 families currently retain full loops.
+- [ ] Compare shortened seams over actual repeats with game-reference footage before claiming production loop fidelity.
+
 - [x] Expand batch selection to all eight Mario animation/section choices for every actual costume ID, including taunt and victory waits.
 - [x] Add independent animation/color selectors that preserve the chosen color.
 - [x] Add uniquely named single-GIF downloads, per-animation color ZIPs, and a full GIF ZIP.
@@ -13,6 +23,7 @@ Rebuild the full roster and download bundles with:
 
 ```powershell
 python -m tools.melee_anim.roster_batch --resume --jobs 8
+python -m tools.melee_anim.cycles
 python -m tools.melee_anim.preview_gallery --require-all
 python -m tools.melee_anim.verify_previews
 node tools/melee_anim/tests/test_gallery.js

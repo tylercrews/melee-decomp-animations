@@ -102,8 +102,38 @@ class DownloadSizeTests(unittest.TestCase):
             self.assertEqual(error.exception.code, 400)
             with self.assertRaises(HTTPError):
                 urlopen(base+'/export?character=synthetic&action=taunt_source&size=128&size=512')
+            with urlopen(base+'/export?character=synthetic&action=taunt_source&size=128&kind=gif&view=1') as response:
+                self.assertTrue(response.headers['Content-Disposition'].startswith('inline;'))
         finally:
             server.shutdown(); server.server_close(); thread.join()
+
+    def test_minimum_cycle_gif_and_stills_use_the_same_selected_interval(self):
+        for clip in self.clips:
+            clip.update(action_key='results-clap_source', fps=50,
+                        minimum_cycle={'start': 1, 'length': 1, 'full_length': 2})
+        options = dict(character='synthetic', action='results-clap_source', size=128, cycle='minimum')
+        path, name, _ = self.catalog.export(**options)
+        self.assertIn('-minimum-cycle-128px.gif', name)
+        with Image.open(path) as im:
+            self.assertEqual(im.info['loop'], 0)
+            self.assertEqual(im.info['duration'], 20)
+            self.assertEqual(im.n_frames, 1)
+            self.assertEqual(im.convert('RGB').getpixel((0, 0)), (255, 0, 0))
+        path, name, _ = self.catalog.export(**options, kind='png', frame=0)
+        with Image.open(path) as im:
+            self.assertEqual(im.getpixel((0, 0)), (255, 0, 0, 255))
+        self.assertIn('-minimum-cycle-frame-0001-128px.png', name)
+        with self.assertRaises(ValueError):
+            self.catalog.export(**options, kind='png', frame=1)
+        path, _, _ = self.catalog.export(**options, scope='colors')
+        with ZipFile(path) as archive:
+            self.assertEqual(len(archive.namelist()), 2)
+            self.assertTrue(all('minimum-cycle' in name for name in archive.namelist()))
+        full, _, _ = self.catalog.export(**{**options, 'cycle': 'full'})
+        with Image.open(full) as im:
+            self.assertEqual(im.n_frames, 3)
+        with self.assertRaises(ValueError):
+            self.catalog.export(**{**options, 'cycle': 'invalid'})
 
 
 if __name__ == '__main__':

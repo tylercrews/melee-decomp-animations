@@ -51,6 +51,24 @@ def resize_gif(data, size):
     return out.getvalue()
 
 
+def cycle_gif(root, clip, size):
+    """Encode the chosen PNG interval at the original FPS, without endpoint duplication."""
+    cycle = clip['minimum_cycle']
+    with Image.open(root/clip['gif']) as source:
+        palette = source.copy()
+    frames = []
+    for path in clip['frames'][cycle['start']:cycle['start']+cycle['length']]:
+        with Image.open(root/path) as source:
+            image = source.convert('RGB')
+            if image.size != (size, size):
+                image = image.resize((size, size), Image.Resampling.LANCZOS)
+            frames.append(image.quantize(palette=palette, dither=Image.Dither.NONE))
+    output = BytesIO()
+    frames[0].save(output, format='GIF', save_all=True, append_images=frames[1:],
+                   duration=1000//clip['fps'], loop=0, disposal=2, optimize=False)
+    return output.getvalue()
+
+
 class DownloadCatalog:
     def __init__(self, root, clips=None):
         self.root = Path(root).resolve()
@@ -58,8 +76,8 @@ class DownloadCatalog:
         self.cache = self.root/'downloads'/'resized'
         self.cache.mkdir(parents=True, exist_ok=True)
 
-    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0):
-        if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all'):
+    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full'):
+        if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum'):
             raise ValueError('Unsupported download option')
         if scope == 'all' and kind != 'gif':
             raise ValueError('All-character export is only available for GIFs')
@@ -68,23 +86,35 @@ class DownloadCatalog:
                  (scope == 'colors' or c['costume_id'] == costume)]
         if not clips:
             raise ValueError('Unknown character, animation, or costume')
-        if kind == 'png' and any(not 0 <= frame < len(c['frames']) for c in clips):
+        def minimum(clip):
+            return clip.get('minimum_cycle') if cycle == 'minimum' and clip['action_key'] == 'results-clap_source' else None
+        if kind == 'png' and any(not 0 <= frame < (minimum(c)['length'] if minimum(c) else len(c['frames'])) for c in clips):
             raise ValueError('Frame index is outside this animation')
         entries = []
         for clip in clips:
+            short = minimum(clip)
+            marked_name = clip['download_name'].replace('.gif', '-minimum-cycle.gif') if short else clip['download_name']
             if kind == 'gif':
                 source = self.root/clip['gif']
-                name = sized_name(clip['download_name'], size)
+                name = sized_name(marked_name, size)
             else:
-                source = self.root/clip['frames'][frame]
-                name = sized_name(clip['download_name'].replace('.gif', f'-frame-{frame+1:04d}.png'), size)
+                source_index = short['start']+frame if short else frame
+                source = self.root/clip['frames'][source_index]
+                name = sized_name(marked_name.replace('.gif', f'-frame-{frame+1:04d}.png'), size)
             data = source.read_bytes()
-            key = hashlib.sha256(b'resize-v1\0'+str(size).encode()+b'\0'+kind.encode()+b'\0'+data).hexdigest()
+            fingerprint = b''
+            if short and kind == 'gif':
+                # Include every selected PNG and FPS, not just the old full GIF.
+                fingerprint = repr((short['start'], short['length'], clip['fps'])).encode()
+                for path in clip['frames'][short['start']:short['start']+short['length']]:
+                    fingerprint += hashlib.sha256((self.root/path).read_bytes()).digest()
+            key = hashlib.sha256(b'resize-v2\0'+str(size).encode()+b'\0'+kind.encode()+b'\0'+data+fingerprint).hexdigest()
             target = self.cache/f'{key}.{kind}'
             if not target.is_file():
                 with Image.open(BytesIO(data)) as original:
                     same_size = original.size == (size, size)
-                resized = data if same_size else (resize_gif if kind == 'gif' else resize_png)(data, size)
+                resized = cycle_gif(self.root, clip, size) if short and kind == 'gif' else (
+                    data if same_size else (resize_gif if kind == 'gif' else resize_png)(data, size))
                 temporary = target.with_suffix(target.suffix+'.tmp')
                 temporary.write_bytes(resized)
                 temporary.replace(target)
@@ -105,4 +135,6 @@ class DownloadCatalog:
             name += f'-frame-{frame+1:04d}'
         if scope == 'colors':
             name += '-all-colors'
+        if any(minimum(c) for c in clips):
+            name += '-minimum-cycle'
         return bundle, f'{name}-{size}px.zip', 'application/zip'

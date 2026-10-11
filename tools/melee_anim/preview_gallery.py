@@ -43,7 +43,9 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label>Animation <select id="action" aria-label="Animation"></select></label>
 <label>Costume <select id="costume" aria-label="Costume color"></select></label>
 <button id="play">Pause</button><button id="restart">Restart</button>
-<label><input id="loop" type="checkbox"> Repeat preview</label></div>
+<label><input id="loop" type="checkbox"> Repeat preview</label>
+<label><input id="minimumcycle" type="checkbox" disabled> Minimum cycle</label>
+<small id="cyclehint"></small></div>
 <div class="stage"><img id="frame" alt="Animated character costume preview"></div>
 <div class="timeline"><input id="scrub" type="range" min="0" value="0" step="1" aria-label="Animation frame"><span id="time"></span></div>
 <div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
@@ -57,7 +59,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <a class="download" id="framezip" hidden download>Download paused frame in all colors</a>
 <a id="open" target="_blank" rel="noopener">Open GIF</a></div>
 <small>Repeat preview does not alter the saved GIF. Victory loops are the separate authored wait animations. If a browser opens a local file instead of downloading it, use Save link as.</small>
-<p id="servicehint" hidden>For resized downloads, open the <a href="http://127.0.0.1:8765/player.html">local download player</a>.
+<p id="servicehint" hidden>For resized or minimum-cycle downloads, open the <a href="http://127.0.0.1:8765/player.html">local download player</a>.
 If it is closed, start it from the repository with <code>python -m tools.melee_anim.player_server</code>.</p>
 <div class="meta" id="meta"></div>
 <p>This prototype uses original models and motion curves with approximate shading. Timed game scripts, effects, props, dynamics, and audio are not played; native seams are preserved.</p>
@@ -68,7 +70,8 @@ const action=document.getElementById('action'), costume=document.getElementById(
 play=document.getElementById('play'), restart=document.getElementById('restart'), loop=document.getElementById('loop'),
 scrub=document.getElementById('scrub'), clock=document.getElementById('time'), gif=document.getElementById('gif'),
 archive=document.getElementById('animationzip'), open=document.getElementById('open'),
-downloadsize=document.getElementById('downloadsize'), allzip=document.getElementById('allzip');
+downloadsize=document.getElementById('downloadsize'), allzip=document.getElementById('allzip'),
+minimumcycle=document.getElementById('minimumcycle'), cyclehint=document.getElementById('cyclehint');
 downloadsize.value='256';
 const exportBase=location.protocol==='http:'?'':'http://127.0.0.1:8765';
 document.getElementById('servicehint').hidden=location.protocol==='http:';
@@ -83,23 +86,34 @@ list.forEach(a=>{let o=document.createElement('option');o.value=a.key;o.textCont
 action.value=list.some(a=>a.key===old)?old:list[0].key}
 colors();actions();
 allzip.textContent=`Download all ${clips.length} GIFs`;
+function useMinimum(){return current>=0&&minimumcycle.checked&&Boolean(clips[current].minimum_cycle)}
+function frameCount(){let c=clips[current];return useMinimum()?c.minimum_cycle.length:c.frames.length}
+function sourceIndex(){return index+(useMinimum()?clips[current].minimum_cycle.start:0)}
+function markedName(name){return useMinimum()?name.replace(/(\.[^.]+)$/,'-minimum-cycle$1'):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
+function updateCycleInfo(){if(current<0)return;let c=clips[current];let short=c.minimum_cycle;minimumcycle.disabled=!short;
+if(!short)minimumcycle.checked=false;
+cyclehint.textContent=short?`${short.length} frames / ${(short.length/c.fps).toFixed(2)}s instead of ${c.frames.length} frames. Edited repeat; subtle motion may differ.`:
+(c.action_key==='results-clap_source'?'No shorter repeat passed the checks.':'Minimum cycle is available for repeating claps.');
+scrub.max=frameCount()-1;
+document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frames at ${c.fps} fps / ${(frameCount()/c.fps).toFixed(2)}s / ${useMinimum()?'minimum cycle (edited loop)':c.authored_loop?'full authored loop':'one-shot action'}`}
 function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
-costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index)});return `${exportBase}/export?${query}`}
+costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:useMinimum()?'minimum':'full'});return `${exportBase}/export?${query}`}
 function updateDownloads(){if(current<0)return;let c=clips[current];let a=animations.find(a=>a.key===c.action_key&&a.character===c.character);
-let original=downloadsize.value==='256';
-gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(c.download_name);
-archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(a.download_name);
+let original=downloadsize.value==='256'&&!useMinimum();
+gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(markedName(c.download_name));
+open.href=original?c.gif:exportURL('gif','costume')+'&view=1';
+archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(markedName(a.download_name));
 allzip.href=original?'downloads/melee-all-characters-all-animations.zip':exportURL('gif','all');
-allzip.download=sizedName('melee-all-characters-all-animations.zip');
+allzip.download=sizedName(markedName('melee-all-characters-all-animations.zip'));
 still.href=original?c.frames[index]:exportURL('png','costume');
-still.download=sizedName(c.download_name.replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`));
+still.download=sizedName(markedName(c.download_name).replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`));
 framezip.href=original?`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`:exportURL('png','colors');
-framezip.download=sizedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`)}
-function show(){if(current<0)return;let c=clips[current];let src=c.frames[index];if(lastImage!==src){frame.src=src;lastImage=src}scrub.value=index;
+framezip.download=sizedName(markedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`))}
+function show(){if(current<0)return;let c=clips[current];let src=c.frames[sourceIndex()];if(lastImage!==src){frame.src=src;lastImage=src}scrub.value=index;
 updateDownloads();
 still.hidden=playing;framezip.hidden=playing;
-clock.textContent=`${index+1}/${c.frames.length} / source ${c.source_times[index].toFixed(2)}`}
+clock.textContent=`${index+1}/${frameCount()} / source ${c.source_times[sourceIndex()].toFixed(2)}`}
 function select(){current=clips.findIndex(c=>c.character===character.value&&c.action_key===action.value&&String(c.costume_id)===costume.value);
 index=0;carry=0;last=performance.now();
 let a=animations.find(a=>a.key===action.value&&a.character===character.value);archive.href=a.zip;archive.download=a.download_name;
@@ -110,15 +124,16 @@ document.getElementById('meta').textContent='This animation/color has not been r
 let c=clips[current];frame.hidden=false;gif.hidden=false;open.hidden=false;scrub.max=c.frames.length-1;
 loop.checked=c.authored_loop;playing=true;play.textContent='Pause';
 gif.href=c.gif;gif.download=c.download_name;gif.textContent=`Download GIF / ${c.costume_label}`;open.href=c.gif;
-document.getElementById('meta').textContent=`${c.symbol} / ${c.period} source frames / ${c.fps} fps preview / ${c.authored_loop?'authored loop':'one-shot action'}`;
+updateCycleInfo();
 c.frames.forEach(src=>{let image=new Image();image.src=src});show()}
 character.onchange=()=>{colors();actions();select()};action.onchange=select;costume.onchange=select;
 downloadsize.onchange=updateDownloads;
+minimumcycle.onchange=()=>{if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();show()};
 play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
 restart.onclick=()=>{if(current<0)return;index=0;last=performance.now();carry=0;playing=true;play.textContent='Pause';show()};
 scrub.oninput=()=>{if(current<0)return;index=Number(scrub.value);playing=false;play.textContent='Play';show()};
 function tick(now){if(current>=0&&playing){let c=clips[current];carry+=Math.min(now-last,250);let step=1000/c.fps;
-while(carry>=step){carry-=step;if(index+1<c.frames.length)index++;else if(loop.checked)index=0;else{playing=false;play.textContent='Play';break}}show()}
+while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.checked)index=0;else{playing=false;play.textContent='Play';break}}show()}
 last=now;requestAnimationFrame(tick)}
 select();requestAnimationFrame(tick);
 </script></html>'''
@@ -159,6 +174,8 @@ def collect_clips(root):
                       "authored_loop": manifest["authored_loop"], "symbol": manifest["source_symbol"],
                       "download_name": filename, "source_times": times, "gif": f"{relative}/preview.gif",
                       "frames": [f"{relative}/frame_{i:04d}.png" for i in range(len(times))]})
+    from .cycles import attach_cycles
+    attach_cycles(root, clips)
     return clips
 
 
