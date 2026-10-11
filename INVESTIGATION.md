@@ -839,3 +839,9 @@ Verification performed:
 The catalog/player were regenerated without replacing legacy masters or bundles. The local server was restarted (task-owned exec session 79443) with the expanded catalog/API. No assets were re-extracted, dependencies installed, original decomp code changed or emulator launched. No native browser navigation or original-game fidelity comparison was automated.
 
 Next fidelity work: implement deterministic particle-bank playback for missed-tech dust and the tech joint callback; reproduce exact TEV/billboard/depth/vertex-color blending and surface overrides; compare against a game reference; then add full trajectory/collision and runtime ground-state transitions. Current output is an isolated source-motion asset with optional core effects, not a complete physical knockdown scenario.
+
+## 33. Knockdown label and alphabetical character selection (2026-10-11)
+
+The Animation Type dropdown now displays **Knockdown** for the seven ground-motion choices. This is a presentation change: internal `tech` values, ordinary-motion source IDs, cache keys and effect behavior remain intact. `preview_gallery.py` sorts the generated Character catalog by case-insensitive display name without changing the source-indexed `CHARACTERS` table. All 26 entries remain selectable, including Zelda and Sheik separately, and Mario remains the initial selection.
+
+Regenerated only `player.html` using `preview_gallery --require-all --player-only`. The Node control regressions passed, including the label, alphabetical order, Mario default and separate forms. A live HTTP check verified the new label and all 26 sorted names in the served HTML. No asset rendering, server restart or dependency changes were required.

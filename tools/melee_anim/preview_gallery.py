@@ -44,7 +44,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label>Character <select id="character" aria-label="Character"></select></label>
 <label>Animation Type <select id="animationtype" aria-label="Animation Type">
 <option value="victory">Victory Pose</option><option value="taunt">Taunt</option>
-<option value="clapping">Clapping</option><option value="attack">Attack</option><option value="tech">Tech</option></select></label>
+<option value="clapping">Clapping</option><option value="attack">Attack</option><option value="tech">Knockdown</option></select></label>
 <label id="actionlabel">Animation <select id="action" aria-label="Animation"></select></label>
 <label>Costume <select id="costume" aria-label="Costume color"></select></label>
 <button id="play">Pause</button><button id="restart">Restart</button>
@@ -83,7 +83,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <p id="servicehint" hidden>For attacks, viewing angles, or resized downloads, open the <a href="http://127.0.0.1:8765/player.html">local download player</a>.
 If it is closed, start it from the repository with <code>python -m tools.melee_anim.player_server</code>.</p>
 <div class="meta" id="meta"></div>
-<p>This prototype uses original models and motion curves with approximate shading. Tech impact effects are optional; other game effects, timed scripts, props, dynamics, and audio are not played. Native seams are preserved.</p>
+<p>This prototype uses original models and motion curves with approximate shading. Ground-impact effects are optional; other game effects, timed scripts, props, dynamics, and audio are not played. Native seams are preserved.</p>
 <script>
 const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__;
 const character=document.getElementById("character"), still=document.getElementById("still"), framezip=document.getElementById("framezip");
@@ -397,6 +397,7 @@ def main():
                     animations.append({'character':fighter['character'],'key':a['key'],'label':a['label'],
                                        'type':'attack','unavailable':a['unavailable_reason']})
     clips.extend(attack_clips)
+    characters.sort(key=lambda character: character['label'].casefold())
     safe_json = lambda value: json.dumps(value).replace("<", "\\u003c")
     content = TEMPLATE.replace("__CLIPS__",safe_json(clips)).replace("__ANIMATIONS__",safe_json(animations)).replace("__CHARACTERS__",safe_json(characters))
     output.write_text(content,encoding="utf-8")

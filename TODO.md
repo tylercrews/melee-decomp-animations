@@ -4,6 +4,8 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Rename the displayed Tech category to Knockdown and alphabetize Character names, preserving Mario's default selection, separate Zelda/Sheik entries and internal source/cache identities. Verify generated controls and served HTML.
+
 - [x] Add Tech type with in-place/forward/back techs, missed-tech face-up/down landings, and face-up/down lying loops for all 26 characters / 123 costumes (182 clips / 861 costume choices), including paired Nana fallback.
 - [x] Import the original EfCoData core tech flash / ground burst with source SRT/visibility, textures, vertex colors and animated color/blend; make effects optional, enabled by default for impact clips and disabled for lying clips.
 - [x] Carry the toggle through on-demand rendering/cache hashes, rotations, sizes, selected/all-color GIFs and exact still PNGs, native right-click targets and local-file transfers. Preserve paused frame and identical on/off camera framing; distinguish effect-enabled filenames.
