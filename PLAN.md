@@ -1,5 +1,8 @@
 # Implementation plan
 
+Held-item attacks, 2026-10-11: attach original Beam Sword, Home-Run Bat, Parasol, Fan, Star Rod and Lip's Stick automatically using verified submotion-to-item mappings and each fighter's source hold joint. Preserve the existing Python lazy-render/catalog/export architecture; no new backend or installation is required. Share item geometry, pose timing, visibility and framing between native preview, exact paused PNG, selected/all-costume GIF/PNG, rotations and Kirby powers. Resolve ItemModelDesc anchors, preserve item scale under position/rotation constraints and retain HSD_AnimJoint scaling flags. Evaluate bounded Parasol/Fan source commands and item curves; use settled held Beam Sword geometry and the original Star Rod glow card/color constants. Blend translucent item layers into RGBA and preserve binary GIF transparency. Cache fingerprints include original item/fighter attachment data. Source/runtime gaps (attack-driven sword extension, projectiles, collisions, material/dynamic VM and character-specific props) remain explicit. See investigation section 44.
+
+
 Pikachu/Pichu eye colors, 2026-10-11: use original BLEND=1 RGB replacement through the existing diffuse texture path for internal kinds 12/23, preserving all four actual costumes each. Refresh results/taunt/sync outputs and bundles after material changes; lazy movement, attacks, Knockdown and rotated previews invalidate through model/module hashes. Keep this scoped to verified materials. General partial BLEND/multistage TEV and timed eye-image/palette scripts remain later fidelity work. See investigation section 42.
 
 

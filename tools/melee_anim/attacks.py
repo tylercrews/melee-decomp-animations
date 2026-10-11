@@ -144,6 +144,11 @@ def build_attack_catalog(repo, report):
                 chosen=('Taunt' if category=='taunt' else readable(name),'Hit' if category=='hit' else 'Other')
             if chosen is None:
                 continue
+            from .held_items import item_for_motion
+            prop=item_for_motion(f'attack-{motion["animation_id"]}',kind) if category=='attack' else None
+            if prop:
+                suffix=(('Jab','Tilt','Smash','Dash attack','Smash follow-up')[prop['variant']] if 'variant' in prop else common.get(motion['animation_id'],name))
+                chosen=(prop['name']+' — '+suffix,'Item attacks')
             actors = []
             reason = None
             for member in [primary] + ([companion] if companion else []):
@@ -173,6 +178,7 @@ def build_attack_catalog(repo, report):
             actions.append({'key':f'{prefix}-{motion["animation_id"]}_source', 'animation_id':motion['animation_id'],
                             'animation_type':category, 'ground_effect':recovery[1] if recovery else None,
                             'name':name, 'label':chosen[0], 'group':chosen[1], 'actors':actors,
+                            'held_item':prop,
                             'available':reason is None, 'unavailable_reason':reason})
         # Full/short hops share JumpF but have distinct source launch velocities.
         has_jump=all(aid<len(motions) and motions[aid]['size'] for aid in JUMP_PHASE_IDS.values())
@@ -212,7 +218,7 @@ def build_attack_catalog(repo, report):
               f'{sum(a["available"] and a["animation_type"]=="tech" for a in actions)} tech/ground clips; '
               f'{sum(not a["available"] for a in actions)} unavailable', flush=True)
     return {'schema':'melee_anim.attacks.v1', 'dol_sha1':report['dol_sha1'], 'characters':entries,
-            'limitations':['Isolated source poses; no opponent, projectiles, items, charge inputs or game physics; Tech impact meshes are optional',
+            'limitations':['Isolated source poses with six common held weapons; no opponent, projectiles, charge inputs or full game physics; Tech impact meshes are optional',
                            'Multipart attacks are separate source clips, not simulated state transitions']}
 
 
@@ -236,6 +242,7 @@ def virtual_clips(root):
                 result.append({'character':slug, 'character_label':fighter['character_label'],
                                'action_key':action['key'], 'action_label':action['label'], 'animation_type':action.get('animation_type','attack'),
                                'ground_effect':action.get('ground_effect'),
+                               'held_item':action.get('held_item'),
                                'costume_id':cid, 'costume_label':color, 'fps':50, 'period':period,
                                'authored_loop':clip['effective_loop'], 'symbol':clip['symbol'],
                                'frame_count':len(times), 'download_name':filename, 'frames':[], 'source_times':[],
@@ -269,6 +276,13 @@ class AttackCache:
             action = clip['action_key'].rsplit('_',1)[0]
             effects = bool(effects and clip.get('ground_effect'))
             paths = [catalog, model, self.repo/'build/melee_anim/motions.json']
+            from .held_items import item_for_motion, item_archive
+            if item_for_motion(action,json.loads(model.read_text()).get('fighter_kind')):
+                paths.extend([item_archive(self.repo/'orig/GALE01/files'),self.repo/'orig/GALE01/files/PlCo.dat'])
+                for source in [model]+([companion] if companion.is_file() else []):
+                    kind=json.loads(source.read_text())['fighter_kind']
+                    table=next(t for t in json.loads(paths[2].read_text())['normal_tables'] if t['fighter_kind']==kind)
+                    paths.append(self.repo/'orig/GALE01/files'/table['fighter_archive'])
             if action.startswith('tech-'):
                 paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
                 paths.append(self.repo/'orig/GALE01/files/PlCo.dat')

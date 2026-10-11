@@ -4,6 +4,12 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Add original Beam Sword, Home-Run Bat, Parasol, Fan, Star Rod and Lip's Stick to their swing attacks across actual costumes, paired actors and Kirby powers. Use source attachment indices and timed Parasol/Fan curves, transparent blending, whole-item camera fit and shared preview/export/cache paths. Include Captain Falcon's six extra smash follow-ups; identify item names in the menu. Verified 140 Python tests / Node controls, 204 full clips / 4,824 frames, all costume/power attachments and exact/sized/color/live exports. See investigation section 44.
+- [ ] Extend Beam Sword's settled held preset to attack-script extension/retraction and full GX glow/material behavior.
+- [ ] Add character-specific spawned props (cape, blasters, Toad, Game & Watch articles, etc.) using source creation/attachment/lifetime callbacks rather than applying generic item IDs.
+- [ ] Add projectiles/collisions and item material/shape/dynamic callbacks where required; generic throwing clips need an explicit item selection because one clip can throw different items.
+
+
 - [x] Correct Pikachu/Pichu eye BLEND=1 colors for all four costumes each; rebuild 64 source previews / 5,844 masters and eight sync claps, refresh cycles and GIF/still/aggregate bundles, and verify both raster backends and actual exports. See investigation section 42.
 - [ ] Implement timed eye/blink/face image and palette scripts; this eye color fix preserves frame-zero selection.
 

@@ -62,7 +62,7 @@ def pose_matrices(bones, tracks, source_frame, tree_type=1, *, root_scale=None, 
     # lbAnim sets/clears classical scaling from FigaTree.type. Results use
     # type 1, while Mario's gameplay taunt uses type 0.
     animated = {t.joint_index for t in tracks}
-    effective = [{**b, "flags": (b["flags"] | 8 if tree_type & 1 else b["flags"] & ~8)
+    effective = [{**b, "flags": b['flags'] if tree_type is None else (b["flags"] | 8 if tree_type & 1 else b["flags"] & ~8)
                   if i in animated else b["flags"]}
                  for i, b in enumerate(bones)]
     poses = [{"rotation": rotation[i], "scale": scale[i], "position": position[i]}
@@ -197,7 +197,11 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
     depth = np.full((height, width), -np.inf)
     light = np.array([-0.35, 0.6, 0.72])
     light /= np.linalg.norm(light)
-    for mesh, (positions, normals) in zip(model["meshes"], posed):
+    ordered=list(zip(model['meshes'],posed))
+    if any(m.get('item_alpha_blend') for m in model['materials']):
+        ordered.sort(key=lambda pair:(bool(model['materials'][pair[0]['material_index']].get('item_alpha_blend')),
+                                       np.mean((pair[1][0]-center)@view,axis=0)[2] if pair[1][0] is not None else 0))
+    for mesh, (positions, normals) in ordered:
         if positions is None:
             continue
         projected = (positions - center) @ view
@@ -263,10 +267,20 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
             if not material.get("unlit"):
                 shade = 0.6+0.4*np.maximum(0, interpolated @ light)
                 rgb[..., :3] *= shade[..., None]
-            mask &= rgb[..., 3]*alpha >= 128
             output = color[ymin:ymax+1, xmin:xmax+1]
-            output[mask] = np.clip(rgb[mask], 0, 255).astype(np.uint8)
-            region[mask] = z[mask]
+            if material.get('item_alpha_blend'):
+                src_alpha=np.clip(rgb[...,3]*alpha/255,0,1)
+                mask &= src_alpha>.001
+                dst_alpha=output[...,3]/255
+                out_alpha=src_alpha+dst_alpha*(1-src_alpha)
+                combined=np.zeros_like(rgb)
+                combined[...,:3]=(rgb[...,:3]*src_alpha[...,None]+output[...,:3]*dst_alpha[...,None]*(1-src_alpha[...,None]))/np.maximum(out_alpha[...,None],1e-8)
+                combined[...,3]=out_alpha*255
+                output[mask]=np.clip(np.rint(combined[mask]),0,255).astype('uint8')
+            else:
+                mask &= rgb[..., 3]*alpha >= 128
+                output[mask] = np.clip(rgb[mask], 0, 255).astype(np.uint8)
+                region[mask] = z[mask]
     return Image.fromarray(color)
 
 
@@ -440,6 +454,23 @@ def main():
                     textures[new]=np.asarray(Image.open(args.companion.parent/old).convert("RGBA"));texture["image_file"]=new
         for mesh in companion["meshes"]:mesh["material_index"]+=offset
         model["materials"].extend(companion["materials"])
+    from .held_items import HeldItem, hold_joint, item_for_motion
+    specification=item_for_motion(args.action,model['fighter_kind'])
+    held=None;companion_held=None
+    if specification:
+        held=HeldItem(args.files,specification,period,motion.get('script'))
+        table=next(t for t in report['normal_tables'] if t['fighter_kind']==model['fighter_kind'])
+        held_joint=hold_joint(args.files,table,model,Path(__file__).resolve().parents[2])
+        def add_item_materials(item):
+            offset=len(model['materials'])
+            for mesh in item.model['meshes']:mesh['material_index']+=offset
+            model['materials'].extend(item.model['materials']);textures.update(item.textures)
+        add_item_materials(held)
+        if companion:
+            companion_held=HeldItem(args.files,specification,period,cm.get('script'))
+            table=next(t for t in report['normal_tables'] if t['fighter_kind']==companion['fighter_kind'])
+            companion_held_joint=hold_joint(args.files,table,companion,Path(__file__).resolve().parents[2])
+            add_item_materials(companion_held)
     view = camera_basis(args.yaw, args.pitch, args.roll)
     def follow_center(posed,mask):
         return projected_pose_center(posed,mask,view)
@@ -461,6 +492,9 @@ def main():
             posed.extend(extra)
             hat_shown=joint_visibility(hat['bones'],[],frame)
             mask.extend(shown[6] and hat_shown[mesh['owner_joint_index']] for mesh in hat['meshes'])
+        if held:
+            extra,visible=held.pose(matrices[held_joint],frame,view)
+            posed.extend(extra);mask.extend(visible)
         if height:
             for positions,_ in posed:positions[:,1]+=height
         if companion:
@@ -472,6 +506,10 @@ def main():
             posed.extend(extra)
             shown = joint_visibility(companion["bones"], cts, ctime)
             mask.extend(shown[mesh["owner_joint_index"]] for mesh in companion["meshes"])
+            if companion_held:
+                extra,visible=companion_held.pose(cp[companion_held_joint],frame,view)
+                for positions,_ in extra:positions[:,0]+=2.8
+                posed.extend(extra);mask.extend(visible)
         cache[key] = (posed, mask)
         return posed, mask
     sampled = [evaluate_pose(frame) for frame in source_times]
@@ -490,7 +528,9 @@ def main():
                 offset=follow_center(geometry,mask) if center_jump else np.zeros(3)
                 fitted.append([(p-offset,n) for (p,n),shown in zip(geometry,mask) if shown] if center_jump else geometry)
     if hat:model['meshes'].extend(hat['meshes'])
+    if held:model['meshes'].extend(held.model['meshes'])
     if companion:model["meshes"].extend(companion["meshes"])
+    if companion_held:model['meshes'].extend(companion_held.model['meshes'])
     framing = fitted if jump_scenes else fitted+poses if fit_times else poses
     knockdown = args.action.startswith('tech-')
     if knockdown:
@@ -572,6 +612,10 @@ def main():
                 "limitations": ["Approximate paired placement" if companion else "Isolated fighter", "no complete gameplay scripts/props/particles/dynamics/audio",
                                 "approximate materials/lighting/reflection", "source finger seam preserved",
                                 "no rendered game-reference validation yet"]}
+    if held:
+        manifest['held_item']={**held.provenance(),'fighter_hold_joint':held_joint,
+                              'companion_hold_joint':companion_held_joint if companion_held else None}
+        manifest['framing_policy']='whole-animation fighter and held-item geometry'
     if knockdown:
         manifest['ground_effects_enabled'] = bool(effect and args.ground_effects=='on')
         manifest['ground_effect'] = effect.provenance() if effect else None

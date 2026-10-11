@@ -59,6 +59,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <div id="jumpcontrols" class="controls" hidden><label><input id="centerjump" type="checkbox" autocomplete="off"> Keep character centered</label>
 <small>The camera follows the character at a fixed zoom. Applies to previews and GIF/PNG downloads.</small></div>
 <p id="movementhint" hidden>Standing includes the normal idle loop; alternate idles vary by character. Walking, running and dashing preview the original motion in place. Full/short hops use neutral jump squat, flight and landing with source movement attributes and shared framing; stage physics and movement effects are not simulated.</p>
+<p id="itemhint" hidden></p>
 <div id="techcontrols" class="controls" hidden>
 <label><input id="groundeffects" type="checkbox" checked> Ground-impact effects</label>
 <small id="techhint">Towards/away follow the character's facing. With impacts on, the whole effect fits; turning them off zooms in on the character. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.</small></div>
@@ -87,7 +88,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <p id="servicehint" hidden>For attacks, viewing angles, or resized downloads, open the <a href="http://127.0.0.1:8765/player.html">local download player</a>.
 If it is closed, start it from the repository with <code>python -m tools.melee_anim.player_server</code>.</p>
 <div class="meta" id="meta"></div>
-<p>This prototype uses original models and motion curves with approximate shading. Ground-impact effects are optional; other game effects, timed scripts, props, dynamics, and audio are not played. Native seams are preserved.</p>
+<p>This prototype uses original models and motion curves with approximate shading. Beam Sword, Home-Run Bat, Parasol, Fan, Star Rod and Lip's Stick are included in their item attacks. Ground-impact effects are optional; projectiles, other props, complete game scripts, dynamics and audio remain unfinished. Native seams are preserved.</p>
 <script>
 const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__, powers=__POWERS__;
 const animationTypes=new Map(animations.filter(a=>a.type).map(a=>[a.character+':'+a.key,a.type]));
@@ -190,6 +191,8 @@ function markedName(name){name=centeredName(powerName(name));let suffix=cycleMod
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
 document.getElementById('movementhint').hidden=!c.action_key.startsWith('movement-');
+document.getElementById('itemhint').hidden=!c.held_item;
+document.getElementById('itemhint').textContent=c.held_item?`${c.held_item.name} is included in the preview and GIF/PNG downloads. Projectile and collision effects are not simulated.`:'';
 jumpcontrols.hidden=!isHop();centerjump.checked=centerJumpEnabled;
 techcontrols.hidden=!c.action_key.startsWith('tech-');groundeffects.disabled=!c.ground_effect;
 techhint.textContent=c.ground_effect?"Towards/away follow the character's facing. With impacts on, the whole effect fits; turning them off zooms in on the character. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.":'Lying animations have no ground-impact effect.';

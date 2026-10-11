@@ -13,7 +13,7 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -531,6 +531,15 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
     assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('frame'),'1');
   }
   console.log('Six non-playable fighters, one-costume menus, valid type fallback, Other motions and exact-frame links: PASS');
+  servedElements.character.value='mario';servedElements.character.onchange();
+  servedElements.animationtype.value='attack';servedElements.animationtype.onchange();
+  servedElements.action.value='attack-112_source';servedElements.action.onchange();
+  assert.equal(servedElements.itemhint.hidden,false);
+  assert.match(servedElements.itemhint.textContent,/Home-Run Bat/);
+  assert(servedElements.action.options.some(o=>/Home-Run Bat/.test(o.textContent)));
+  servedElements.action.value='attack-44_source';servedElements.action.onchange();
+  assert.equal(servedElements.itemhint.hidden,true);
+  console.log('Held-item labels and action-specific preview/export hint: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

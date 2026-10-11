@@ -14,6 +14,16 @@ Kinds 12 (Pikachu) and 23 (Pichu) each have four costumes. Original eye material
 
 Rebuilt eight models, 64 results/taunt clips (5,844 PNG masters), eight 42-frame sync claps, cycle fingerprints, original all-color GIF/PNG ZIPs and aggregate bundle. Ordinary/rotation caches hash models/modules and regenerate on demand. Restart the service around exporter changes to avoid stale imported code. 131 Python tests and Node controls pass. Actual export/visual verification and remaining gaps are in investigation section 42; QA assets remain ignored.
 
+## Latest feature: held-item attack props (2026-10-11)
+
+The user authorized adding the six common swing weapons: Beam Sword, Home-Run Bat, Parasol, Fan, Star Rod and Lip's Stick. These now attach automatically in original item attacks and all preview/export paths. The earlier stop concerned additional characters/appearance presets; Dark Link and other actor extensions remain deferred. Identify items by verified submotion IDs 108..131, not packed names (many are just Swing1). Captain Falcon FK2 has six extra follow-up submotions 295..300. Labels now identify each weapon and swing variant, without changing action keys or costume IDs.
+
+held_items.py reuses Archive, inspect_model, decode_mesh, pixel/FObj readers and source attachment indices. US item assets come from ItCo.usd; retain ItCo.dat fallback and include the selected archive plus fighter data/PlCo in cache fingerprints. ftData.x8+0x10 is a RAW joint index passed to ftLib_GetPartJObj, not a canonical Fighter_Part remapping request. Resolve item anchor from ItemModelDesc, including the child-chain rule without a bone table. Position/rotation constraints preserve ITEM scales rather than inheriting hand squash (important for Game & Watch). HSD_AnimJoint retains authored scaling flags: pose_matrices(...,tree_type=None). Preserve costume/companion/power identity; both Ice Climbers receive their source-attached item in this composed preset.
+
+Parasol commands (opcode 42) and Fan command-variable events (19) drive bounded source-timed item curves. Beam Sword uses settled PickedUp blade/glow scale; attack-driven extension is still approximate. Star Rod's glow is a camera-facing leaf card and uses original TEV0/KONST yellow, not grayscale RGB. Translucent item materials use alpha compositing; native memory DIB rendering recovers RGBA with two known mattes, never RGB color-key removal. Opaque depth occludes props, translucent layers retain alpha, and whole-motion camera bounds include items. PNG remains the partial-alpha master; GIF thresholds to binary alpha.
+
+See investigation section 44 for coverage and actual checks. Common throws lack a uniquely identified item; projectiles/collisions, character-specific spawned props and general item material/script/dynamic VMs remain unfinished. Do not claim a full game simulation. Keep original data/QA/generated outputs ignored and restart the server after code/catalog changes.
+
 ## Read these first
 
 - [INVESTIGATION.md](INVESTIGATION.md): verified source paths, identifiers, asset availability, and limitations.

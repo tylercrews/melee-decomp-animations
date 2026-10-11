@@ -66,6 +66,7 @@ class NativeRaster:
             "glTexImage2D":[ui,integer,integer,integer,integer,integer,ui,ui,ptr],
             "glReadPixels":[integer,integer,integer,integer,ui,ui,ptr],"glPixelStorei":[ui,integer],"glFinish":[],
             "glCullFace":[ui],"glFrontFace":[ui],"glGetError":[],"glGetString":[ui]}
+        specs.update(glBlendFunc=[ui,ui],glDepthMask=[W.BYTE])
         for name, args in specs.items():
             api(self.gl,name,C.c_uint if name=="glGetError" else C.c_char_p if name=="glGetString" else None,args)
         self.renderer = self.gl.glGetString(0x1F01).decode()
@@ -93,13 +94,34 @@ class NativeRaster:
         self.texture_ids[key]=tex.value
         return tex.value
 
-    def render(self,model,posed,textures,view,width,height,center,pixels_per_unit,background):
+    def render(self,model,posed,textures,view,width,height,center,pixels_per_unit,background,_matte=False):
+        translucent=any(m.get('item_alpha_blend') for m in model['materials'])
+        if not _matte and translucent:
+            # Memory DIBs need not expose GL alpha. Two known mattes recover
+            # coverage of translucent item layers, including black RGB.
+            dark=np.asarray(self.render(model,posed,textures,view,width,height,center,pixels_per_unit,(0,0,0,255),True),dtype=float)
+            light=np.asarray(self.render(model,posed,textures,view,width,height,center,pixels_per_unit,(255,255,255,255),True),dtype=float)
+            alpha=np.clip(1-np.mean(light[:,:,:3]-dark[:,:,:3],axis=2)/255,0,1)
+            rgba=np.zeros_like(dark)
+            rgba[:,:,:3]=np.clip(dark[:,:,:3]/np.maximum(alpha[:,:,None],1e-8),0,255)
+            rgba[:,:,3]=np.rint(alpha*255)
+            result=Image.fromarray(rgba.astype('uint8'))
+            return Image.alpha_composite(Image.new('RGBA',result.size,background),result)
         self.gl.glClearColor(*(v/255 for v in background)); self.gl.glClear(0x4100)
         light=np.array([-.35,.6,.72]); light/=np.linalg.norm(light)
-        for mesh,(positions,normals) in zip(model["meshes"],posed):
+        ordered=list(zip(model['meshes'],posed))
+        if translucent:
+            ordered.sort(key=lambda pair:(bool(model['materials'][pair[0]['material_index']].get('item_alpha_blend')),
+                                           np.mean((pair[1][0]-center)@view,axis=0)[2] if pair[1][0] is not None else 0))
+        for mesh,(positions,normals) in ordered:
             if positions is None:
                 continue
             mat=model["materials"][mesh["material_index"]]
+            if mat.get('item_alpha_blend'):
+                self.gl.glEnable(0x0BE2);self.gl.glBlendFunc(0x0302,0x0303)
+                self.gl.glDepthMask(0);self.gl.glAlphaFunc(0x0206,.001)
+            else:
+                self.gl.glDisable(0x0BE2);self.gl.glDepthMask(1);self.gl.glAlphaFunc(0x0206,.5)
             candidates=[t for t in mat["textures"] if t.get("coordinate_type",0)==0 and t.get("image_file") in textures]
             diffuse_only=mat.get('copy_diffuse_only') or mat.get('diffuse_texture_only')
             if diffuse_only:
@@ -137,6 +159,7 @@ class NativeRaster:
             indices=np.ascontiguousarray(mesh["triangles"],dtype=np.uint32)
             self.gl.glVertexPointer(3,0x1406,0,verts.ctypes.data);self.gl.glColorPointer(4,0x1406,0,colors.ctypes.data)
             self.gl.glDrawElements(4,indices.size,0x1405,indices.ctypes.data)
+        self.gl.glDepthMask(1);self.gl.glDisable(0x0BE2)
         pixels=np.empty((height,width,4),dtype=np.uint8)
         self.gl.glFinish();self.gl.glReadPixels(0,0,width,height,0x1908,0x1401,pixels.ctypes.data)
         error=self.gl.glGetError()

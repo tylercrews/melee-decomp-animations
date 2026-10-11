@@ -9,6 +9,14 @@ import struct
 
 
 class PreviewTests(unittest.TestCase):
+    def test_translucent_black_prop_keeps_alpha_in_python_raster(self):
+        mesh={'material_index':0,'uvs':[[0,0]]*3,'triangles':[[0,1,2]]}
+        mat={'textures':[],'diffuse_rgba':[0,0,0,255],'unlit':True,'alpha':.25,'item_alpha_blend':True}
+        p=np.array([[-1.,-1,0],[1.,-1,0],[0.,1,0]])
+        im=render_frame({'meshes':[mesh],'materials':[mat]},[(p,np.tile([0.,0,1],(3,1)))],{},np.eye(3),32,32,np.zeros(3),12,(0,0,0,0))
+        self.assertEqual(im.getpixel((16,16)),(0,0,0,64))
+        self.assertEqual(im.getpixel((0,0))[3],0)
+
     def test_full_eye_blend_matches_replace_without_gray_diffuse_tint(self):
         tex={'coordinate_type':0,'flags':0x30010,'blend':1.,'image_file':'eye','texture_matrix':np.eye(4).tolist()}
         mat={'textures':[tex],'diffuse_rgba':[179,179,179,255],'diffuse_texture_only':True}

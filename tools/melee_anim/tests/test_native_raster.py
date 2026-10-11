@@ -8,6 +8,18 @@ from tools.melee_anim.native_raster import NativeRaster
 
 @unittest.skipUnless(os.name == "nt", "Windows memory-bitmap OpenGL backend")
 class NativeRasterTests(unittest.TestCase):
+    def test_translucent_black_prop_keeps_true_alpha_without_color_keying(self):
+        mesh={'material_index':0,'uvs':[[0,0]]*3,'triangles':[[0,1,2]]}
+        mat={'textures':[],'diffuse_rgba':[0,0,0,255],'unlit':True,'alpha':.25,'item_alpha_blend':True}
+        p=np.array([[-1.,-1,0],[1.,-1,0],[0.,1,0]])
+        raster=NativeRaster(32)
+        try:
+            im=raster.render({'meshes':[mesh],'materials':[mat]},[(p,np.tile([0.,0,1],(3,1)))],{},np.eye(3),32,32,np.zeros(3),12,(0,0,0,0))
+            pixel=im.getpixel((16,16))
+            self.assertEqual(pixel[:3],(0,0,0));self.assertLessEqual(abs(pixel[3]-64),1)
+            self.assertEqual(im.getpixel((0,0))[3],0)
+        finally:raster.close()
+
     def test_opted_reflection_texture_is_visible_in_native_raster(self):
         tex={'coordinate_type':1,'flags':0x50081,'image_file':'visor','texture_matrix':np.eye(4).tolist()}
         mat={'textures':[tex],'diffuse_rgba':[164,164,164,255],'unlit':True,'reflection_texture_preview':True}

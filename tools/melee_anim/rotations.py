@@ -67,6 +67,11 @@ class RotationCache:
                 from .attacks import CATALOG, find_action
                 attack_catalog = self.root/CATALOG
                 actor = find_action(json.loads(attack_catalog.read_text()), data['fighter_kind'], action)
+                from .held_items import item_for_motion, item_archive
+                if item_for_motion(action,data['fighter_kind']):
+                    table=next(t for t in report['normal_tables'] if t['fighter_kind']==data['fighter_kind'])
+                    paths.extend([item_archive(self.repo/'orig/GALE01/files'),self.repo/'orig/GALE01/files/PlCo.dat',
+                                  self.repo/'orig/GALE01/files'/table['fighter_archive']])
                 archive = actor['animation_file']
                 paths.append(attack_catalog)
                 if action.startswith('tech-'):
