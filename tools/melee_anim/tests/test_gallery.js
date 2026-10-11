@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','dirtylist','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -123,9 +123,13 @@ elements.character.value='mario';elements.character.onchange();
 elements.action.value='taunt_source';elements.action.onchange();
 assert.equal(elements.minimumcycle.disabled,true);
 assert.equal(elements.minimumcycle.checked,false);
-assert.equal(elements.dirtylist.options.length,11);
-for (const button of elements.dirtylist.options) {
-  button.onclick();
+assert(!html.includes('Dirty loop candidates to review'));assert(!html.includes('dirtylist'));
+const dirtyCharacters=data('characters.filter(ch=>clips.some(c=>c.character===ch.slug&&c.dirty_cycle))');
+assert.equal(dirtyCharacters.length,11);
+for (const ch of dirtyCharacters) {
+  elements.character.value=ch.slug;elements.character.onchange();
+  elements.action.value='results-clap_source';elements.action.onchange();
+  elements.dirtycycle.checked=true;elements.dirtycycle.onchange();
   assert.equal(elements.action.value,'results-clap_source');
   assert.equal(elements.dirtycycle.checked,true);
   assert.equal(elements.minimumcycle.checked,false);
@@ -180,7 +184,28 @@ assert(servedElements.gif.href.startsWith('/export?'));
 console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links, and file/HTTP origins: PASS');
 
 (async()=>{
-  assert.equal(elements.applyangle.disabled,true,'offline player explains that rendering needs the local service');
+  for(const id of ['pitch','yaw','roll','applyangle','resetangle'])assert.notEqual(elements[id].disabled,true,'local-file rotation controls must remain usable');
+  elements.character.value='mario';elements.character.onchange();elements.action.value='victory3_source';elements.action.onchange();
+  elements.costume.value='2';elements.costume.onchange();elements.scrub.value='67';elements.scrub.oninput();
+  elements.downloadsize.value='512';elements.downloadsize.onchange();elements.loop.checked=true;
+  elements.pitch.value='20';elements.pitch.oninput();elements.yaw.value='45';elements.roll.value='10';elements.applyangle.onclick();
+  const handoff=new URL(context.location.href);assert.equal(handoff.origin,'http://127.0.0.1:8765');assert.equal(handoff.pathname,'/player.html');
+  const saved=new URLSearchParams(handoff.hash.slice(1));
+  for(const [key,value] of Object.entries({character:'mario',action:'victory3_source',costume:'2',frame:'67',playing:'false',repeat:'true',size:'512',pitch:'20',yaw:'45',roll:'10',cycle:'full'}))assert.equal(saved.get(key),value);
+  elements.resetangle.onclick();assert.equal(elements.yaw.value,'0');assert.match(elements.frame.src,/costume_02\/victory3_source\/frame_0067.png$/);
+  // The served page restores the file player's exact selection before rendering.
+  const restoredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  let restoredRequest;
+  const restoredContext=vm.createContext({document:{getElementById:id=>restoredElements[id],createElement:()=>({})},location:{protocol:'http:',hash:handoff.hash},URLSearchParams,
+    performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},fetch:url=>new Promise(resolve=>{restoredRequest={url,resolve}})});
+  vm.runInContext(script,restoredContext);
+  assert.equal(vm.runInContext('index',restoredContext),67);assert.equal(vm.runInContext('playing',restoredContext),false);
+  assert.equal(restoredElements.costume.value,'2');assert.equal(restoredElements.downloadsize.value,'512');
+  assert.equal(restoredElements.loop.checked,true);
+  assert.equal(new URL(restoredRequest.url,'http://localhost').searchParams.get('yaw'),'45');
+  restoredRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:101},(_,i)=>`rotations/restored/frame_${String(i).padStart(4,'0')}.png`)})});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(restoredElements.frame.src,'rotations/restored/frame_0067.png');assert.equal(restoredElements.still.hidden,false);
   const inspect=expression=>vm.runInContext(expression,servedContext);
   const settle=()=>new Promise(resolve=>setImmediate(resolve));
   function complete(request,label){const count=inspect('frameCount()');request.resolve({ok:true,json:async()=>({frames:Array.from({length:count},(_,i)=>`rotations/${label}/frame_${String(i).padStart(4,'0')}.png`)})})}

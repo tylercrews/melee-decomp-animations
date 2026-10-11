@@ -4,6 +4,9 @@ Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 2
 
 ## Current workflow and remaining work
 
+- [x] Fix disabled local-file rotation sliders: keep controls enabled, hand off Apply to the local player with angle/character/action/costume/mode/frame/playback/repeat/size preserved, and keep Reset usable locally.
+- [x] Remove "Dirty loop candidates to review" section and its button-generation code; preserve the dirty-loop radio, candidate intervals and exports.
+
 - [x] Extend `camera_basis` from yaw to pitch/yaw/roll, documenting axes/order and testing identity, quarter turns, and an orthonormal view basis.
 - [x] Add clapping/taunt/victory viewing-angle inputs with Apply/Reset; rerender source poses on demand through the local service with bounded jobs and angle-aware cache/provenance.
 - [x] Keep a stable whole-animation world pivot/framing and apply the selected camera to preview, all four download sizes, and selected/all-costume GIF/PNG exports, including minimum/dirty/sync modes.
@@ -34,7 +37,7 @@ Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 2
 - [ ] Resample original motion curves onto the shared timeline, keep source/output timing in manifests, and verify wrap timing, contacts, and repeated seams separately.
 
 - [x] Preserve approved minimums while exposing rejected near-repeat candidates through a separate Minimum loop (dirty/jittery) toggle.
-- [x] Add a clickable review list for all 11 experimental families / 54 actual costumes, with failed-check explanations.
+- [x] Originally add a clickable review list for all 11 experimental families / 54 actual costumes; subsequently remove that section at the user's request, retaining failed-check explanations in the clapping controls.
 - [x] Apply dirty intervals to GIF/PNG/color/aggregate exports and inline GIF viewing, keeping timing and source-frame mapping intact.
 - [x] Verify all 54 dirty costume GIF durations/loops and exact all-color still bytes, plus sized inline previews; 75 Python tests and Node controls pass.
 - [ ] Review the experimental loops with the user and record which dirty candidates they consider usable; do not promote them automatically.

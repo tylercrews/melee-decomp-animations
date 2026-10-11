@@ -50,7 +50,6 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label><input id="dirtycycle" type="radio" name="clapmode" value="dirty" disabled> Minimum loop (dirty/jittery)</label>
 <label><input id="synccycle" type="radio" name="clapmode" value="sync" disabled> Clapping-sync alteration</label>
 <small id="cyclehint"></small></fieldset>
-<details><summary>Dirty loop candidates to review</summary><div class="controls" id="dirtylist"></div></details>
 <fieldset class="controls"><legend>Viewing angle</legend>
 <label>X tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" aria-label="X tilt"><output id="pitchvalue">0°</output></label>
 <label>Y turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" aria-label="Y turn"><output id="yawvalue">0°</output></label>
@@ -93,8 +92,7 @@ const angleInputs=['pitch','yaw','roll'].map(id=>document.getElementById(id));
 const rotationstatus=document.getElementById('rotationstatus'), applyangle=document.getElementById('applyangle'), resetangle=document.getElementById('resetangle');
 let angles=[0,0,0], rotated=null, rotationBusy=false, rotationFailed=false, rotationGeneration=0;
 angleInputs.forEach((input,i)=>{input.value='0';input.oninput=()=>document.getElementById(['pitchvalue','yawvalue','rollvalue'][i]).textContent=`${input.value}°`});
-if(location.protocol!=='http:'){angleInputs.forEach(input=>input.disabled=true);applyangle.disabled=true;resetangle.disabled=true;
-rotationstatus.textContent='Open the local download player to render different viewing angles.'}
+if(location.protocol!=='http:')rotationstatus.textContent='Choose an angle. Apply opens the local rendering player with your current selections.';
 function hasAngle(){return angles.some(v=>v!==0)}
 function angleSuffix(){return hasAngle()?'-view-'+angles.map((v,i)=>'xyz'[i]+v).join('-'):''}
 function angleName(name){return name.replace(/(\.[^.]+)$/,`${angleSuffix()}$1`)}
@@ -102,7 +100,9 @@ function previewUnavailable(){return rotationBusy||rotationFailed}
 function updateRotationState(){frame.hidden=previewUnavailable();play.disabled=previewUnavailable();scrub.disabled=previewUnavailable();
 document.getElementById('downloadpanel').hidden=previewUnavailable()}
 async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
-if(!hasAngle()){if(location.protocol==='http:')rotationstatus.textContent='Default angle. Angles apply to previews and every GIF/PNG download.';updateRotationState();show();return}
+if(!hasAngle()){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();return}
+if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
+location.href=`${exportBase}/player.html#${query}`;return}
 rotationBusy=true;rotationstatus.textContent='Rendering this viewing angle… Downloads will be ready with the preview. All-color and all-GIF downloads render additional costumes as needed.';
 updateRotationState();
 try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
@@ -187,11 +187,21 @@ scrub.oninput=()=>{if(current<0)return;index=Number(scrub.value);playing=false;p
 function tick(now){if(current>=0&&playing&&!previewUnavailable()){let c=clips[current];carry+=Math.min(now-last,250);let step=1000/c.fps;
 while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.checked)index=0;else{playing=false;play.textContent='Play';break}}show()}
 last=now;requestAnimationFrame(tick)}
-characters.forEach(ch=>{let c=clips.find(c=>c.character===ch.slug&&c.dirty_cycle);if(!c)return;
-let b=document.createElement('button');b.textContent=`${ch.label} (${c.dirty_cycle.length} frames)`;
-b.onclick=()=>{character.value=ch.slug;colors();actions();action.value='results-clap_source';checkMode('dirty');select()};
-document.getElementById('dirtylist').append(b)});
-select();requestAnimationFrame(tick);
+function restoreSelection(){let incoming=new URLSearchParams((location.hash||'').slice(1));
+if(characters.some(c=>c.slug===incoming.get('character'))){character.value=incoming.get('character');colors();actions()}
+if(animations.some(a=>a.character===character.value&&a.key===incoming.get('action')))action.value=incoming.get('action');
+if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===incoming.get('costume')))costume.value=incoming.get('costume');
+if(['full','minimum','dirty','sync'].includes(incoming.get('cycle')))checkMode(incoming.get('cycle'));
+if(['128','256','512','1024'].includes(incoming.get('size')))downloadsize.value=incoming.get('size');
+select();
+let savedFrame=Number(incoming.get('frame'));if(Number.isInteger(savedFrame)&&savedFrame>=0&&savedFrame<frameCount())index=savedFrame;
+if(incoming.has('playing')){playing=incoming.get('playing')==='true';play.textContent=playing?'Pause':'Play'}
+if(incoming.has('repeat'))loop.checked=incoming.get('repeat')==='true';
+let savedAngles=['pitch','yaw','roll'].map(key=>Number(incoming.get(key)||0));
+if(savedAngles.every(v=>Number.isFinite(v)&&Math.abs(v)<=180)&&savedAngles.some(v=>v!==0)){
+angleInputs.forEach((input,i)=>{input.value=String(savedAngles[i]);input.oninput()});angles=savedAngles.map(v=>v===180?-180:v);loadRotation();
+}else show()}
+restoreSelection();requestAnimationFrame(tick);
 </script></html>'''
 
 
