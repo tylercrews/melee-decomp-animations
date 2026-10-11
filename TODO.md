@@ -1,6 +1,39 @@
 # Ordered implementation checklist
 
-Created and updated 2026-10-10. Extraction and asset-backed investigation are now complete; unchecked items remain future implementation work. See [PLAN.md](PLAN.md) for the architecture and [INVESTIGATION.md](INVESTIGATION.md), section 11, for evidence and implemented commands. No rendered animation/video has been produced yet.
+Updated 2026-10-10 at the user's requested stopping point. Requested animations and costume references are cataloged across all 26 selectable forms. A playable Mario CPU prototype now produces PNG sequences and GIFs; full roster rendering, production fidelity, and MP4 remain future work. See `AGENTS.md`'s immediate handoff for the exact resume order.
+
+## Next session: bounded fixes before expanding
+
+- [ ] Honor exported front/back PObj culling flags in `preview.render_frame`, then review existing reference poses.
+- [ ] Make source/output duration rounding explicit and decide one-shot terminal hold behavior. Current 50-frame waits become 42 GIF frames at 50 fps (0.84s); taunt includes one final frame (3.02s).
+- [ ] Detect stale owned PNG frames when rerendering a shorter sequence; reject conflicting outputs or remove only verified generated files, never the original assets or unrelated files.
+- [ ] Bound pilot results clip reads to their owning public region before Popo/Nana support.
+- [ ] Run the 57 current Python tests plus player logic tests, adding only meaningful tests for these fixes.
+- [ ] Add manifest-driven MP4 encoding and `ffprobe` validation after FFmpeg is available.
+
+## Optional installation steps for later
+
+**The current CPU preview does not require Blender or FFmpeg.** Python 3.13, NumPy 2.2.4, and Pillow 11.1.0 are already working here. Node is only needed for the optional player-logic test.
+
+For the planned production renderer:
+
+- [ ] Download the stable **Windows x64 ZIP** from [Blender's download page](https://www.blender.org/download/), record the exact version, and extract it to a stable directory such as `C:\Tools\Blender`. The ZIP can run without an installer; use the [Windows installation instructions](https://docs.blender.org/manual/en/4.2/getting_started/installing/windows.html).
+- [ ] Locate `blender.exe`, launch it once to confirm it works, and run `& 'C:\Tools\Blender\blender.exe' --version` using the actual extracted path.
+- [ ] Record that executable path/version in task configuration. Adding it to PATH is optional; an explicit path is sufficient. Blender provides its own Python/`bpy`; do not assume the system Python can import `bpy`.
+- [ ] Implement/test the Blender importer/backend using the existing exported model/poses. Installation alone does not add DAT import or make the current CPU command use Blender.
+
+For MP4 encoding:
+
+- [ ] Follow the **Windows EXE Files** links on [FFmpeg's official download page](https://ffmpeg.org/download.html) to a prebuilt Windows package, such as Gyan's [release essentials ZIP](https://www.gyan.dev/ffmpeg/builds/). Extract it to a stable directory such as `C:\Tools\FFmpeg`.
+- [ ] Locate both `bin\ffmpeg.exe` and `bin\ffprobe.exe`; verify with `ffmpeg -version` / `ffprobe -version` or their full paths. Record the tested versions and confirm `ffmpeg -encoders` lists `libx264`.
+- [ ] Configure their full paths or add the package's `bin` directory to PATH. No FFmpeg Python wrapper is needed.
+- [ ] Test one current clapping sequence, then verify duration/dimensions/frame count with ffprobe. Example future command (not run yet):
+
+```powershell
+& 'C:\Tools\FFmpeg\bin\ffmpeg.exe' -framerate 50 -i 'build/melee_anim/preview/mario/costume_00/results-clap_source/frame_%04d.png' -frames:v 15 -c:v libx264 -pix_fmt yuv420p -movflags +faststart 'build/melee_anim/preview/mario/costume_00/results-clap_source/preview.mp4'
+```
+
+Use actual extracted executable paths and each job manifest's frame count/fps. The current preview background is opaque; production transparent PNG/alternative video formats remain separate work.
 
 ## 0. Preserve the investigation
 
@@ -52,8 +85,9 @@ Done when: catalog output can explain where each requested clip and costume come
 - [x] Verify mixed byte-order and interpolation/terminal edge cases with synthetic samples; report exact endpoint, left-limit, and finite-slope differences.
 - [ ] Compare scalar and matrix results against native HSD/game reference samples; the current evaluator uses Python double precision and is not a complete runtime.
 - [ ] Establish source tick-to-output timing against reference capture.
-- [ ] Load the costume skeleton/bind transforms and evaluate a pose at several known frames.
-- [ ] Display a diagnostic skeleton or pose contact sheet and compare against game/viewer reference frames.
+- [x] Load Mario's costume bind transforms and evaluate/render poses for clapping, all three victories/waits, and taunt.
+- [x] Create and visually inspect contact sheets; preserve intentional type-0 taunt enlargement.
+- [ ] Compare rendered poses against original game/viewer reference frames; this native-fidelity check remains open.
 - [x] Select the working focused Python reader/evaluator as the first importer foundation based on actual asset access; native/HSDRaw remain targeted references/replacements if discrepancies justify them.
 
 Done when: known clapping poses match the reference and the game-authored loop interval is identified. Do not approximate every curve as linear.
@@ -61,8 +95,10 @@ Done when: known clapping poses match the reference and the game-authored loop i
 ## 5. Render the first complete character
 
 - [x] Inspect all five Mario costume GX layouts/display-list indices, envelopes/weights, UV metadata, texture/palette descriptors, and basic material references.
-- [ ] Convert GX corners into a mesh with consistent bind-space coordinates; account for single-joint versus mixed-envelope matrix semantics before assigning Blender weights.
-- [ ] Decode CMPR and C8/RGB565-palette texture pixels and build basic materials, including reflection/second-UV cases.
+- [x] Export Mario meshes with consistent bind geometry, exact source palettes/coordinates, bone transforms, normals, UVs, and initial visibility.
+- [x] Decode CMPR and C8/RGB565-palette pixels and export all five costume models/185 PNG textures; preserve texture matrices and mirrored wrap.
+- [x] Implement a first NumPy/Pillow CPU renderer with skinning, depth, basic textures, PNG/GIF output, and whole-interval camera fitting.
+- [ ] Complete accurate TEV/reflection, timed material/visibility scripts, props, effects, and native reference checks.
 - [ ] Import the model and sampled transforms into Blender; handle scale compensation and hierarchy differences explicitly.
 - [ ] Add a fixed camera, whole-interval bounds fitting, lighting, and background/alpha settings.
 - [ ] Apply required part visibility and appearance animation.
@@ -73,10 +109,11 @@ Done when: one Mario clapping frame renders correctly and the same importer can 
 
 ## 6. Produce the first working MP4 and GIF
 
-- [ ] Render one complete clapping cycle to numbered PNG frames using deterministic sample times.
+- [x] Render Mario clapping cycles in all five costumes to numbered PNGs and looping GIFs; also render three victory entrances, three waits, and taunt in default costume.
 - [ ] Measure pose/appearance continuity before endpoint wrapping; visually inspect at least three actual repeats.
 - [ ] Preserve first-play, endpoint, and rewind rules; avoid inserting a duplicate endpoint frame.
-- [ ] Add FFmpeg encoding for MP4 with explicit frame rate/background and for GIF with palette generation, dithering, delays, and loop metadata.
+- [x] Add pilot GIF encoding with shared palette, explicit delays, and authored-loop metadata. Twelve completed jobs' durations and file counts were checked.
+- [ ] Add FFmpeg production MP4/GIF encoding and decoded-output verification.
 - [ ] Add `ffprobe`/decoded-frame verification for duration, frame count, dimensions, and the encoded seam.
 - [ ] Save a reproducibility manifest with inputs, hashes, source interval, timing, camera, versions, and limitations.
 - [ ] Document one end-to-end command that produces both formats.
@@ -85,8 +122,8 @@ Done when: default Mario clapping exports successfully to both formats and is re
 
 ## 7. Record an action in every costume variant
 
-- [ ] Add `--costume all`, expanding each character's actual costume IDs rather than a fixed count or distinct filenames.
-- [ ] Export Mario clapping in all five costumes with the same action timing and framing.
+- [x] Add Mario `preview_batch --costume all` using actual DOL costume IDs; full roster action/costume inventory is generated separately.
+- [x] Export Mario clapping in all five costumes with shared source timing and framing; review costume contact sheets.
 - [ ] Verify costume-specific joint/material/visibility/accessory behavior and create a contact sheet labeled by costume ID.
 - [ ] Add stable filenames, progress reporting, resumable jobs, source-sensitive caching, and failures associated with specific variants.
 - [ ] Verify the `all` path on a four-costume character and a six-costume character.
@@ -111,8 +148,10 @@ Done when: a reviewed results-animation coverage matrix has an outcome for every
 
 ## 9. Extend to taunts and attacks
 
-- [ ] Resolve ordinary action states through their animation IDs and `ftData.xC` motion records into `Pl*AJ.dat` archives.
-- [ ] Add taunt actions, including facing variants and character-specific multi-stage taunts.
+- [x] Resolve all standard taunt states/clips through verified DOL callbacks and motion records, keeping Zelda/Sheik separate.
+- [x] Catalog directional fallback, Dr. Mario/Young Link overrides, Nana's Popo source, and Fox/Falco multipart stage taunts.
+- [x] Join these actions to all 123 real costume selections; record runtime caveats and primary waits in the 1,123-job inventory.
+- [ ] Execute required taunt scripts/props/effects and render the other fighters; metadata coverage is not rendering coverage.
 - [ ] Add forward smash, including supported angle variants, charge timing, and character-specific follow-ups/accessories.
 - [ ] Distinguish source skeleton playback from full gameplay behavior requiring subaction commands, particles, items, root motion, hitlag, or physics.
 - [ ] Support source, segment, once, and explicitly requested edited-loop modes.
@@ -152,4 +191,4 @@ Done when: both isolated character assets and a composed results scene can be ex
 
 Avoid expanding GUI, packaging, full game porting, or complete results UI work ahead of the first verified clapping MP4/GIF.
 
-Current next step: assemble and skin Mario's default costume from the validated descriptors, apply the decoded `Lose` channels with correct HSD transforms/part defaults, decode its textures, and render reference poses. The 18-frame native loop has preliminary finger-channel seam differences; do not mark the first export perfectly seamless without repeated rendered inspection.
+Current reviewable output: `build/melee_anim/preview/player.html` with 12 Mario clips and play/pause/seek controls. Regenerate with `python -m tools.melee_anim.preview_gallery`. Native shader/scripts and loop perfection remain unverified. Resume with the bounded fixes at the top and the explicit `AGENTS.md` handoff; avoid repeating extraction/catalog work.

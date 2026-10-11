@@ -4,7 +4,7 @@ Initial source investigation and subsequent asset inspection: 2026-10-10, using 
 
 ## Findings
 
-**The supplied `melee.iso` has been extracted into the ignored `orig/GALE01` directory. Its executable matches this repository exactly.** We have now validated the costume references, nested results clips, ordinary motion references, model descriptors, and packed animation channels. A rendered character player has not yet been implemented; scalar-channel inspection is not full visual or runtime validation.
+**The ISO is extracted and verified; the requested victory/clapping/taunt catalog now covers all 26 selectable forms and 123 costume selections.** Zelda and Sheik are separate records. A working Mario prototype now skins the actual model, decodes textures, renders PNG/GIF animations, and generates an offline player. It is not yet a full roster/native-fidelity renderer. Section 12 records the latest playback and handoff state.
 
 | Requested asset | What was found | What still needs game data/runtime verification |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ The expected inputs are defined by:
 - [config/GALE01/dat.yml](config/GALE01/dat.yml): archive directory `orig/GALE01/files`, matching `*.dat`.
 - [.gitignore](.gitignore): original extracted files and executable/build outputs are ignored.
 
-GALE01 remains the configured version; continue checking the executable hash for any replacement dump. The extraction prerequisite is now complete. Building a renderer/importer over the verified descriptors and curves is the next step.
+GALE01 remains the configured version; continue checking the executable hash for replacement data. Extraction is complete, and the first Mario importer/CPU rendering proof is now working. Production rendering and other fighter runtime behavior are the next stages.
 
 The upstream goal is matching C reconstruction of the PowerPC program, as described in [docs/getting_started.md](docs/getting_started.md). That does not make this checkout an asset bundle or a desktop animation player, and this investigation did not measure overall decompilation completeness.
 
@@ -305,11 +305,11 @@ The `native` preset in [CMakePresets.json](CMakePresets.json), lines 24-29, is a
 
 There is no ready-made native animation player demonstrated by these builds. Building a desktop runtime would still need rendering, platform initialization, raw-format decoding, unresolved behavior, and pointer/layout issues addressed. It should not be assumed to be a simple compile-and-run step.
 
-The initial environment had Python and CMake on PATH; .NET was also found during this follow-up. Blender, FFmpeg, Dolphin, Rust/Cargo, Ninja, and Nix were not detected on PATH. This does not prove they are absent from the machine. The new extraction/inspection tools use Python's standard library. No dependencies were installed; no full game/native build or character render was run.
+The environment has Python, NumPy 2.2.4, Pillow 11.1.0, Node, CMake, and .NET. Blender/FFmpeg were not found in usual installation locations; Slippi Dolphin binaries were found under the user's Slippi Launcher `netplay` and `playback` directories. No dependencies were installed and no full game/native build or emulator capture was run. The CPU prototype has now rendered actual character frames using installed Python packages.
 
 ## 10. Recommended next experiment and unresolved facts
 
-Extraction and descriptor/curve inspection are complete; the next decisive experiment is **rendered Mario default-costume clapping**:
+Extraction, descriptor/curve inspection, and the **rendered Mario clapping proof** are complete. The following sequence describes that proof and remaining production checks:
 
 1. Use the verified model and clip references from the inspection reports.
 2. Assemble Mario's default mesh, bind transforms, envelopes, textures, and correct drawable alternatives.
@@ -441,4 +441,66 @@ The stored panel/film camera descriptors use a 640x480 viewport/scissor, eye `(0
 
 Extraction, hashes, Git exclusion, actual costume references, skeletal topology, Mario mesh/texture/envelope metadata, results packed ranges/names, ordinary motion references, and compressed scalar-channel decoding have been checked. Synthetic tests exercise malformed inputs and format/loop edge cases without embedding game data.
 
-The next useful implementation is a **small Mario model/pose importer**, using the existing Python inspection/evaluation primitives, followed by a few rendered reference poses. Blender remains the recommended renderer. The native decomp library is still useful as a reference or targeted evaluator adapter, but a full game/GX port is not necessary to access this data. No MP4/GIF or rendered character was produced in this investigation.
+A **Mario model/pose importer and CPU preview renderer** have now been implemented using these primitives (section 12). Blender remains the planned production renderer; the native decomp remains a reference or targeted adapter. Animated GIF/PNG previews exist; MP4 and exact game rendering have not been produced.
+
+## 12. All-character taunts and first playable recordings
+
+### Standard taunts are now cataloged for every form
+
+The inspector resolves actual DOL motion-state callbacks instead of assuming every taunt uses one state. Its 53 taunt records comprise 40 unique standard clips, 12 Fox/Falco stage-taunt parts, and Nana's shared Popo clip record. All are authored one-shots, not source loops. Standard durations are source frames:
+
+| Character | Frames | Character | Frames |
+| --- | ---: | --- | ---: |
+| Mario | 180 | Fox | 110 |
+| Captain Falcon | 60 | Donkey Kong | 60 |
+| Kirby | 60 | Bowser | 140 |
+| Link | 100 | Sheik | 100 |
+| Ness | 60 | Peach | 85 |
+| Ice Climbers: Popo/Nana source | 60 | Pikachu | 100 |
+| Samus | 70 | Yoshi | 80 |
+| Jigglypuff | 100 | Mewtwo | 120 |
+| Luigi | 70 | Marth | 93 |
+| Zelda | 90 | Young Link | 200 |
+| Dr. Mario | 85 | Falco | 115 |
+| Pichu | 100 | Mr. Game & Watch | 60 |
+| Ganondorf | 100 | Roy | 120 |
+
+Captain Falcon, Donkey Kong, Kirby, Link, Ness, Peach, Pikachu, Samus, Yoshi, Jigglypuff, Zelda, Young Link, Pichu, and Ganondorf have separate right/left standard clips. Others select the right state when the left archive is absent while retaining facing sign -1. Dr. Mario uses custom states 341/342; Young Link uses 342/343; animation IDs remain 239/240. Nana can resolve the taunt through Popo while retaining Nana's own costume and part mapping. Zelda (90 frames) and Sheik (100) retain separate files and rigs.
+
+Fox/Falco also have optional **Corneria or Venom** radio/stage taunts: states 370/372/374 right and 371/373/375 left, animation IDs 321/323/325 or 322/324/326. Their three parts are 25/307/65 frames and explicitly transition through character callbacks. Scene eligibility, radio state, and once-per-match logic are separate from ordinary taunts.
+
+Runtime caveats remain concrete: Young Link's milk and Dr. Mario's randomized pill require item models/callbacks; Kirby cleans up copy state; Ganondorf creates an effect; Game & Watch changes model visibility. Static script traversal now records reachable subroutines and command-variable/texture/visibility fields, but does not execute timed gameplay behavior.
+
+[catalog.py](tools/melee_anim/catalog.py) joins all this with actual costume records: **26 forms, 123 selectable costumes, 1,123 inventory jobs** including clap, three victory entrances, their primary waits, both standard-taunt facings, and optional stage sequences. Every standard clip's node count matches every mapped costume skeleton; this is structural compatibility, not a claim of complete runtime fidelity. Fox's extra `Win2Wait2` is present in the motion report but is not yet a separate inventory job.
+
+### Actual playback/recording prototype
+
+[export_model.py](tools/melee_anim/export_model.py) exports all five Mario costumes into neutral JSON plus 185 decoded PNG textures. Each has 61 bones, 52 selected meshes, 43 materials, 6,518 GX corners, and 4,718 nondegenerate triangles. It retains exact source palettes as well as converted bind geometry. [texture.py](tools/melee_anim/texture.py) decodes GX formats; CMPR uses the hardware's 3/8 interpolation/colored transparent pixels, and the hat requires authored repeat/mirror UV behavior. Pixel decoding references the emulator's [texture decoder](https://github.com/dolphin-emu/dolphin/blob/master/Source/Core/VideoCommon/TextureDecoder_Generic.cpp).
+
+[preview.py](tools/melee_anim/preview.py) evaluates source channels, HSD scale/matrix rules, palette skinning, textures, depth, and approximate lighting, then writes PNG masters and GIFs. Mario's taunt uses type 0 scaling and intentionally grows around 2.25x; results use type 1. The renderer preserves the native finger-channel seam, rather than silently modifying the motion. Timed scripts/props/particles/dynamics/audio and exact TEV/reflection are not implemented.
+
+Completed outputs under `build/melee_anim/preview/mario`:
+
+- Clapping in costume IDs 0-4: five 15-frame GIFs, each 300 ms at the explicit 50 fps / nominal 60 source-tick/s preset.
+- Default costume victories 1-3: three one-shot sequences, 101 frames each including the terminal pose.
+- Their separate wait clips: three looping sequences, 42 frames each.
+- Default costume taunt: one 151-frame one-shot including terminal pose.
+
+These 12 jobs have **655 PNG masters and 12 GIFs**. Source/output timing is recorded; it is not measured emulator timing. Waits are 0.84 s rather than nominal 50/60 s because of output-grid rounding, and one-shot taunt is 3.02 s including the terminal frame. Fix/disclose that policy before production encoding. GIF durations/loop metadata and manifest file counts were checked. Contact sheets show coherent skins/textures, costume colors, victory poses, and intentional taunt scaling.
+
+Reproduce/open the pilot:
+
+```powershell
+python -m tools.melee_anim.catalog
+python -m tools.melee_anim.preview_batch --action results-clap --costume all
+python -m tools.melee_anim.preview --action victory1 --output build/melee_anim/preview/mario/costume_00/victory1_source
+python -m tools.melee_anim.preview --action victory1 --section wait --output build/melee_anim/preview/mario/costume_00/victory1_wait
+python -m tools.melee_anim.preview --action taunt --output build/melee_anim/preview/mario/costume_00/taunt_source
+python -m tools.melee_anim.preview_gallery
+```
+
+Open local `build/melee_anim/preview/player.html` in a normal browser. It has clip/costume selection, play/pause, restart, repeat, scrubbing, and GIF links, with no server/CDN required. The browser connector returned no enabled browser, so the live UI was not driven; player control/timer logic and all frame links passed the Node test. Fifty-seven Python tests passed. All generated models/images/player data remain ignored.
+
+### Stopping point and next implementation
+
+The user requested an immediate handoff to a lighter model. See `AGENTS.md`'s immediate handoff and the top of `TODO.md`. First fix source culling, timing-grid/terminal hold, stale-frame handling, and owning-container bounds. Then add manifest-driven FFmpeg encoding/reference checks and extend renderer/runtime support by fighter family. `TODO.md` includes optional Blender and FFmpeg installation steps for later; no dependency installation was performed here. Do not re-extract or restart the completed catalog investigation.

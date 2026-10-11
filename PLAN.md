@@ -1,10 +1,12 @@
 # Implementation plan
 
-Status as of 2026-10-10: ISO extraction, bounded DAT/DOL inspection, costume catalog validation, and a preliminary scalar motion evaluator are implemented. The supplied executable matches the configured revision. No rendered character player or video exporter exists yet. Read [INVESTIGATION.md](INVESTIGATION.md), especially section 11, for actual asset evidence and runnable commands, and [TODO.md](TODO.md) for the remaining sequence.
+Status at the user's 2026-10-10 stopping point: extraction and the requested all-character/costume investigation are complete. A neutral Mario model exporter and NumPy/Pillow CPU renderer now produce actual PNG/GIF animations and an offline playback page. The first 12 completed clips cover five clapping costumes, three victories, their three waits, and a taunt. Full roster rendering, native fidelity, Blender integration, and MP4 remain open. Read `AGENTS.md`'s immediate handoff before continuing.
 
 ## Recommendation
 
 Build a **Python application that imports Melee assets, plays selected animations in Blender, renders image sequences, and calls FFmpeg to produce MP4 and GIF files**. Use the decompilation as the specification for asset selection, animation evaluation, costumes, and results-screen behavior. Reuse the existing DAT tooling where it saves work.
+
+Blender is a planned production backend, not a requirement for the current prototype. Because it was not installed, the first playback proof uses already-installed NumPy/Pillow to rasterize the real skinned meshes and decoded textures. It establishes a working data-to-animation path and stays available as a diagnostic renderer. `TODO.md` now contains optional Blender setup and FFmpeg installation/verification steps for the user to follow later.
 
 Python is the easiest language for the user to maintain and is well suited to catalogs, batch jobs, animation sampling, and export settings. Blender supplies meshes, cameras, skinning, materials, a viewport, and scripted rendering. Its command line supports background execution and Python scripts. We still need to build the Melee importer; Blender does not automatically understand these DAT files. See the [Blender command-line documentation](https://docs.blender.org/manual/en/3.6/advanced/command_line/arguments.html).
 
@@ -153,7 +155,7 @@ Allow both formats in a single job. Inspect decoded output for frame count, dura
 | Milestone | Reviewable result | Gate |
 | --- | --- | --- |
 | A: asset readiness — complete | Verified extraction/hash manifest, results/ordinary motion metadata, and all selectable costume references | Original DOL matches; actual packed boundaries/publics and model roots checked. |
-| B: motion/assembly proof — next | Mario clapping matrices/skinned poses and one rendered character frame | Preliminary scalar evaluator and readable mesh data already exist; matrix/visibility/texture correctness must match reference. |
+| B: motion/assembly proof — prototype complete | Mario meshes, decoded textures, source poses, and 12 rendered PNG/GIF clips | Synthetic/reference-math checks and visual contact sheets pass; original-game reference/fidelity comparison remains open. |
 | C: first working exporter | Default Mario clapping PNG sequence, MP4, and GIF with seam report | Repeatable export and acceptable animation/render fidelity. |
 | D: costume batch | Same action exported for all five Mario costumes | Correct costume ID and appearance in each artifact; shared framing. |
 | E: results coverage | Clapping + all three victory variants for every roster costume | Coverage matrix includes exceptions; intros/loops distinguished. |
@@ -163,3 +165,7 @@ Allow both formats in a single job. Inspect decoded output for frame count, dura
 If the first Blender import cannot achieve acceptable motion or appearance without excessive custom rendering, keep the Python catalog/batch/export design and switch that renderer to a focused native player or Dolphin harness. Document the evidence before changing the backend. Do not make a full native game port a prerequisite for the first working asset export.
 
 The runnable commands at the current stage are `extract_iso.py`, `inspect_motions`, `inspect_models --catalog` / `--all-models`, and `inspect_results_scene` as documented in `INVESTIGATION.md`. The proposed `melee_anim export` interface above is still future work.
+
+Additional implemented commands are `catalog`, `export_model`, `preview`, `preview_batch`, and `preview_gallery`. The current job inventory includes all 26 forms/123 costumes with primary victory waits and both taunt facings (1,123 jobs including stage sequences). Rendering is presently Mario-only; Fox's extra `Win2Wait2` exists in the motion report but is not a job in that inventory yet.
+
+Resume priorities are bounded prototype fixes, manifest-driven FFmpeg encoding, game-reference comparison, and one-family-at-a-time renderer expansion. Honor source culling, report timing-grid/terminal hold behavior, and avoid stale PNG sequence files before calling the pilot a production exporter. Keep native and explicitly edited loops separate.
