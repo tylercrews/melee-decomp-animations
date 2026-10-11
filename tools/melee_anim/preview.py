@@ -1,4 +1,4 @@
-"""Render a first Mario animation preview from extracted assets.
+"""Render roster animation previews from extracted assets.
 
 This CPU renderer uses NumPy and Pillow. It preserves source pose channels and
 HSD envelope matrices, but approximates lighting/materials and does not run
@@ -46,7 +46,9 @@ def pose_matrices(bones, tracks, source_frame, tree_type=1):
         elif channel in (5, 6, 7):
             position[i, channel - 5] = value
         elif channel in (8, 9, 10):
-            scale[i, channel - 8] = value
+            scale[i, channel - 8] = .001 if abs(value)<.001 else value
+        elif channel in (11,12):
+            continue  # HSD node/branch visibility is handled before drawing.
         else:
             raise ValueError(f"Preview does not support side-effect joint channel {channel}")
     # lbAnim sets/clears classical scaling from FigaTree.type. Results use
@@ -63,6 +65,32 @@ def pose_matrices(bones, tracks, source_frame, tree_type=1):
 def deform(mesh, matrices, bones):
     """Evaluate retained GX source coordinates by their exact HSD palette."""
     return skin_source_mesh(mesh, bones, matrices)
+
+
+def joint_visibility(bones, tracks, source_frame):
+    """HSD_A_J_NODE/BRANCH update JOBJ_HIDDEN; hiding a node keeps its children.
+
+    The joint array is parent-before-child. Branch tracks affect the subtree,
+    and later child tracks may override their own visibility, as in HSD.
+    """
+    visible = [not (b["flags"] & (1 << 4)) for b in bones]
+    for track in tracks:
+        if track.channel not in (11, 12):
+            continue
+        value = track.evaluate(source_frame)
+        if value is None:
+            continue
+        node = track.joint_index
+        if not 0 <= node < len(bones):
+            raise ValueError("Visibility animation exceeds joint hierarchy")
+        visible[node] = value > .5
+        if track.channel == 12:
+            subtree = {node}
+            for i in range(node + 1, len(bones)):
+                if bones[i]["parent"] in subtree:
+                    subtree.add(i)
+                    visible[i] = value > .5
+    return visible
 
 
 def camera_basis(yaw):
@@ -101,6 +129,8 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
     light = np.array([-0.35, 0.6, 0.72])
     light /= np.linalg.norm(light)
     for mesh, (positions, normals) in zip(model["meshes"], posed):
+        if positions is None:
+            continue
         projected = (positions - center) @ view
         screen = projected.copy()
         screen[:, 0] = projected[:, 0] * pixels_per_unit + width / 2
@@ -119,6 +149,10 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
             a, b, c = screen[ids]
             area = (b[1]-c[1])*(a[0]-c[0])+(c[0]-b[0])*(a[1]-c[1])
             if abs(area) < 1e-9:
+                continue
+            # Screen Y is inverted; GX clockwise fronts have positive area.
+            cull = mesh.get("cull_flags", 0) & 0xC000
+            if cull == 0xC000 or cull == 0x4000 and area > 0 or cull == 0x8000 and area < 0:
                 continue
             xmin, ymin = np.floor(screen[ids, :2].min(axis=0)).astype(int)
             xmax, ymax = np.ceil(screen[ids, :2].max(axis=0)).astype(int)
@@ -205,7 +239,7 @@ def main():
     report = json.loads(args.motions.read_text())
     motion, metadata, tracks = load_clip(report, args.action, args.section, args.files,model["fighter_kind"])
     if metadata["node_count"] != len(model["bones"]) or metadata["type"] not in (0, 1):
-        parser.error("pilot requires the matching Mario node hierarchy and supported scaling type")
+        parser.error("preview requires matching node hierarchy and supported scaling type")
     period = metadata["frames"]
     looping = motion.get("effective_loop", motion.get("motion_loop", False))
     count = max(1, math.ceil(period/args.ticks_per_second*args.fps))
@@ -249,9 +283,12 @@ def main():
     view = camera_basis(args.yaw)
     # Precompute poses once; fit over the whole selected source interval.
     poses = []
+    visibility = []
     for frame in source_times:
         matrices = pose_matrices(model["bones"], tracks, frame, metadata["type"])
         posed=[deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]]
+        shown = joint_visibility(model["bones"], tracks, frame)
+        mask = [shown[mesh["owner_joint_index"]] for mesh in model["meshes"]]
         if model.get("width_z"):
             for positions,normals in posed:positions[:,2]*=model["width_z"]
         if companion:
@@ -260,7 +297,10 @@ def main():
             for positions,normals in posed:positions[:,0]-=2.8
             for positions,normals in extra:positions[:,0]+=2.8
             posed.extend(extra)
+            shown = joint_visibility(companion["bones"], ctracks, frame % ct["frames"])
+            mask.extend(shown[mesh["owner_joint_index"]] for mesh in companion["meshes"])
         poses.append(posed)
+        visibility.append(mask)
     if companion:model["meshes"].extend(companion["meshes"])
     cloud = np.concatenate([p for frame in poses for p, _ in frame])
     projected = cloud @ view
@@ -275,7 +315,8 @@ def main():
         print(f"Offscreen raster: {raster.renderer}",flush=True)
     started = time.monotonic()
     for i, pose in enumerate(poses):
-        image = (raster.render if raster else render_frame)(model, pose, textures, view, args.size, args.size, center, scale, (34, 38, 46, 255))
+        drawn = [p if shown else (None, None) for p, shown in zip(pose, visibility[i])]
+        image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, center, scale, (34, 38, 46, 255))
         image.save(args.output/f"frame_{i:04d}.png")
         images.append(image.convert("RGB"))
         if i == 0 or (i+1) % 20 == 0 or i == len(poses)-1:
@@ -308,6 +349,7 @@ def main():
                 "output_duration_seconds": len(images)/args.fps,
                 "complete_interval": args.max_frames is None, "size": args.size, "camera_yaw": args.yaw,
                 "model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
+                "render_backend": args.backend,
                 "limitations": ["Approximate paired placement" if companion else "Isolated fighter", "no gameplay scripts/props/effects/dynamics/audio",
                                 "approximate materials/lighting/reflection", "source finger seam preserved",
                                 "no rendered game-reference validation yet"]}

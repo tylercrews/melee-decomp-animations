@@ -12,7 +12,10 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--character',default='all');p.add_argument('--jobs',type=int,default=8)
     p.add_argument('--resume',action='store_true');p.add_argument('--size',type=int,default=256)
-    a=p.parse_args();catalog=roster();queue=[];reused=0
+    a=p.parse_args()
+    if a.character != 'all' and a.character not in dict(CHARACTERS):p.error('unknown character slug')
+    if not 1 <= a.jobs <= 8 or not 64 <= a.size <= 1024:p.error('jobs must be 1..8 and size 64..1024')
+    catalog=roster();queue=[];reused=0
     for fighter in catalog['fighters']:
         if fighter['paired_member']:continue
         slug,name=CHARACTERS[fighter['character_kind']]
@@ -25,7 +28,7 @@ def main():
             if companion:paired,_=export_fighter(Path('orig/GALE01/files'),base/'companion',companion['fighter_kind'],cid)
             for action,section in action_sections('all','all'):
                 out=Path('build/melee_anim/preview')/slug/f'costume_{cid:02d}'/f'{action}_{section}'
-                if a.resume and (completed_job(out,model,action,section,a.size) or slug=='mario' and (out/'preview-manifest.json').is_file()):
+                if a.resume and completed_job(out,model,action,section,a.size):
                     reused+=1;continue
                 queue.append((slug,cid,model,paired,action,section,out))
             print(f'Exported {name} costume {cid}',flush=True)

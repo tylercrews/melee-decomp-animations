@@ -380,6 +380,26 @@ def costume_catalog(files_root: Path, dol_path: Path, symbols_path: Path, langua
                            "outline_rgba": list(gw.read(attr + 20, 4))}}
 
 
+def visibility_lookup(ar, lookup, model_count):
+    """Read one source FtPartsVisLookup array with bounded alternatives."""
+    groups = []
+    if lookup is None:
+        return groups
+    for group in range(model_count):
+        count, alternatives = ar.u32(lookup + group * 8), ar.pointer(lookup + group * 8 + 4)
+        if count > ar.data_size // 8:
+            raise FormatError("visibility alternatives count exceeds archive")
+        choices = []
+        for option in range(count):
+            if alternatives is None:
+                raise FormatError("visibility alternatives missing")
+            at = alternatives + option * 8
+            size, indices = ar.u32(at), ar.pointer(at + 4)
+            choices.append(list(ar.read(indices, size)) if indices is not None else [])
+        groups.append(choices)
+    return groups
+
+
 def visibility_tables(path: Path, data_symbol: str, costume_count: int) -> dict:
     """Read FtPartsDesc alternatives; indices refer to preorder DObj lists.
 
@@ -404,20 +424,7 @@ def visibility_tables(path: Path, data_symbol: str, costume_count: int) -> dict:
             fallback = lookup is None
             if fallback:
                 lookup = ar.pointer(table + cls * 4)
-            groups = []
-            if lookup is not None:
-                for group in range(model_count):
-                    count, alternatives = ar.u32(lookup + group * 8), ar.pointer(lookup + group * 8 + 4)
-                    if count > ar.data_size // 8:
-                        raise FormatError("visibility alternatives count exceeds archive")
-                    choices = []
-                    for option in range(count):
-                        if alternatives is None:
-                            raise FormatError("visibility alternatives missing")
-                        at = alternatives + option * 8
-                        size, indices = ar.u32(at), ar.pointer(at + 4)
-                        choices.append(list(ar.read(indices, size)) if indices is not None else [])
-                    groups.append(choices)
+            groups = visibility_lookup(ar, lookup, model_count)
             classes.append({"class": cls, "fallback_to_costume_0": fallback,
                             "lookup_offset": lookup, "groups": groups})
         tex_indices = []

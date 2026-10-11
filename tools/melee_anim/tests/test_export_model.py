@@ -3,10 +3,16 @@ import unittest
 
 import numpy as np
 
-from tools.melee_anim.export_model import local_matrix, palette_matrices, skin_source_mesh, texture_matrix
+from tools.melee_anim.export_model import local_matrix, palette_matrices, primary_drawables, skin_source_mesh, texture_matrix
 
 
 class SkinningTests(unittest.TestCase):
+    def test_visibility_class_two_uses_an_independent_drawable_list(self):
+        classes = [{"groups": [[[0], [1]]]}, {"groups": [[[2]]]},
+                   {"groups": [[[3]]]}, {"groups": [[[4]]]}]
+        # Class 2 index 3 must remain; class 4 item-only index 5 is hidden.
+        self.assertEqual(primary_drawables(7, classes, [[[0, 5]]]), {0, 1, 3, 6})
+
     def test_texture_repeat_and_mirror_offset(self):
         texture = {"scale": [1, 1, 1], "rotation": [0, 0, 0],
                    "translation": [0, 0, 0], "repeat_s": 2, "repeat_t": 1, "wrap_t": 0}

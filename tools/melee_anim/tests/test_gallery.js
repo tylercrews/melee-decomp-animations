@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   performance: {now: () => 0}, Image: class {}, requestAnimationFrame: callback => {context.nextFrame = callback;}});
@@ -14,6 +14,7 @@ vm.runInContext(script, context);
 const data = expression => vm.runInContext(expression, context);
 assert.equal(elements.action.options.length, 8);
 assert.equal(elements.costume.options.length, 5);
+assert(elements.character.options.length>=1);
 assert.match(elements.frame.src, /frame_0000.png$/);
 elements.play.onclick();
 assert.equal(data('playing'), false);
@@ -43,6 +44,7 @@ for (const clip of data('clips')) {
 }
 
 for (const clip of data('clips')) {
+  elements.character.value=clip.character;elements.character.onchange();
   elements.costume.value = String(clip.costume_id);
   elements.costume.onchange();
   elements.action.value = clip.action_key;
@@ -52,11 +54,15 @@ for (const clip of data('clips')) {
   assert.equal(elements.gif.href, clip.gif);
   assert.equal(elements.gif.download, clip.download_name);
   assert.match(elements.gif.download, /\.gif$/);
-  const a = data('animations.find(a => a.key === action.value)');
+  elements.scrub.value='3';elements.scrub.oninput();
+  assert.equal(elements.still.href,clip.frames[3]);assert.equal(elements.still.hidden,false);
+  assert.match(elements.still.download,/frame-0004.png$/);
+  assert(fs.existsSync(path.join(path.dirname(page),elements.framezip.href)));
+  const a = data('animations.find(a => a.key === action.value && a.character === character.value)');
   assert.equal(elements.animationzip.href, a.zip);
   assert.equal(elements.animationzip.download, a.download_name);
   assert(fs.existsSync(path.join(path.dirname(page), a.zip)));
 }
-assert(html.includes('download="mario-all-animations-all-colors.zip"'));
-assert(fs.existsSync(path.join(path.dirname(page), 'downloads/mario-all-animations-all-colors.zip')));
+assert(html.includes('download="melee-all-characters-all-animations.zip"'));
+assert(fs.existsSync(path.join(path.dirname(page), 'downloads/melee-all-characters-all-animations.zip')));
 console.log('Playback, color retention, selected GIF download, ZIP links, and frame references: PASS');

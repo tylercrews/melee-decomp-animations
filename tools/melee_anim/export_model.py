@@ -1,4 +1,4 @@
-"""Export a Mario costume as neutral JSON meshes plus decoded PNG textures.
+"""Export a fighter costume as neutral JSON meshes plus decoded PNG textures.
 
 Matrices are row-major 4x4 arrays multiplying column vectors. Coordinates stay
 in the game's axes (Y up); the render backend owns any coordinate conversion.
@@ -17,7 +17,7 @@ import struct
 import numpy as np
 
 from .hsd import Archive, FormatError
-from .inspect_models import attribute_size, costume_catalog, inspect_model, linked, visibility_tables
+from .inspect_models import attribute_size, costume_catalog, inspect_model, linked, visibility_tables, visibility_lookup
 from .motions import Track
 from .roster import roster, visibility_defaults, visible_drawables
 from .texture import decode_image, image_size, write_png
@@ -93,7 +93,9 @@ def skin_source_mesh(mesh, bones, worlds):
     for index, matrix in enumerate(palettes):
         selected = indices == index
         positions[selected] = source[selected] @ matrix[:3, :3].T + matrix[:3, 3]
-        normal_matrix = np.linalg.inv(matrix[:3, :3]).T
+        # Zero-scale channels collapse/hide parts; their normal matrix is
+        # singular, but they must not abort the rest of a valid fighter pose.
+        normal_matrix = np.linalg.pinv(matrix[:3, :3]).T
         transformed_normals[selected] = normals[selected] @ normal_matrix.T
     lengths = np.linalg.norm(transformed_normals, axis=1)
     good = lengths > 1e-12
@@ -247,6 +249,18 @@ def texture_matrix(texture):
     return np.diag(s + [1]) @ local_matrix(rotation, [1, 1, 1], [0, 0, 0]) @ local_matrix([0, 0, 0], [1, 1, 1], t)
 
 
+def primary_drawables(count, classes, item_groups=()):
+    """Classes 0/1/3/4 address the primary list; class 2 uses fp->x203C.
+
+    Exclude alternate normal/metal/item geometry from the initial primary
+    list while retaining every option the normal motion scripts may select.
+    """
+    normal = {d for group in classes[0]["groups"] for option in group for d in option}
+    hidden = {d for cls in (classes[1], classes[3]) for group in cls["groups"] for option in group for d in option}
+    hidden.update(d for group in item_groups for option in group for d in option)
+    return set(range(count)) - (hidden - normal)
+
+
 def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt")):
     catalog = roster(files_root)
     fighter=next(f for f in catalog["fighters"] if f["fighter_kind"]==kind)
@@ -263,12 +277,14 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
     visibility = visibility_tables(files_root/data_root["fighter_archive"],data_root["fighter_root"],fighter["costume_count"])
     groups=visibility["costumes"][costume_id]["classes"][0]["groups"]
     states=visibility_defaults(kind,costume_id,len(groups))
-    base=list(range(len(model["drawables"])))
-    selected=set(base)
-    # Remove alternatives belonging solely to other rendering classes (LOD, metal).
-    other={i for cls in visibility["costumes"][costume_id]["classes"][1:] for group in cls["groups"] for option in group for i in option}
-    normal={i for group in groups for option in group for i in option}
-    selected-=other-normal
+    item_groups = []
+    if kind == 24:
+        # ftGw_Init_OnLoad assigns class 4 from items[10].visibility. Without
+        # hiding this list, oil-panic/other silhouettes overlap the fighter.
+        fighter_ar = Archive((files_root/data_root["fighter_archive"]).read_bytes())
+        items = fighter_ar.pointer(fighter_ar.public(data_root["fighter_root"]) + 0x48)
+        item_groups = visibility_lookup(fighter_ar, fighter_ar.pointer(items + 10 * 4), len(groups))
+    selected = primary_drawables(len(model["drawables"]), visibility["costumes"][costume_id]["classes"], item_groups)
     vis={"groups":groups,"defaults":states,"base":sorted(selected)}
     used_materials = {d["material"] for d in model["drawables"] if d["index"] in selected}
     material_ids, materials = {}, []

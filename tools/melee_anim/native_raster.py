@@ -97,6 +97,8 @@ class NativeRaster:
         self.gl.glClearColor(*(v/255 for v in background)); self.gl.glClear(0x4100)
         light=np.array([-.35,.6,.72]); light/=np.linalg.norm(light)
         for mesh,(positions,normals) in zip(model["meshes"],posed):
+            if positions is None:
+                continue
             mat=model["materials"][mesh["material_index"]]
             candidates=[t for t in mat["textures"] if t.get("coordinate_type",0)==0 and t.get("image_file") in textures]
             base=next((t for t in candidates if ((t.get("flags",0)>>16)&15) in (4,5)),candidates[0] if candidates else None)
