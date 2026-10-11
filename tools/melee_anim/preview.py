@@ -139,6 +139,20 @@ def fit_camera(cloud, view, size):
     return center, size*.82/(2*extent)
 
 
+def fit_knockdown_camera(cloud, view, size):
+    """Center the visible fighter's whole-motion projected bounds, not effects."""
+    center = (cloud.min(axis=0)+cloud.max(axis=0))/2
+    projected = (cloud-center)@view
+    lo, hi = projected.min(axis=0), projected.max(axis=0)
+    offset = (lo+hi)/2
+    offset[2] = 0
+    center = center+view@offset
+    extent = ((hi-lo)[:2]/2).max()
+    if extent <= 0:
+        raise ValueError('Cannot frame degenerate geometry')
+    return center, size*.82/(2*extent)
+
+
 def texture_uv(uv, descriptor):
     """HSD UV transform followed by GX clamp/repeat/mirrored repeat."""
     if descriptor.get("texture_matrix") is not None:
@@ -384,22 +398,34 @@ def main():
     fitted = [evaluate_pose(frame)[0] for frame in fit_times] if fit_times else poses
     if companion:model["meshes"].extend(companion["meshes"])
     framing = fitted+poses if fit_times else poses
-    cloud = np.concatenate([p for frame in framing for p, _ in frame])
+    knockdown = args.action.startswith('tech-')
+    if knockdown:
+        fit_samples = [evaluate_pose(t) for t in (fit_times or source_times)]
+        cloud = np.concatenate([p for frame, mask in fit_samples for (p,_),shown in zip(frame,mask) if shown])
+    else:
+        cloud = np.concatenate([p for frame in framing for p, _ in frame])
     effect = None
+    flash = None
     anchors = [[-2.8,0,0],[2.8,0,0]] if companion else [[0,0,0]]
-    if args.action.startswith('tech-'):
+    if knockdown:
         from .techs import ground_effect
         from .ground_effects import GroundEffect
         effect_kind = ground_effect(args.action)
         if effect_kind:
             effect = GroundEffect(args.files,effect_kind)
-            # Fit identically with effects on/off: toggling should not change
-            # the character scale, camera pivot or exact selected frame.
-            extra = [p for t in source_times for anchor in anchors for _,p in effect.geometry(t,anchor,view)]
-            if extra:cloud=np.concatenate([cloud]+extra)
-    # One world-space pivot for the entire animation, independent of camera
-    # angles. Symmetric projected bounds retain the pivot without clipping.
-    center, scale = fit_camera(cloud, view, args.size)
+    # Keep one center/scale for the whole clip. Knockdown centers the fighter
+    # in the selected view, then fits the complete visible impact at that pivot.
+    center, scale = (fit_knockdown_camera if knockdown else fit_camera)(cloud, view, args.size)
+    if effect:
+        bounds = effect.visible_bounds(fit_times or source_times,anchors,view)
+        if len(bounds):
+            extent = max(np.abs((cloud-center)@view)[:,:2].max(),
+                         np.abs((bounds-center)@view)[:,:2].max())
+            scale = args.size*.88/(2*extent)
+    if knockdown:
+        from .fighter_colors import TechFlash, tech_color_animation
+        if tech_color_animation(args.action) is not None:
+            flash = TechFlash(args.files,args.action,motion)
     images = []
     raster=None
     if args.backend=="native":
@@ -410,6 +436,8 @@ def main():
     for i, pose in enumerate(poses):
         drawn = [p if shown else (None, None) for p, shown in zip(pose, visibility[i])]
         image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, center, scale, (34, 38, 46, 0))
+        if flash:
+            image = flash.apply(image,source_times[i])
         if effect and args.ground_effects=='on':
             layer = effect.render(source_times[i],anchors,view,args.size,center,scale)
             image = Image.alpha_composite(layer,image)
@@ -449,10 +477,13 @@ def main():
                 "limitations": ["Approximate paired placement" if companion else "Isolated fighter", "no complete gameplay scripts/props/particles/dynamics/audio",
                                 "approximate materials/lighting/reflection", "source finger seam preserved",
                                 "no rendered game-reference validation yet"]}
-    if args.action.startswith('tech-'):
+    if knockdown:
         manifest['ground_effects_enabled'] = bool(effect and args.ground_effects=='on')
         manifest['ground_effect'] = effect.provenance() if effect else None
         manifest['effect_anchors'] = anchors if effect else []
+        manifest['ground_effect_display_scale'] = 1.0 if effect else None
+        manifest['framing_policy'] = 'fighter-centered whole-motion fit with complete visible impact alpha; shared source scale'
+        manifest['fighter_flash'] = flash.provenance() if flash else None
     if sync_plan:
         manifest['sync_plan'] = sync_plan
         manifest['output_mode'] = 'clapping-sync alteration'

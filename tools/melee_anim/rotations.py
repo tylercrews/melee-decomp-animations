@@ -64,6 +64,7 @@ class RotationCache:
                 paths.append(attack_catalog)
                 if action.startswith('tech-'):
                     paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
+                    paths.append(self.repo/'orig/GALE01/files/PlCo.dat')
             elif action == 'taunt':
                 table = next(t for t in report['taunts'] if t['fighter_kind'] == data['fighter_kind'])
                 source_kind = table['standard_facing']['right']['source_fighter_kind']

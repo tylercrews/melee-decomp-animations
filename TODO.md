@@ -4,6 +4,11 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Verify final full-impact policy: 116 Python tests / Node controls; all 182 default-costume Knockdown renders and 6,865 alpha-matched GIF/PNG frames without edge cropping; 16 live on/off previews, 32 exact PNG/GIF exports, 10 all-color/all-size still ZIPs and two all-five-color GIF ZIPs. Review final Mario and rotated reference sheets.
+
+- [x] Correct missed-tech green texture color using source TEV active flags. Enlarge and center Knockdown fighters independently of effects; fit complete visible impacts at the same camera scale as the fighter, preserving on/off framing. The user explicitly selected full impact visibility with reduced fighter size; exclude transparent padding from the fit. Independent effect shrinking and overflow cropping are not the selected policy. Add original PlCo white color-script flashes to in-place/away rolls, keeping towards unchanged and stopping at source hit-status reset; retain transparency and shared export/costume/rotation behavior.
+- [ ] Compare Knockdown flashes with the game and implement the full fighter hurtbox/color-overlay priority state machine. Current selection of in-place/away flashes is the requested isolated preview policy.
+
 - [x] Rename the displayed Tech category to Knockdown and alphabetize Character names, preserving Mario's default selection, separate Zelda/Sheik entries and internal source/cache identities. Verify generated controls and served HTML.
 
 - [x] Add Tech type with in-place/forward/back techs, missed-tech face-up/down landings, and face-up/down lying loops for all 26 characters / 123 costumes (182 clips / 861 costume choices), including paired Nana fallback.

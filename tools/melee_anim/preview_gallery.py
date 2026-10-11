@@ -57,7 +57,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <small id="cyclehint"></small></fieldset>
 <div id="techcontrols" class="controls" hidden>
 <label><input id="groundeffects" type="checkbox" checked> Ground-impact effects</label>
-<small id="techhint">Towards/away follow the character's facing. Effects include the ground burst or tech flash; extra dust/sparkle particles are not included yet.</small></div>
+<small id="techhint">Towards/away follow the character's facing. The whole impact fits in the image; larger bursts make the character smaller. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.</small></div>
 <fieldset class="controls"><legend>Viewing angle</legend>
 <label>X tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="X tilt"><output id="pitchvalue">0°</output></label>
 <label>Y turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="Y turn"><output id="yawvalue">0°</output></label>
@@ -168,7 +168,7 @@ function markedName(name){let suffix=cycleMode()==='sync'?'-clapping-sync':cycle
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
 techcontrols.hidden=!c.action_key.startsWith('tech-');groundeffects.disabled=!c.ground_effect;
-techhint.textContent=c.ground_effect?"Towards/away follow the character's facing. Effects include the ground burst or tech flash; extra dust/sparkle particles are not included yet.":'Lying animations have no ground-impact effect.';
+techhint.textContent=c.ground_effect?"Towards/away follow the character's facing. The whole impact fits in the image; larger bursts make the character smaller. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.":'Lying animations have no ground-impact effect.';
 synccycle.disabled=!c.sync_cycle;document.getElementById('clapmodes').hidden=c.action_key!=='results-clap_source';
 if(cycleMode()==='full')checkMode('full');
 let short=activeCycle()||c.minimum_cycle||c.dirty_cycle;

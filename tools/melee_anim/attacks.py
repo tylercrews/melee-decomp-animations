@@ -234,6 +234,7 @@ class AttackCache:
             paths = [catalog, model, self.repo/'build/melee_anim/motions.json']
             if action.startswith('tech-'):
                 paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
+                paths.append(self.repo/'orig/GALE01/files/PlCo.dat')
             for source in [model]+([companion] if companion.is_file() else []):
                 data = json.loads(source.read_text()); actor = find_action(selection, data['fighter_kind'], action)
                 paths += [source, self.repo/'orig/GALE01/files'/actor['animation_file']]

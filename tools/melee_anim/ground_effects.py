@@ -18,6 +18,16 @@ from .texture import decode_image, image_size
 EFFECT_IDS = {'missed': (1030, 4), 'tech': (1053, 15)}
 
 
+def effect_texture_rgb(rgb, konst, active):
+    """These descriptors' color generator is used only when COLOR_TEV is active.
+
+    Descriptor 4 enables ALPHA_TEV alone: retain its original green texels.
+    Descriptor 15 enables both and uses (1-texture)*texture + texture*konst.
+    See HSD_TObjMakeTExp / MakeColorGenTExp in baselib/tobj.c.
+    """
+    return rgb*(1-rgb)+rgb*konst if active & (1 << 30) else rgb.copy()
+
+
 def aobj_tracks(ar, at, index):
     if at is None:
         return []
@@ -128,6 +138,7 @@ class GroundEffect:
                 off = tex['offset']; image = ar.pointer(off+76); pal = ar.pointer(off+80)
                 tex['id'] = ar.u32(off+8)
                 tex['konst'] = list(ar.read(tex['tev']+16,4)) if tex['tev'] else [255]*4
+                tex['tev_active'] = ar.u32(tex['tev']+28) if tex['tev'] else 0
                 w,h,fmt = ar.u16(image+4),ar.u16(image+6),ar.u32(image+8)
                 palette = ar.read(ar.pointer(pal),ar.u16(pal+12)*2) if pal is not None else None
                 pixels = decode_image(ar.read(ar.pointer(image),image_size(w,h,fmt)),w,h,fmt,palette,ar.u32(pal+4) if pal is not None else 1)
@@ -170,6 +181,26 @@ class GroundEffect:
             result.append((mesh,points))
         return result
 
+    def visible_bounds(self, ticks, anchors, view):
+        """Measure alpha coverage without treating transparent mesh padding as visible."""
+        from .preview import fit_knockdown_camera
+        geometry = [p for t in ticks for a in anchors for _,p in self.geometry(t,a,view)]
+        if not geometry:
+            return np.empty((0,3))
+        resolution = 512
+        center, scale = fit_knockdown_camera(np.concatenate(geometry),view,resolution)
+        points = []
+        for tick in ticks:
+            box = self.render(tick,anchors,view,resolution,center,scale).getchannel('A').getbbox()
+            if box:
+                # Conservative one-pixel pad for raster/coverage rounding.
+                x0,y0,x1,y1 = box
+                corners = np.array([[x,y,0] for x in (x0-1,x1+1) for y in (y0-1,y1+1)],dtype=float)
+                corners[:,0] = (corners[:,0]-resolution/2)/scale
+                corners[:,1] = (resolution/2-corners[:,1])/scale
+                points.extend(corners@view.T+center)
+        return np.asarray(points).reshape(-1,3)
+
     def render(self, tick, anchors, view, size, center, scale):
         layer = Image.new('RGBA',(size,size))
         for anchor in anchors:
@@ -181,11 +212,7 @@ class GroundEffect:
                     if values.get(channel) is not None:tint[channel-12]=values[channel]
                 colors = np.asarray(mesh['colors'],dtype=float)
                 pixels = self.textures[tex['offset']].astype(float)/255
-                # Both descriptors use color A=texture0, B=konst,
-                # C=texture, D=zero. GX ADD evaluates (1-C)*A+C*B.
-                # Taking raw texel RGB as the final color produces a spurious
-                # neon-green missed-tech burst.
-                combined = pixels[:,:,:3]*(1-pixels[:,:,:3])+pixels[:,:,:3]*tint[:3]
+                combined = effect_texture_rgb(pixels[:,:,:3], tint[:3], tex['tev_active'])
                 blend = np.clip(values.get(9,tex['blend']),0,1)
                 if self.kind=='tech':
                     pixels[:,:,:3] = (1-blend)+combined*blend

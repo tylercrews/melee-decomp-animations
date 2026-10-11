@@ -103,6 +103,7 @@ class AttackTests(unittest.TestCase):
         action=self.catalog['characters'][0]['actions'][0]
         action.update(key='tech-199_source',animation_type='tech',ground_effect='tech')
         (self.repo/'orig/GALE01/files/EfCoData.dat').write_bytes(b'synthetic effect archive fingerprint')
+        (self.repo/'orig/GALE01/files/PlCo.dat').write_bytes(b'synthetic color archive fingerprint')
         (self.root/'attack-catalog.json').write_text(json.dumps(self.catalog))
         self.clip=virtual_clips(self.root)[0]
         self.assertEqual(self.clip['animation_type'],'tech')
