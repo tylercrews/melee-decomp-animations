@@ -38,7 +38,7 @@ class RotationCache:
         self.repo = Path(repo).resolve() if repo else Path(__file__).resolve().parents[2]
         self.lock = threading.RLock()
 
-    def _inputs(self, clip, angles, sync, power='none'):
+    def _inputs(self, clip, angles, sync, power='none', center=False):
         slug, cid = clip['character'], clip['costume_id']
         model = self.repo/'build/melee_anim/exported'/slug/f'costume_{cid:02d}'/'model.json'
         companion = model.parent/'companion/model.json'
@@ -84,7 +84,7 @@ class RotationCache:
         # Include evaluators, texture codecs and the renderer, not merely models.
         paths.extend(Path(__file__).parent.glob('*.py'))
         settings = {'version': 'camera-v1', 'angles': angles, 'action': action, 'section': section,
-                    'kirby_power':power,
+                    'kirby_power':power, 'center_jump':center,
                     'ground_effects':manifest.get('ground_effects_enabled',False),
                     'source_times': selected['sample_source_times'], 'fps': selected['fps'],
                     'sync_plan': selected.get('sync_plan') if sync else None,
@@ -98,14 +98,16 @@ class RotationCache:
             digest.update(hashlib.sha256(path.read_bytes()).digest())
         return digest.hexdigest(), settings, model, companion if companion.is_file() else None
 
-    def get(self, clip, angles, sync=False, power='none'):
+    def get(self, clip, angles, sync=False, power='none', center=False):
         angles = camera_angles(*angles)
         from .kirby_powers import validate_power
         validate_power(clip['character'],power)
-        if not any(angles) and power=='none':
+        from .movement import centered_jump_setting
+        centered_jump_setting(clip['action_key'],'on' if center else 'off')
+        if not any(angles) and power=='none' and not center:
             return clip
         with self.lock:
-            key, settings, model, companion = self._inputs(clip, angles, sync, power)
+            key, settings, model, companion = self._inputs(clip, angles, sync, power, center)
             folder = self.root/'rotations'/key
             done = folder/'rotation.json'
             ready = False
@@ -128,6 +130,7 @@ class RotationCache:
                            '--backend', settings['backend'], '--pitch', str(angles[0]),
                            '--yaw', str(angles[1]), '--roll', str(angles[2])]
                 if power!='none':command += ['--kirby-power',power]
+                if center:command += ['--center-jump','on']
                 if companion:
                     command += ['--companion', str(companion)]
                 if settings['action'].startswith(('attack-','tech-','movement-')):
@@ -158,6 +161,7 @@ class RotationCache:
             relative = folder.relative_to(self.root).as_posix()
             if power!='none':
                 clip={**clip,'kirby_power':power,'download_name':clip['download_name'].replace('.gif',f'-power-{power}.gif')}
+            if center:clip={**clip,'download_name':clip['download_name'].replace('.gif','-centered.gif')}
             frames = [f'{relative}/frame_{i:04d}.png' for i in range(len(settings['source_times']))]
             if sync:
                 return {**clip, 'sync_cycle': {**clip['sync_cycle'], 'frames': frames, 'gif': f'{relative}/preview.gif'}}

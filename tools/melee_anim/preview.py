@@ -175,6 +175,11 @@ def texture_uv(uv, descriptor):
     return uv
 
 
+def projected_pose_center(posed, mask, view):
+    visible = np.concatenate([p for (p, _), shown in zip(posed, mask) if shown]) @ view
+    return view @ ((visible.min(0) + visible.max(0)) / 2)
+
+
 def reflection_uv(normals, view):
     """HSD TEX_COORD_REFLECTION: camera normals map into the texture square.
 
@@ -304,6 +309,7 @@ def main():
     parser.add_argument("--attack-catalog", type=Path, default=Path("build/melee_anim/preview/attack-catalog.json"))
     parser.add_argument('--ground-effects', choices=('on','off'), default='off', help='original tech flash/missed-tech ground burst')
     parser.add_argument('--kirby-power', default='none', help='copied character slug; none for ordinary Kirby')
+    parser.add_argument('--center-jump', choices=('on','off'), default='off', help='follow the visible full/short-hop character with a fixed-scale camera')
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
     parser.add_argument("--action", default="results-clap", help="results-clap, victory1/2/3, taunt, or cataloged attack-/tech-<animation ID>")
     parser.add_argument("--section", choices=("source", "wait"), default="source")
@@ -329,6 +335,11 @@ def main():
         parser.error('samples cannot be combined with timeline or truncation')
     if args.ground_effects=='on' and not args.action.startswith('tech-'):
         parser.error('ground effects are only available for Tech animations')
+    from .movement import centered_jump_setting
+    try:
+        center_jump = centered_jump_setting(args.action,args.center_jump)
+    except ValueError as error:
+        parser.error(str(error))
     model = json.loads(args.model.read_text())
     from .kirby_powers import validate_power
     validate_power('kirby' if model['fighter_kind']==4 else '',args.kirby_power)
@@ -430,6 +441,8 @@ def main():
         for mesh in companion["meshes"]:mesh["material_index"]+=offset
         model["materials"].extend(companion["materials"])
     view = camera_basis(args.yaw, args.pitch, args.roll)
+    def follow_center(posed,mask):
+        return projected_pose_center(posed,mask,view)
     # Precompute poses once; fit over the whole selected source interval.
     cache = {}
     def evaluate_pose(frame,scene_mode=None):
@@ -472,7 +485,10 @@ def main():
         for mode in ('fullhop','shorthop'):
             duration=max(jump_scenes[mode].duration,companion_jumps[mode].duration if companion else 0)
             count=max(1,math.ceil(duration/args.ticks_per_second*args.fps))
-            for i in range(count+1):fitted.append(evaluate_pose(duration*i/count,mode)[0])
+            for i in range(count+1):
+                geometry,mask=evaluate_pose(duration*i/count,mode)
+                offset=follow_center(geometry,mask) if center_jump else np.zeros(3)
+                fitted.append([(p-offset,n) for (p,n),shown in zip(geometry,mask) if shown] if center_jump else geometry)
     if hat:model['meshes'].extend(hat['meshes'])
     if companion:model["meshes"].extend(companion["meshes"])
     framing = fitted if jump_scenes else fitted+poses if fit_times else poses
@@ -493,7 +509,7 @@ def main():
             effect = GroundEffect(args.files,effect_kind)
     # Keep one center/scale for the whole clip. Knockdown centers the fighter
     # in the selected view, then fits the complete visible impact at that pivot.
-    center, scale = (fit_knockdown_camera if knockdown else fit_camera)(cloud, view, args.size)
+    center, scale = (fit_knockdown_camera if knockdown or center_jump else fit_camera)(cloud, view, args.size)
     if effect and args.ground_effects=='on':
         bounds = effect.visible_bounds(fit_times or source_times,anchors,view)
         if len(bounds):
@@ -513,7 +529,8 @@ def main():
     started = time.monotonic()
     for i, pose in enumerate(poses):
         drawn = [p if shown else (None, None) for p, shown in zip(pose, visibility[i])]
-        image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, center, scale, (34, 38, 46, 0))
+        frame_center=center+follow_center(pose,visibility[i]) if center_jump else center
+        image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, frame_center, scale, (34, 38, 46, 0))
         if flash:
             image = flash.apply(image,source_times[i])
         if effect and args.ground_effects=='on':
@@ -574,7 +591,10 @@ def main():
             'limitations':['Hat dynamics remain at bind pose; copied projectiles, items and complete runtime scripts are not executed']}
     if jump_scenes:
         manifest['movement_scenario']=jump_scenes[jump_mode].provenance()
-        manifest['framing_policy']='shared complete full-hop and short-hop geometry bounds'
+        manifest['center_jump_enabled']=center_jump
+        manifest['framing_policy']=('follow projected visible fighter center; fixed scale shared across full/short hops'
+                                    if center_jump else 'shared complete full-hop and short-hop geometry bounds')
+        if center_jump:manifest['camera_sample_centers']=[(center+follow_center(p,v)).tolist() for p,v in sampled]
         if companion:manifest['companion_movement_scenario']=companion_jumps[jump_mode].provenance()
     if sync_plan:
         manifest['sync_plan'] = sync_plan

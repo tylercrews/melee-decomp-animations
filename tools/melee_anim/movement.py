@@ -54,6 +54,12 @@ def is_jump(action):
     return action.removesuffix('_source') in ('movement-fullhop','movement-shorthop')
 
 
+def centered_jump_setting(action, value):
+    if value not in ('on', 'off') or value == 'on' and not is_jump(action):
+        raise ValueError('Keep character centered is only available for full/short hops')
+    return value == 'on'
+
+
 class JumpScene:
     def __init__(self,actor,files,mode,remap=None):
         self.parameters=actor['movement']['parameters'];self.mode=mode

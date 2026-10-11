@@ -13,7 +13,7 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -465,6 +465,43 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
     assert(list.some(c=>c.action_key==='movement-shorthop_source'));
     for(const a of new Set(list.map(c=>c.action_key)))assert.equal(list.filter(c=>c.action_key===a).length,c.costumes.length);
   }
+  assert.equal(servedElements.jumpcontrols.hidden,false);
+  assert.equal(servedElements.centerjump.checked,false);
+  servedElements.centerjump.checked=true;servedElements.centerjump.onchange();
+  let centeredRequest=requests.at(-1);
+  assert.equal(new URL(centeredRequest.url,'http://localhost').searchParams.get('center'),'on');
+  centeredRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:vm.runInContext('frameCount()',servedContext)},(_,i)=>`movement/center-${i}.png`)})});await settle();
+  assert.equal(inspect('index'),4);assert.equal(inspect('playing'),false);
+  for(const id of ['gif','animationzip','still','framezip']){
+    assert.equal(new URL(servedElements[id].href,'http://localhost').searchParams.get('center'),'on');
+    assert.match(servedElements[id].download,/-centered/);
+  }
+  assert.equal(servedElements.saveimage.src,servedElements.still.href);
+  servedElements.centerjump.checked=false;servedElements.centerjump.onchange();
+  assert.equal(new URL(requests.at(-1).url,'http://localhost').searchParams.get('center'),'off');
+  servedElements.action.value='movement-2_source';servedElements.action.onchange();
+  assert.equal(servedElements.jumpcontrols.hidden,true);
+  assert(!new URL(requests.at(-1).url,'http://localhost').searchParams.has('center'));
+  elements.character.value='mario';elements.character.onchange();
+  elements.animationtype.value='movement';elements.animationtype.onchange();
+  elements.action.value='movement-shorthop_source';elements.action.onchange();
+  elements.scrub.value='4';elements.scrub.oninput();
+  elements.centerjump.checked=true;elements.centerjump.onchange();
+  const centerHandoff=new URL(context.location.href);
+  assert.equal(new URLSearchParams(centerHandoff.hash.slice(1)).get('center'),'on');
+  const centerElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  let centerRequest,centerPageShow;
+  const centerContext=vm.createContext({document:{getElementById:id=>centerElements[id],createElement:()=>({})},URLSearchParams,
+    location:{protocol:'http:',hash:centerHandoff.hash},performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},
+    addEventListener:(event,callback)=>{if(event==='pageshow')centerPageShow=callback},
+    fetch:url=>new Promise(resolve=>centerRequest={url,resolve})});
+  vm.runInContext(script,centerContext);
+  assert.equal(centerElements.centerjump.checked,true);assert.equal(centerElements.jumpcontrols.hidden,false);
+  assert.equal(vm.runInContext('index',centerContext),4);assert.equal(vm.runInContext('playing',centerContext),false);
+  assert.equal(new URL(centerRequest.url,'http://localhost').searchParams.get('center'),'on');
+  centerElements.centerjump.checked=false;centerPageShow({persisted:false});
+  assert.equal(centerElements.centerjump.checked,true,'restored browser form must match the requested render setting');
+  console.log('Centered hop visibility, toggle, paused frame and all download controls: PASS');
   console.log('Movement dropdown, all-character/costume coverage, lazy jump preview and exact-frame export controls: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');

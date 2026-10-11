@@ -56,6 +56,8 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label><input id="dirtycycle" type="radio" name="clapmode" value="dirty" disabled> Minimum loop (dirty/jittery)</label>
 <label><input id="synccycle" type="radio" name="clapmode" value="sync" disabled> Clapping-sync alteration</label>
 <small id="cyclehint"></small></fieldset>
+<div id="jumpcontrols" class="controls" hidden><label><input id="centerjump" type="checkbox" autocomplete="off"> Keep character centered</label>
+<small>The camera follows the character at a fixed zoom. Applies to previews and GIF/PNG downloads.</small></div>
 <p id="movementhint" hidden>Standing includes the normal idle loop; alternate idles vary by character. Walking, running and dashing preview the original motion in place. Full/short hops use neutral jump squat, flight and landing with source movement attributes and shared framing; stage physics and movement effects are not simulated.</p>
 <div id="techcontrols" class="controls" hidden>
 <label><input id="groundeffects" type="checkbox" checked> Ground-impact effects</label>
@@ -99,6 +101,11 @@ const saveimage=document.getElementById('saveimage');
 const groundeffects=document.getElementById('groundeffects'),techcontrols=document.getElementById('techcontrols'),techhint=document.getElementById('techhint');
 let groundEffectsEnabled=true;
 groundeffects.checked=groundEffectsEnabled;
+const centerjump=document.getElementById('centerjump'),jumpcontrols=document.getElementById('jumpcontrols');
+let centerJumpEnabled=false;centerjump.checked=false;
+function isHop(){return ['movement-fullhop_source','movement-shorthop_source'].includes(clips[current].action_key)}
+function centerSetting(){return isHop()&&centerJumpEnabled?'on':'off'}
+function centeredName(name){return centerSetting()==='on'?name.replace(/(\.[^.]+)$/,'-centered$1'):name}
 const animationtype=document.getElementById('animationtype'), actionlabel=document.getElementById('actionlabel');
 const action=document.getElementById('action'), costume=document.getElementById('costume'), frame=document.getElementById('frame'),
 play=document.getElementById('play'), restart=document.getElementById('restart'), loop=document.getElementById('loop'),
@@ -129,12 +136,13 @@ function updateRotationState(){frame.hidden=previewUnavailable();saveimage.hidde
 document.getElementById('downloadpanel').hidden=previewUnavailable()}
 async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
 if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();return}
-if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting()});
+if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting()});
 location.href=`${exportBase}/player.html#${query}`;return}
 rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
 updateRotationState();
 try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
 if(hasPower())query.set('power',powerSetting());
+if(isHop())query.set('center',centerSetting());
 if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
 let response=await fetch(`/rotation?${query}`);if(!response.ok)throw Error(response.status===503?'Renderer is busy; try Apply again shortly.':'Render failed. Check the player service log, then try Apply again or Reset.');
 let result=await response.json();if(generation!==rotationGeneration)return;
@@ -145,7 +153,7 @@ result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotation
 }catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
 rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
 applyangle.onclick=()=>{angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
-function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled;kirbypower.value=kirbyPower}
+function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled;kirbypower.value=kirbyPower;centerjump.checked=centerJumpEnabled}
 resetangle.onclick=()=>{angles=[0,0,0];syncAngleInputs();loadRotation()};
 // Form restoration can run after this script; also reset a cached page when
 // returning through browser history. Explicit file-to-server handoffs still
@@ -174,10 +182,11 @@ function frameCount(){let c=clips[current];let short=activeCycle();return short?
 function sourceIndex(){let short=activeCycle();return index+(short&&!short.frames?short.start:0)}
 function framePath(){if(rotated)return rotated.frames[index];let short=activeCycle();return short&&short.frames?short.frames[index]:clips[current].frames[sourceIndex()]}
 function sourceTime(){let c=clips[current];let short=activeCycle();return short&&short.frames?short.source_times[index]:c.lazy?(rotated&&rotated.source_times?rotated.source_times[index]:c.period*index/Math.max(1,Math.ceil(c.period/60*c.fps))):c.source_times[sourceIndex()]}
-function markedName(name){name=powerName(name);let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
+function markedName(name){name=centeredName(powerName(name));let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
 document.getElementById('movementhint').hidden=!c.action_key.startsWith('movement-');
+jumpcontrols.hidden=!isHop();centerjump.checked=centerJumpEnabled;
 techcontrols.hidden=!c.action_key.startsWith('tech-');groundeffects.disabled=!c.ground_effect;
 techhint.textContent=c.ground_effect?"Towards/away follow the character's facing. With impacts on, the whole effect fits; turning them off zooms in on the character. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.":'Lying animations have no ground-impact effect.';
 synccycle.disabled=!c.sync_cycle;document.getElementById('clapmodes').hidden=c.action_key!=='results-clap_source';
@@ -190,6 +199,7 @@ scrub.max=frameCount()-1;
 document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frames at ${c.fps} fps / ${(frameCount()/c.fps).toFixed(2)}s / ${cycleMode()==='sync'?'clapping-sync alteration':cycleMode()==='dirty'?'minimum loop (dirty/jittery)':useMinimum()?'minimum cycle (edited loop)':c.authored_loop?'full authored loop':'one-shot action'}`}
 function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
 costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:cycleMode()});
+if(isHop())query.set('center',centerSetting());
 if(hasPower())query.set('power',powerSetting());
 if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
 if(hasAngle()){['pitch','yaw','roll'].forEach((key,i)=>query.set(key,String(angles[i])))}return `${exportBase}/export?${query}`}
@@ -235,6 +245,7 @@ action.onchange=()=>{animationtype.value=typeForAction(action.value);actions();s
 function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048'}
 downloadsize.onchange=()=>{updateSizeWarning();show()};
 groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[current].ground_effect)loadRotation()};
+centerjump.onchange=()=>{centerJumpEnabled=centerjump.checked;if(isHop())loadRotation()};
 function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle()||hasPower())loadRotation();else show()}
 [fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.onchange=()=>{if(r.checked){checkMode(['full','minimum','dirty','sync'][i]);changeCycle()}});
 play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
@@ -253,6 +264,7 @@ if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===
 if(['full','minimum','dirty','sync'].includes(incoming.get('cycle')))checkMode(incoming.get('cycle'));
 if(['128','256','512','1024','2048'].includes(incoming.get('size')))downloadsize.value=incoming.get('size');
 if(action.value.startsWith('tech-')&&['on','off'].includes(incoming.get('effects'))){groundEffectsEnabled=incoming.get('effects')==='on';groundeffects.checked=groundEffectsEnabled}
+if(['movement-fullhop_source','movement-shorthop_source'].includes(action.value)&&['on','off'].includes(incoming.get('center'))){centerJumpEnabled=incoming.get('center')==='on';centerjump.checked=centerJumpEnabled}
 updateSizeWarning();
 select(false);
 let savedFrame=Number(incoming.get('frame'));if(Number.isInteger(savedFrame)&&savedFrame>=0&&savedFrame<frameCount())index=savedFrame;

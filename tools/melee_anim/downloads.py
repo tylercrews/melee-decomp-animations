@@ -73,7 +73,9 @@ class DownloadCatalog:
         from .attacks import AttackCache
         self.attacks = AttackCache(self.root)
 
-    def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none'):
+    def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off'):
+        from .movement import centered_jump_setting
+        centered = centered_jump_setting(action,center)
         from .kirby_powers import validate_power
         validate_power(character,power)
         angles = camera_angles(pitch, yaw, roll)
@@ -87,7 +89,7 @@ class DownloadCatalog:
         if cycle == 'sync' and (action != 'results-clap_source' or not clip.get('sync_cycle')):
             raise ValueError('Clapping-sync render is not available for this animation')
         clip = self.attacks.get(clip,effects=effects=='on')
-        clip = self.rotations.get(clip, angles, sync=cycle == 'sync', **({'power':power} if power!='none' else {}))
+        clip = self.rotations.get(clip, angles, sync=cycle == 'sync', **({'power':power} if power!='none' else {}), **({'center':True} if centered else {}))
         if cycle == 'sync':
             frames = clip['sync_cycle']['frames']
         else:
@@ -100,7 +102,10 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
-    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none'):
+    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off'):
+        from .movement import centered_jump_setting
+        centered = centered_jump_setting(action,center)
+        if centered and scope=='all':raise ValueError('Select one hop animation for centered exports')
         from .kirby_powers import validate_power
         validate_power(character,power)
         if power!='none' and scope=='all':raise ValueError('Select one Kirby animation for power exports')
@@ -130,8 +135,8 @@ class DownloadCatalog:
             if kind == 'png' and not 0 <= frame < length:
                 raise ValueError('Frame index is outside this animation')
         clips = [self.attacks.get(c,effects=effects=='on') for c in clips]
-        if any(angles) or power!='none':
-            clips = [self.rotations.get(c, angles, sync=cycle == 'sync', **({'power':power} if power!='none' else {})) for c in clips]
+        if any(angles) or power!='none' or centered:
+            clips = [self.rotations.get(c, angles, sync=cycle == 'sync', **({'power':power} if power!='none' else {}), **({'center':True} if centered else {})) for c in clips]
         if cycle == 'sync':
             clips = [{**c, 'gif': c['sync_cycle']['gif'], 'frames': c['sync_cycle']['frames'],
                       'fps': c['sync_cycle']['fps'],
@@ -200,6 +205,7 @@ class DownloadCatalog:
         if scope == 'colors':
             name += '-all-colors'
         if power!='none':name+=f'-power-{power}'
+        if centered:name+='-centered'
         if any(selected_cycle(c) for c in clips):
             name += '-dirty-loop' if cycle == 'dirty' else '-minimum-cycle'
         if cycle == 'sync':
