@@ -4,6 +4,9 @@ Updated 2026-10-11 after Game & Watch's source root-flattening/facing/material c
 
 ## Current workflow and remaining work
 
+- [x] Remove the UI checkerboard and show a clear stage; preserve transparent GIF/PNG downloads and native save targets.
+- [x] Reset X/Y/Z on fresh loads and browser history returns; consume one-time local-file handoff fragments, override stale form restoration, and retain requested angles on the initial transfer. Regenerated player only; Node control regressions and live HTTP HTML checks pass.
+
 - [x] Add true raster-coverage alpha to PNG masters and a reserved GIF transparency index; keep black/background-gray geometry opaque, clear prior poses with GIF disposal, and preserve every held tick.
 - [x] Preserve alpha through GIF/PNG resizing, minimum/dirty slices and sync encoding; retain source outline alpha in PNGs and invalidate opaque render/resize caches.
 - [x] Add a CSS checkerboard plus real GIF/PNG native right-click targets while preserving timed playback, scrubbing, size, mode and viewing-angle controls.

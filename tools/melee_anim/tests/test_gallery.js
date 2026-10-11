@@ -5,6 +5,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
+assert.match(html,/\.stage\{background:transparent;/);
+assert(!html.includes('repeating-conic-gradient'),'preview must have no checkerboard');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const elements = Object.fromEntries(['saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
@@ -178,12 +180,21 @@ assert.equal(elements.clapmodes.hidden,true);
 assert.equal(data('cycleMode()'),'full');
 // Served pages use their own origin, including a user-selected server port.
 const servedElements=Object.fromEntries(Object.keys(elements).map(id=>[id,
-  {value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  {value:'90',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
 const requests=[];
+let servedPageShow;
 const servedContext=vm.createContext({document:{getElementById:id=>servedElements[id],createElement:()=>({})}, location:{protocol:'http:'}, URLSearchParams,
+    addEventListener:(name,callback)=>{if(name==='pageshow')servedPageShow=callback},
     performance:context.performance, Image:context.Image, requestAnimationFrame:()=>{},
     fetch:url=>new Promise(resolve=>requests.push({url,resolve}))});
 vm.runInContext(script,servedContext);
+// Fresh loads override stale restored form values, even if restoration is late.
+for(const id of ['pitch','yaw','roll'])assert.equal(servedElements[id].value,'0');
+for(const id of ['pitch','yaw','roll'])servedElements[id].value='75';
+servedPageShow({persisted:false});
+for(const id of ['pitch','yaw','roll']){
+  assert.equal(servedElements[id].value,'0');assert.equal(servedElements[id+'value'].textContent,'0°');
+}
 assert.equal(servedElements.servicehint.hidden,true);
 servedElements.downloadsize.value='512';servedElements.downloadsize.onchange();
 assert(servedElements.gif.href.startsWith('/export?'));
@@ -202,9 +213,18 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   // The served page restores the file player's exact selection before rendering.
   const restoredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
   let restoredRequest;
-  const restoredContext=vm.createContext({document:{getElementById:id=>restoredElements[id],createElement:()=>({})},location:{protocol:'http:',hash:handoff.hash},URLSearchParams,
+  let restoredPageShow;
+  const restoredLocation={protocol:'http:',hash:handoff.hash,pathname:'/player.html',search:''};
+  const replacedURLs=[];
+  const restoredContext=vm.createContext({document:{getElementById:id=>restoredElements[id],createElement:()=>({})},URLSearchParams,
+    location:restoredLocation,
+    history:{replaceState:(state,title,url)=>{replacedURLs.push(url);restoredLocation.hash=''}},
+    addEventListener:(name,callback)=>{if(name==='pageshow')restoredPageShow=callback},
     performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},fetch:url=>new Promise(resolve=>{restoredRequest={url,resolve}})});
   vm.runInContext(script,restoredContext);
+  assert.deepEqual(replacedURLs,['/player.html']);assert.equal(restoredLocation.hash,'');
+  restoredElements.yaw.value='123';restoredPageShow({persisted:false});
+  assert.equal(restoredElements.yaw.value,'45','first handoff keeps its requested angle after form restoration');
   assert.equal(vm.runInContext('index',restoredContext),67);assert.equal(vm.runInContext('playing',restoredContext),false);
   assert.equal(restoredElements.costume.value,'2');assert.equal(restoredElements.downloadsize.value,'512');
   assert.equal(restoredElements.loop.checked,true);
@@ -212,6 +232,19 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   restoredRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:101},(_,i)=>`rotations/restored/frame_${String(i).padStart(4,'0')}.png`)})});
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(restoredElements.frame.src,'rotations/restored/frame_0067.png');assert.equal(restoredElements.still.hidden,false);
+  // Reload the consumed handoff: no rotation request and every axis starts at 0.
+  const reloadElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'90',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const reloadContext=vm.createContext({document:{getElementById:id=>reloadElements[id],createElement:()=>({})},location:restoredLocation,URLSearchParams,
+    performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},fetch:()=>{throw Error('reload must use default prepared masters')}});
+  vm.runInContext(script,reloadContext);
+  for(const id of ['pitch','yaw','roll'])assert.equal(reloadElements[id].value,'0');
+  assert.equal(vm.runInContext('hasAngle()',reloadContext),false);
+  // A browser back/forward cache return resets the actual render and exports.
+  restoredPageShow({persisted:true});
+  assert.equal(vm.runInContext('hasAngle()',restoredContext),false);
+  for(const id of ['pitch','yaw','roll'])assert.equal(restoredElements[id].value,'0');
+  assert.match(restoredElements.frame.src,/costume_02\/victory3_source\/frame_0067.png$/);
+  assert.equal(new URL(restoredElements.still.href,'http://localhost').searchParams.has('yaw'),false);
   const inspect=expression=>vm.runInContext(expression,servedContext);
   const settle=()=>new Promise(resolve=>setImmediate(resolve));
   function complete(request,label){const count=inspect('frameCount()');request.resolve({ok:true,json:async()=>({frames:Array.from({length:count},(_,i)=>`rotations/${label}/frame_${String(i).padStart(4,'0')}.png`)})})}

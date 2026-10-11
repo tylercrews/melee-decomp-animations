@@ -32,7 +32,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 .controls,.downloads{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:20px 0}
 .controls label{display:flex;align-items:center;gap:8px}.download{display:inline-block;text-decoration:none}
 .download.primary{background:#235da8;border-color:#3878cb}.download:hover{filter:brightness(1.15)}
-.stage{background:repeating-conic-gradient(#dde1e7 0% 25%,#f6f7f9 0% 50%) 50%/24px 24px;border:1px solid #354151;border-radius:12px;display:flex;justify-content:center;min-height:400px;align-items:center}
+.stage{background:transparent;border:1px solid #354151;border-radius:12px;display:flex;justify-content:center;min-height:400px;align-items:center}
 .framewrap{position:relative;width:min(100%,512px)}#saveimage{position:absolute;inset:0;width:100%;height:100%;opacity:0}
 #frame{width:min(100%,512px);height:auto}.timeline{display:flex;gap:12px;align-items:center;margin:20px 0}
 #scrub{flex:1}a{color:#81baff}.meta{background:#202a36;padding:16px;border-radius:8px}
@@ -55,13 +55,13 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label><input id="synccycle" type="radio" name="clapmode" value="sync" disabled> Clapping-sync alteration</label>
 <small id="cyclehint"></small></fieldset>
 <fieldset class="controls"><legend>Viewing angle</legend>
-<label>X tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" aria-label="X tilt"><output id="pitchvalue">0°</output></label>
-<label>Y turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" aria-label="Y turn"><output id="yawvalue">0°</output></label>
-<label>Z roll <input id="roll" type="range" min="-180" max="180" step="1" value="0" aria-label="Z roll"><output id="rollvalue">0°</output></label>
+<label>X tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="X tilt"><output id="pitchvalue">0°</output></label>
+<label>Y turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="Y turn"><output id="yawvalue">0°</output></label>
+<label>Z roll <input id="roll" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="Z roll"><output id="rollvalue">0°</output></label>
 <button id="applyangle">Apply</button><button id="resetangle">Reset</button>
 <small id="rotationstatus" role="status" aria-live="polite">Angles apply to previews and every GIF/PNG download. New angles need rendering.</small></fieldset>
 <div class="stage"><div class="framewrap"><img id="frame" alt="Animated character costume preview"><img id="saveimage" aria-hidden="true" alt="" title="Right-click to save"></div></div>
-<small>The checkerboard shows transparency. Right-click the character to save its GIF while playing or its PNG while paused.</small>
+<small>Right-click the character to save its transparent GIF while playing or its transparent PNG while paused.</small>
 <div class="timeline"><input id="scrub" type="range" min="0" value="0" step="1" aria-label="Animation frame"><span id="time"></span></div>
 <div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
 <option value="128">Extra small (128 × 128)</option><option value="256" selected>Small (256 × 256)</option>
@@ -124,7 +124,13 @@ result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotation
 }catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
 rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
 applyangle.onclick=()=>{angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
-resetangle.onclick=()=>{angles=[0,0,0];angleInputs.forEach(input=>{input.value='0';input.oninput()});loadRotation()};
+function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()})}
+resetangle.onclick=()=>{angles=[0,0,0];syncAngleInputs();loadRotation()};
+// Form restoration can run after this script; also reset a cached page when
+// returning through browser history. Explicit file-to-server handoffs still
+// keep their requested angles on the first visit.
+if(typeof addEventListener==='function')addEventListener('pageshow',event=>{
+if(event.persisted)resetangle.onclick();else syncAngleInputs()});
 function checkMode(mode){[fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.checked=['full','minimum','dirty','sync'][i]===mode)}
 checkMode('full');
 characters.forEach(c=>{let o=document.createElement('option');o.value=c.slug;o.textContent=c.label;character.append(o)});
@@ -208,6 +214,8 @@ function tick(now){if(current>=0&&playing&&!previewUnavailable()){let c=clips[cu
 while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.checked)index=0;else{playing=false;play.textContent='Play';break}}show()}
 last=now;requestAnimationFrame(tick)}
 function restoreSelection(){let incoming=new URLSearchParams((location.hash||'').slice(1));
+// Consume this one-time handoff so refresh/reopen cannot replay old angles.
+if(location.hash&&typeof history!=='undefined')history.replaceState(null,'',location.pathname+location.search);
 if(characters.some(c=>c.slug===incoming.get('character'))){character.value=incoming.get('character');colors();actions()}
 if(animations.some(a=>a.character===character.value&&a.key===incoming.get('action')&&!a.unavailable)){animationtype.value=typeForAction(incoming.get('action'));action.value=incoming.get('action');actions()}
 if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===incoming.get('costume')))costume.value=incoming.get('costume');

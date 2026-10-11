@@ -68,11 +68,11 @@ Use this launcher whenever you want the UI. It does not reimport or rerender the
 
 Select a character, **Animation Type**, and costume. Types are **Victory Pose, Taunt, Clapping, Attack**. An Animation dropdown appears when the type has multiple choices. Victory includes entrances and their authored loops. Attack includes normal attacks, aerials, grounded/aerial specials and their separate phases, grabs/throws, getup/ledge attacks, and item attacks. Selecting an attack renders that costume once and saves it for reuse; an all-color download renders any remaining colors. Some Kirby copy clips require alternate models and are marked unavailable. Projectiles, spawned props, effects, opponents, and game physics are not yet played.
 
-GIFs and PNG stills have transparent backgrounds. The player checkerboard is only a transparency indicator and is not included in saved images. Right-click the character to save its GIF while playing or its exact PNG while paused. The download buttons also save one costume or all colors at the selected size.
+GIFs and PNG stills have transparent backgrounds. The preview is clear, showing the page background through the image. Right-click the character to save its GIF while playing or its exact PNG while paused. The download buttons also save one costume or all colors at the selected size.
 
 Pause or scrub to download a still. Clapping has exclusive full, minimum, dirty/jittery and 0.84-second sync modes. Adjust the viewing-angle sliders and click **Apply**; a new angle needs rendering and is then cached. **Reset** returns to the original view. The aggregate results/taunt GIF collection remains available for those types; attacks use per-animation downloads so one click does not trigger thousands of renders.
 
-The generated HTML is `build/melee_anim/preview/player.html`. Opening that file directly supports the original previews; selecting an attack or applying a rotation opens the local player with your selection preserved. The HTTP player provides attack playback and all on-demand rotated/resized exports.
+The generated HTML is `build/melee_anim/preview/player.html`. Opening that file directly supports the original previews; selecting an attack or applying a rotation opens the local player with your selection preserved. This transfer applies once; reopening or refreshing the player starts X/Y/Z at 0. The HTTP player provides attack playback and all on-demand rotated/resized exports.
 
 ## Troubleshooting and manual commands
 
