@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['dirtycycle','dirtylist','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['fullcycle','synccycle','clapmodes','dirtycycle','dirtylist','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -115,7 +115,7 @@ for (const [slug,length] of [['luigi',20],['kirby',34],['link',12]]) {
   assert.equal(new URL(elements.still.href).searchParams.get('frame'),String(length-1));
   elements.play.onclick();context.nextFrame(20);
   assert.equal(data('index'),0,'short loops wrap without an extra endpoint');
-  elements.minimumcycle.checked=false;elements.minimumcycle.onchange();
+  elements.fullcycle.checked=true;elements.fullcycle.onchange();
   assert.equal(data('frameCount()'),data('clips[current].frames.length'));
   assert.equal(elements.gif.href,data('clips[current].gif'));
 }
@@ -139,9 +139,33 @@ for (const button of elements.dirtylist.options) {
   assert.equal(new URL(elements.still.href).searchParams.get('frame'),String(short.length-1));
   elements.play.onclick();context.nextFrame(20);
   assert.equal(data('index'),0);
-  elements.dirtycycle.checked=false;elements.dirtycycle.onchange();
+  elements.fullcycle.checked=true;elements.fullcycle.onchange();
   assert.equal(elements.gif.href,data('clips[current].gif'));
 }
+assert.equal((html.match(/type="radio" name="clapmode"/g)||[]).length,4);
+for (const clip of data('clips.filter(c=>c.sync_cycle)')) {
+  elements.character.value=clip.character;elements.character.onchange();
+  elements.action.value='results-clap_source';elements.action.onchange();
+  elements.costume.value=String(clip.costume_id);elements.costume.onchange();
+  elements.synccycle.checked=true;elements.synccycle.onchange();
+  assert.equal(data('cycleMode()'),'sync');
+  assert.equal(data('frameCount()'),42);
+  assert.equal(elements.scrub.max,41);
+  assert.equal(elements.frame.src,clip.sync_cycle.frames[0]);
+  assert.equal([elements.fullcycle,elements.minimumcycle,elements.dirtycycle,elements.synccycle].filter(r=>r.checked).length,1);
+  assert.match(elements.meta.textContent,/42 frames at 50 fps \/ 0.84s/);
+  assert.equal(new URL(elements.gif.href).searchParams.get('cycle'),'sync');
+  assert.match(elements.gif.download,/-clapping-sync-256px.gif$/);
+  elements.scrub.value='41';elements.scrub.oninput();
+  assert.equal(elements.frame.src,clip.sync_cycle.frames[41]);
+  assert.equal(new URL(elements.still.href).searchParams.get('frame'),'41');
+  elements.play.onclick();context.nextFrame(20);
+  assert.equal(data('index'),0);
+  elements.fullcycle.checked=true;elements.fullcycle.onchange();
+}
+elements.action.value='taunt_source';elements.action.onchange();
+assert.equal(elements.clapmodes.hidden,true);
+assert.equal(data('cycleMode()'),'full');
 // Served pages use their own origin, including a user-selected server port.
 const servedElements=Object.fromEntries(Object.keys(elements).map(id=>[id,
   {value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));

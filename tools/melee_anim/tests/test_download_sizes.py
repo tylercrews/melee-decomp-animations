@@ -155,6 +155,28 @@ class DownloadSizeTests(unittest.TestCase):
                     self.assertEqual(im.info['loop'], 0)
                     self.assertEqual(im.info['duration'], 20)
 
+    def test_sync_uses_rendered_frames_and_exports_only_claps_in_the_all_bundle(self):
+        for clip in self.clips:
+            clip.update(action_key='results-clap_source', fps=50,
+                        sync_cycle={'gif': clip['gif'], 'frames': list(reversed(clip['frames'])), 'fps': 50})
+        taunt = {**self.clips[0], 'action_key': 'taunt_source', 'download_name': 'taunt.gif'}
+        self.catalog.clips.append(taunt)
+        options = dict(character='synthetic', action='results-clap_source', cycle='sync', size=128)
+        path, name, _ = self.catalog.export(**options, kind='png')
+        self.assertIn('-clapping-sync-frame-0001-128px.png', name)
+        with Image.open(path) as im:
+            self.assertEqual(im.getpixel((0, 0)), (255, 0, 0, 255))
+        path, name, _ = self.catalog.export(**options, scope='all')
+        self.assertIn('melee-all-characters-clapping-sync-128px.zip', name)
+        with ZipFile(path) as archive:
+            self.assertEqual(len(archive.namelist()), 2)
+            self.assertTrue(all('clapping-sync' in n for n in archive.namelist()))
+        with self.assertRaises(ValueError):
+            self.catalog.export(**{**options, 'action': 'taunt_source'})
+        del self.clips[0]['sync_cycle']
+        with self.assertRaises(ValueError):
+            self.catalog.export(**options)
+
 
 if __name__ == '__main__':
     unittest.main()

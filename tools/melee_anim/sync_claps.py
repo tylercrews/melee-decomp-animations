@@ -8,7 +8,6 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import subprocess
@@ -153,7 +152,7 @@ def attach_sync(root, clips):
             continue
         manifest = json.loads(manifest_path.read_text())
         frames = [folder/f'frame_{i:04d}.png' for i in range(FRAME_COUNT)]
-        if (manifest.get('sync_plan') != plan or not (folder/'preview.gif').is_file() or
+        if (manifest.get('sync_plan') != plan or not manifest.get('uniform_gif_ticks') or not (folder/'preview.gif').is_file() or
                 not all(p.is_file() for p in frames)):
             continue
         clip['sync_cycle'] = {**{k: v for k, v in plan.items() if k not in ('input_fingerprint', 'fit_source_times')},
@@ -190,7 +189,7 @@ def main():
             companion_hash = hashlib.sha256(companion.read_bytes()).hexdigest() if companion.is_file() else None
             if args.resume and old.is_file():
                 data = json.loads(old.read_text())
-                if (data.get('sync_plan') == plan and data.get('model_sha256') == fingerprint and
+                if (data.get('sync_plan') == plan and data.get('uniform_gif_ticks') and data.get('model_sha256') == fingerprint and
                         data.get('companion_sha256') == companion_hash and (folder/'preview.gif').is_file() and
                         {p.name for p in folder.glob('frame_*.png')} == {f'frame_{i:04d}.png' for i in range(FRAME_COUNT)}):
                     continue

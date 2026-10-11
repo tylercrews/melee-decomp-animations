@@ -33,6 +33,7 @@ python -m tools.melee_anim.preview_batch --action results-clap --costume all
 python -m tools.melee_anim.preview --action taunt --size 256 --output build/melee_anim/preview/mario/costume_00/taunt_source
 python -m tools.melee_anim.roster_batch --resume --jobs 8
 python -m tools.melee_anim.cycles
+python -m tools.melee_anim.sync_claps --resume
 python -m tools.melee_anim.preview_gallery --require-all
 python -m tools.melee_anim.verify_previews
 python -m tools.melee_anim.player_server
@@ -103,6 +104,14 @@ The initial Windows session's default MSYS Git failed to initialize its signal p
 Leave existing user changes intact, keep the checklist current, and describe backend decisions and remaining fidelity gaps in the plan so future work does not repeat this investigation.
 
 ## Current handoff after full-roster rendering
+
+Current implemented feature: clapping mode now uses one radio group: **Full animation**, **Minimum cycle**, **Minimum loop (dirty/jittery)**, and **Clapping-sync alteration**. The group is hidden outside clapping. Full remains default; selection cannot combine edited modes. Sync is available for all 26 forms / 123 costumes and produces **42 individual GIF frames at 50fps, exactly 0.84s**, including explicit hold frames. Preview, scrubbing, inline GIFs, all download sizes, selected/all-color PNGs, and the all-synced-claps ZIP share that timeline. Sync aggregate export contains 123 claps only. The older advice/estimates below are historical; this fixed preset is now implemented, while a general duration/FPS/trim UI remains future work.
+
+`sync_claps.py --resume` plans and renders original motion curves at fractional source times. It prefers dirty, then approved, then full intervals; extra least-disruptive common cuts are Mewtwo `[49,74)` (idle), Pikachu `[25,40)`, Pichu `[88,103)` (zero-based old output coordinates). Integer repeats and 0–3 open-pose hold ticks fit 42 samples with moving rates 0.846–1.190. Wrist-gap extrema provide contact/open-pose phase proxies in the default model; Mewtwo uses idle phase. All costumes share their character's schedule, with actual costume bind/material data and paired Nana retained. Contacts are proxies; different characters can make different integer clap counts within the shared loop, and dirty/manual cut seams can remain.
+
+Generated plans are ignored `preview/clapping-sync.json`; PNGs/GIFs/manifests are in `preview/clapping-sync/<character>/costume_##`. There are 123 completed sync renders and 5,166 new PNG masters. The main preview's optional `--timeline` is restricted to clapping and validates finite bounded source times. It fits framing over the original whole clip plus sync samples. Resume verifies plan, primary/companion model hashes, exact frame inventory, and uniform GIF policy; bump `sync_claps.VERSION` after relevant planner/renderer semantic changes. Gallery attachment invalidates changed source-master fingerprints.
+
+`gif_export.py` preserves all 42 time steps by using Pillow 11.1.0's exposed legacy `GifImagePlugin.getheader/getdata` block APIs, with copied palette frames. Both native-size and resized sync GIFs avoid adjacent-frame merging; each frame delay is 20ms and infinite looping is explicit. Ordinary full/minimum/dirty encoding is unchanged. 80 Python tests and Node radio/preview/download tests pass. All 123 sync GIFs and the HTTP aggregate ZIP were decoded to exactly 42 frames / 840ms; all four size presets were checked using held-pose Bowser exports. All-color last PNG bytes for Mewtwo/Pikachu/Pichu/Ice Climbers/Game & Watch match the sync masters. All-default contact poses and representative closing seams were visually inspected. The loopback service is running with the new code; live browser clicks/game-reference fidelity remain unverified.
 
 Latest correction/estimate: current export timing is 50fps, so 1.4s is 70 frames (at 60fps it would be 84). The conditional short-segment schedule can shrink further by relaxing edits: ≤3 output hold ticks with ±15% rate ->60 frames/1.2s; ±20% ->42/0.84s; ±25% ->28/0.56s. ±10% with ≤4 hold ticks ->62/1.24s. The longest selected moving clips are Bowser/Kirby/Yoshi34 and Jigglypuff33. The 25-frame group (Donkey Kong/Fox/Game & Watch/Ice Climbers/provisional Mewtwo) conflicts most with them: omitting it permits39 frames/0.78s under the prior ±10%/3-hold assumptions. These fits still assume unapproved manual Mewtwo/Pikachu/Pichu cuts, and synchronize wrap rather than a universal clap rhythm. A 25fps output could give21 frames at0.84s; no new FPS control or sync exporter exists yet.
 

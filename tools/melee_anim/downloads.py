@@ -29,7 +29,7 @@ def resize_png(data, size):
         return out.getvalue()
 
 
-def resize_gif(data, size):
+def resize_gif(data, size, preserve_frames=False):
     """Preserve each decoded frame's delay and authored GIF loop metadata."""
     if size not in SIZES:
         raise ValueError('Unsupported download size')
@@ -43,6 +43,9 @@ def resize_gif(data, size):
             frame = source.convert('RGB').resize((size, size), Image.Resampling.LANCZOS)
             frames.append(frame.quantize(palette=palette, dither=Image.Dither.NONE))
     out = BytesIO()
+    if preserve_frames:
+        from .gif_export import encode_frames
+        return encode_frames(frames, durations, looping)
     options = dict(save_all=True, append_images=frames[1:], duration=durations,
                    disposal=2, optimize=False)
     if looping is not None:
@@ -125,8 +128,14 @@ class DownloadCatalog:
             if not target.is_file():
                 with Image.open(BytesIO(data)) as original:
                     same_size = original.size == (size, size)
-                resized = cycle_gif(self.root, clip, size, short) if short and kind == 'gif' else (
-                    data if same_size else (resize_gif if kind == 'gif' else resize_png)(data, size))
+                if short and kind == 'gif':
+                    resized = cycle_gif(self.root, clip, size, short)
+                elif same_size:
+                    resized = data
+                elif kind == 'gif':
+                    resized = resize_gif(data, size, preserve_frames=cycle == 'sync')
+                else:
+                    resized = resize_png(data, size)
                 temporary = target.with_suffix(target.suffix+'.tmp')
                 temporary.write_bytes(resized)
                 temporary.replace(target)

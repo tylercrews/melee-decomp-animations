@@ -4,6 +4,15 @@ Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 2
 
 ## Current workflow and remaining work
 
+- [x] Add clapping-only radio selection: Full animation / Minimum cycle / Minimum loop (dirty/jittery) / Clapping-sync alteration.
+- [x] Implement the selected fixed 0.84s preset with source-curve resampling, integer repeats, limited speed changes, and 0–3 open-pose hold ticks.
+- [x] Select the extra common costume intervals: Mewtwo `[49,74)` idle, Pikachu `[25,40)`, Pichu `[88,103)` clap cuts; retain edited-seam limitations.
+- [x] Render all 123 costume jobs to 5,166 PNG masters and looping GIFs with exactly 42 encoded 20ms frames each.
+- [x] Apply sync to preview, all-size GIF downloads, selected/all-color stills, inline viewing, and the all-synced-claps ZIP.
+- [x] Verify 80 Python tests, Node radio/timer/download tests, all 123 GIF frame counts/durations and aggregate entries, held-frame preservation at every size, and representative exact still bytes.
+- [ ] Add general duration/FPS/segment controls later; the implemented sync preset is fixed at 0.84s / 50fps.
+- [ ] Review new sync cuts and per-character clap phases with the user; wrist-gap proxies and dirty seams remain approximate.
+
 - [ ] Preview the proposed rate/hold tradeoffs rather than assuming 1.4s is the shortest: 1.24s (±10%, 4 holds), 1.2s (±15%, 3 holds), 0.84s (±20%, 3 holds), or 0.56s (±25%, 3 holds), conditional on the three manual cuts.
 - [ ] Prioritize the timing mismatch between the 34/33-frame families and the 25-frame families; include Yoshi in the 34-frame group.
 - [ ] Add optional 25fps synchronized export for smaller GIFs at the same duration, with source resampling and explicit tick/frame counts; current downloads stay at50fps.
@@ -44,6 +53,7 @@ Rebuild the full roster and download bundles with:
 ```powershell
 python -m tools.melee_anim.roster_batch --resume --jobs 8
 python -m tools.melee_anim.cycles
+python -m tools.melee_anim.sync_claps --resume
 python -m tools.melee_anim.preview_gallery --require-all
 python -m tools.melee_anim.verify_previews
 node tools/melee_anim/tests/test_gallery.js

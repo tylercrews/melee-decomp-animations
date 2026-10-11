@@ -320,7 +320,8 @@ def main():
     visibility = [v for _, v in sampled]
     fitted = [evaluate_pose(frame)[0] for frame in fit_times] if fit_times else poses
     if companion:model["meshes"].extend(companion["meshes"])
-    cloud = np.concatenate([p for frame in fitted+poses for p, _ in frame])
+    framing = fitted+poses if fit_times else poses
+    cloud = np.concatenate([p for frame in framing for p, _ in frame])
     projected = cloud @ view
     low, high = projected.min(axis=0), projected.max(axis=0)
     center = ((low+high)/2) @ view.T
@@ -348,7 +349,11 @@ def main():
     options = {"save_all": True, "append_images": frames[1:], "duration": 1000//args.fps, "disposal": 2}
     if looping and not args.max_frames:
         options["loop"] = 0
-    frames[0].save(args.output/"preview.gif", **options)
+    if sync_plan:
+        from .gif_export import encode_frames
+        (args.output/'preview.gif').write_bytes(encode_frames(frames, [1000//args.fps]*len(frames), 0))
+    else:
+        frames[0].save(args.output/"preview.gif", **options)
     if raster:raster.close()
     strip = Image.new("RGB", (args.size*4, args.size+28), (34, 38, 46))
     draw = ImageDraw.Draw(strip)
@@ -374,6 +379,7 @@ def main():
     if sync_plan:
         manifest['sync_plan'] = sync_plan
         manifest['output_mode'] = 'clapping-sync alteration'
+        manifest['uniform_gif_ticks'] = True
         manifest['companion_sha256'] = hashlib.sha256(args.companion.read_bytes()).hexdigest() if args.companion else None
     (args.output/"preview-manifest.json").write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")
     print(f"Preview: {args.output/'preview.gif'}", flush=True)
