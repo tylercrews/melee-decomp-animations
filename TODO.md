@@ -4,6 +4,12 @@ Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 2
 
 ## Current workflow and remaining work
 
+- [x] Extend `camera_basis` from yaw to pitch/yaw/roll, documenting axes/order and testing identity, quarter turns, and an orthonormal view basis.
+- [x] Add clapping/taunt/victory viewing-angle inputs with Apply/Reset; rerender source poses on demand through the local service with bounded jobs and angle-aware cache/provenance.
+- [x] Keep a stable whole-animation world pivot/framing and apply the selected camera to preview, all four download sizes, and selected/all-costume GIF/PNG exports, including minimum/dirty/sync modes.
+- [x] Visually check tilted/back/side/top/underside/rolled views, paired Ice Climbers and near-flat Game & Watch; verify all 26 default sync timelines and the 42 separate GIF ticks, all-size held-frame exports, all eight Mario actions and exact frame-68 bytes for all five Mario costumes. Python suite: 87 tests; Node rotation controls and HTTP exports pass.
+- [ ] Consider continuous drag-to-orbit playback later; the current saved-image viewer cannot expose unseen model surfaces without rerendering.
+
 - [x] Add clapping-only radio selection: Full animation / Minimum cycle / Minimum loop (dirty/jittery) / Clapping-sync alteration.
 - [x] Implement the selected fixed 0.84s preset with source-curve resampling, integer repeats, limited speed changes, and 0–3 open-pose hold ticks.
 - [x] Select the extra common costume intervals: Mewtwo `[49,74)` idle, Pikachu `[25,40)`, Pichu `[88,103)` clap cuts; retain edited-seam limitations.
@@ -269,4 +275,4 @@ Current reviewable output: `build/melee_anim/preview/player.html` with 984 chara
 
 
 [ ] want more sizes for the produced gifs - extra small (128), medium (512), large (1024)
-- [ ] Add user-controlled camera rotation around the model's 3D axes (current CLI has yaw only).
+- [x] Add user-controlled X/Y/Z viewing angles around the 3D model; preview CLI and local player support pitch/yaw/roll, with matching GIF/PNG downloads.

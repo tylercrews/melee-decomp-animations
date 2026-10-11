@@ -19,6 +19,8 @@ def make_server(root, port=8765, catalog=None):
     catalog = DownloadCatalog(root) if catalog is None else catalog
     # Serialize exports to bound Pillow's memory use for long 1024px GIFs.
     lock = threading.Lock()
+    # Bound waiting render/download requests as well as active work.
+    slots = threading.BoundedSemaphore(4)
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -38,7 +40,7 @@ def make_server(root, port=8765, catalog=None):
                 self.end_headers()
                 self.wfile.write(data)
                 return
-            if url.path != '/export':
+            if url.path not in ('/export', '/rotation'):
                 target = Path(self.translate_path(self.path)).resolve()
                 if not target.is_relative_to(root):
                     self.send_error(403)
@@ -46,7 +48,9 @@ def make_server(root, port=8765, catalog=None):
                 return super().do_GET()
             try:
                 values = parse_qs(url.query, strict_parsing=True)
-                allowed = {'character', 'action', 'costume', 'size', 'kind', 'scope', 'frame', 'cycle', 'view'}
+                allowed = {'character', 'action', 'costume', 'cycle', 'pitch', 'yaw', 'roll'}
+                if url.path == '/export':
+                    allowed |= {'size', 'kind', 'scope', 'frame', 'view'}
                 if set(values)-allowed or any(len(v) != 1 for v in values.values()):
                     raise ValueError('Unknown or repeated download option')
                 options = {k: v[0] for k, v in values.items()}
@@ -56,16 +60,39 @@ def make_server(root, port=8765, catalog=None):
                 for key in ('costume', 'size', 'frame'):
                     if key in options:
                         options[key] = int(options[key])
+                for key in ('pitch', 'yaw', 'roll'):
+                    if key in options:
+                        options[key] = float(options[key])
                 options.setdefault('character', '')
                 options.setdefault('action', '')
-                with lock:
-                    target, filename, mime = catalog.export(**options)
+                if not slots.acquire(blocking=False):
+                    self.send_error(503, 'Renderer is busy; retry after the current render completes')
+                    return
+                try:
+                    with lock:
+                        if url.path == '/rotation':
+                            data = json.dumps(catalog.preview(**options)).encode()
+                        else:
+                            target, filename, mime = catalog.export(**options)
+                finally:
+                    slots.release()
             except (ValueError, TypeError) as error:
                 self.send_error(400, str(error))
                 return
             except Exception as error:
                 self.log_error('Export failed: %s', error)
                 self.send_error(500, 'Export failed; see the player service log')
+                return
+            if url.path == '/rotation':
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(data)))
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                try:
+                    self.wfile.write(data)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
                 return
             self.send_response(200)
             self.send_header('Content-Type', mime)

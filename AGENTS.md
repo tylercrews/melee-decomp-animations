@@ -35,6 +35,7 @@ python -m tools.melee_anim.roster_batch --resume --jobs 8
 python -m tools.melee_anim.cycles
 python -m tools.melee_anim.sync_claps --resume
 python -m tools.melee_anim.preview_gallery --require-all
+python -m tools.melee_anim.preview_gallery --require-all --player-only
 python -m tools.melee_anim.verify_previews
 python -m tools.melee_anim.player_server
 python -m unittest discover -s tools/melee_anim/tests -v
@@ -44,6 +45,9 @@ node tools/melee_anim/tests/test_gallery.js
 Extraction/inspection and texture codecs use the standard library. Model export/rendering also use installed NumPy 2.2.4; the preview uses Pillow 11.1.0. Node is used only for player-logic tests. Generated metadata, models, decoded textures, frames, GIFs, and player output remain under ignored `build/melee_anim`. Keep notes in these four documents, as requested. Original asset bytes must remain ignored.
 
 ## Design direction to preserve
+
+- Camera rotation is implemented: X tilt / Y turn / Z roll sliders plus Apply/Reset in the local player. `preview.py` supports `--pitch/--yaw/--roll` with the camera basis `Ry(yaw) @ Rx(pitch) @ Rz(roll)`; poses and world lighting stay unchanged. A whole-clip world-space bounds center is independent of angle, with a symmetric projected fit stable across frames. Each costume keeps its own whole-clip fit. `rotations.py` renders 256px masters on demand under ignored `preview/rotations/<content-hash>`; all GIF/PNG sizes and scopes use those masters. Preserve exact source times, companion data, min/dirty intervals, and sync's 42 separate ticks. Cache fingerprints include renderer/evaluator modules, model/companion/textures, motion report/archives, source manifests, angles and timeline; completion verifies output hashes. The loopback service serializes work, allows four active/waiting requests, and bounds each render subprocess to 600s. Apply preserves a paused index; async generation tokens discard obsolete responses; Reset restores original masters. Offline angle controls explain the service requirement. Continuous drag is still future work. See investigation section 23.
+- Latest rotation checks: 87 Python tests and Node controls pass; live rotated sync renders for all 26 default characters retain exact times and 42 ticks, all eight Mario action timelines and exact frame-68 masters for all five Mario colors pass, and four-size held-frame sync GIF exports preserve 840ms. Visual QA covers each axis, top/back/side views and paired Ice Climbers/flat Game & Watch. No live browser click test or game-reference fidelity validation was performed. Generated files stay ignored. Leave the local player running for review; use its task-owned exec session to restart it after code changes.
 
 - Python owns the CLI, catalog, jobs, costume batching, manifests, and FFmpeg export orchestration.
 - The full-roster prototype uses NumPy poses, Windows offscreen memory-bitmap OpenGL rasterization (`native_raster.py`), and Pillow PNG/GIF encoding. No window, desktop capture, dependency installation, or Blender is required. The slower Python rasterizer remains available. Blender is an optional planned production backend; setup is in `TODO.md`.
@@ -158,6 +162,6 @@ Resume without re-extracting or restarting the investigation:
 3. Resolve production timing policy: explicit nominal 60 source ticks/s and 50 fps are still presets; GIF rounding and one extra terminal one-shot sample are disclosed in manifests. MP4 must use exact manifest counts and an explicit background.
 4. Add manifest-driven FFmpeg MP4 output and ffprobe verification when the user has FFmpeg available. Optional installation instructions remain in `TODO.md`; no installation was performed.
 5. Extend resume fingerprints to renderer/evaluator/script versions and companion model hashes. Current cache verifies primary model hash, settings, completeness, and exact frame files; force a re-render after relevant code changes. `roster_batch --character <slug>` limits scope. Do not reintroduce the earlier unchecked Mario cache exception.
-6. Add optional Blender rendering using the existing neutral models/poses when justified; no Blender importer exists. Camera rotation, transparency/background settings, attacks/damage actions, and full results-screen composition remain later work.
+6. Add optional Blender rendering using the existing neutral models/poses when justified; no Blender importer exists. Continuous drag camera interaction, transparency/background settings, attacks/damage actions, and full results-screen composition remain later work. Apply/Reset camera angles already work; use `--player-only` to refresh existing gallery controls without repackaging all bundles, then restart the service for server changes.
 
 The current prototype is useful animation/costume coverage, with approximate materials/lighting/reflection and no complete timed scripts, props, effects, dynamics, or audio. All source game/decomp code remains unchanged. Keep these limitations visible while improving fidelity.

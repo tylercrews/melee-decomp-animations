@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['fullcycle','synccycle','clapmodes','dirtycycle','dirtylist','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','dirtylist','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -169,10 +169,56 @@ assert.equal(data('cycleMode()'),'full');
 // Served pages use their own origin, including a user-selected server port.
 const servedElements=Object.fromEntries(Object.keys(elements).map(id=>[id,
   {value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
-vm.runInContext(script,
-  vm.createContext({document:{getElementById:id=>servedElements[id],createElement:()=>({})}, location:{protocol:'http:'}, URLSearchParams,
-    performance:context.performance, Image:context.Image, requestAnimationFrame:()=>{}}));
+const requests=[];
+const servedContext=vm.createContext({document:{getElementById:id=>servedElements[id],createElement:()=>({})}, location:{protocol:'http:'}, URLSearchParams,
+    performance:context.performance, Image:context.Image, requestAnimationFrame:()=>{},
+    fetch:url=>new Promise(resolve=>requests.push({url,resolve}))});
+vm.runInContext(script,servedContext);
 assert.equal(servedElements.servicehint.hidden,true);
 servedElements.downloadsize.value='512';servedElements.downloadsize.onchange();
 assert(servedElements.gif.href.startsWith('/export?'));
 console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links, and file/HTTP origins: PASS');
+
+(async()=>{
+  assert.equal(elements.applyangle.disabled,true,'offline player explains that rendering needs the local service');
+  const inspect=expression=>vm.runInContext(expression,servedContext);
+  const settle=()=>new Promise(resolve=>setImmediate(resolve));
+  function complete(request,label){const count=inspect('frameCount()');request.resolve({ok:true,json:async()=>({frames:Array.from({length:count},(_,i)=>`rotations/${label}/frame_${String(i).padStart(4,'0')}.png`)})})}
+  servedElements.downloadsize.value='256';servedElements.downloadsize.onchange();
+  servedElements.action.value='victory3_source';servedElements.action.onchange();
+  servedElements.scrub.value='67';servedElements.scrub.oninput();
+  servedElements.pitch.value='20';servedElements.pitch.oninput();servedElements.yaw.value='45';servedElements.roll.value='10';
+  assert.equal(servedElements.pitchvalue.textContent,'20°');
+  servedElements.applyangle.onclick();
+  assert.equal(servedElements.frame.hidden,true);assert.equal(servedElements.downloadpanel.hidden,true);
+  const first=requests.shift();assert.equal(new URL(first.url,'http://localhost').searchParams.get('yaw'),'45');
+  complete(first,'first');await settle();
+  assert.equal(inspect('index'),67);assert.equal(inspect('playing'),false);
+  assert.equal(servedElements.frame.src,'rotations/first/frame_0067.png');
+  assert.equal(servedElements.frame.hidden,false);assert.equal(servedElements.downloadpanel.hidden,false);
+  for(const id of ['gif','animationzip','allzip','still','framezip']){
+    const url=new URL(servedElements[id].href,'http://localhost');assert.equal(url.searchParams.get('pitch'),'20');assert.equal(url.searchParams.get('roll'),'10');
+    assert.match(servedElements[id].download,/-view-x20-y45-z10-256px\.(gif|png|zip)$/);
+  }
+  servedElements.downloadsize.value='1024';servedElements.downloadsize.onchange();
+  assert.equal(inspect('index'),67);assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('size'),'1024');
+  // A superseded request cannot replace a later selection or undo Reset.
+  servedElements.yaw.value='90';servedElements.applyangle.onclick();const stale=requests.shift();
+  servedElements.resetangle.onclick();complete(stale,'stale');await settle();
+  assert.equal(inspect('hasAngle()'),false);assert.match(servedElements.frame.src,/mario\/costume_00\/victory3_source\/frame_0067.png$/);
+  assert.equal(servedElements.pitch.value,'0');assert.equal(servedElements.pitchvalue.textContent,'0°');
+  servedElements.character.value='luigi';servedElements.character.onchange();servedElements.action.value='results-clap_source';servedElements.action.onchange();
+  servedElements.yaw.value='90';servedElements.applyangle.onclick();complete(requests.shift(),'full');await settle();
+  servedElements.minimumcycle.checked=true;servedElements.minimumcycle.onchange();
+  let minimum=requests.shift();assert.equal(new URL(minimum.url,'http://localhost').searchParams.get('cycle'),'minimum');complete(minimum,'minimum');await settle();
+  assert.equal(inspect('frameCount()'),20);assert.match(servedElements.frame.src,/rotations\/minimum/);
+  servedElements.synccycle.checked=true;servedElements.synccycle.onchange();
+  complete(requests.shift(),'sync');await settle();assert.equal(inspect('frameCount()'),42);
+  servedElements.scrub.value='41';servedElements.scrub.oninput();assert.match(servedElements.frame.src,/rotations\/sync\/frame_0041.png$/);
+  assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('cycle'),'sync');
+  servedElements.costume.value='1';servedElements.costume.onchange();
+  const failed=requests.shift();assert.equal(new URL(failed.url,'http://localhost').searchParams.get('costume'),'1');failed.resolve({ok:false,status:503});await settle();
+  assert.equal(servedElements.downloadpanel.hidden,true);assert.match(servedElements.rotationstatus.textContent,/busy/);
+  servedElements.resetangle.onclick();assert.equal(servedElements.downloadpanel.hidden,false);
+  console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
+})().catch(error=>{console.error(error);process.exitCode=1});

@@ -10,6 +10,7 @@ from zipfile import ZipFile, ZIP_STORED
 
 from PIL import Image
 from .preview_gallery import collect_clips
+from .rotations import RotationCache, camera_angles, marked_angle
 
 SIZES = (128, 256, 512, 1024)
 
@@ -78,8 +79,27 @@ class DownloadCatalog:
         self.clips = collect_clips(self.root) if clips is None else clips
         self.cache = self.root/'downloads'/'resized'
         self.cache.mkdir(parents=True, exist_ok=True)
+        self.rotations = RotationCache(self.root)
 
-    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full'):
+    def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0):
+        angles = camera_angles(pitch, yaw, roll)
+        if cycle not in ('full', 'minimum', 'dirty', 'sync'):
+            raise ValueError('Unsupported clapping mode')
+        clip = next((c for c in self.clips if c['character'] == character and c['action_key'] == action and c['costume_id'] == costume), None)
+        if clip is None:
+            raise ValueError('Unknown character, animation, or costume')
+        if cycle == 'sync' and (action != 'results-clap_source' or not clip.get('sync_cycle')):
+            raise ValueError('Clapping-sync render is not available for this animation')
+        clip = self.rotations.get(clip, angles, sync=cycle == 'sync')
+        if cycle == 'sync':
+            frames = clip['sync_cycle']['frames']
+        else:
+            short = ((clip.get('dirty_cycle') if cycle == 'dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and action == 'results-clap_source' else None
+            frames = clip['frames'][short['start']:short['start']+short['length']] if short else clip['frames']
+        return {'frames': frames, 'angles': angles}
+
+    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0):
+        angles = camera_angles(pitch, yaw, roll)
         if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum', 'dirty', 'sync'):
             raise ValueError('Unsupported download option')
         if scope == 'all' and kind != 'gif':
@@ -93,6 +113,17 @@ class DownloadCatalog:
             clips = [c for c in clips if c['action_key'] == 'results-clap_source']
             if any(not c.get('sync_cycle') for c in clips):
                 raise ValueError('Sync render is not ready for every requested costume')
+        if not clips:
+            raise ValueError('Unknown character, animation, or costume')
+        # Reject bad frame requests before starting an expensive render.
+        for c in clips:
+            short = ((c.get('dirty_cycle') if cycle == 'dirty' else None) or c.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and c['action_key'] == 'results-clap_source' else None
+            length = len(c['sync_cycle']['frames']) if cycle == 'sync' else short['length'] if short else len(c['frames'])
+            if kind == 'png' and not 0 <= frame < length:
+                raise ValueError('Frame index is outside this animation')
+        if any(angles):
+            clips = [self.rotations.get(c, angles, sync=cycle == 'sync') for c in clips]
+        if cycle == 'sync':
             clips = [{**c, 'gif': c['sync_cycle']['gif'], 'frames': c['sync_cycle']['frames'],
                       'fps': c['sync_cycle']['fps'],
                       'download_name': c['download_name'].replace('.gif', '-clapping-sync.gif')} for c in clips]
@@ -109,6 +140,7 @@ class DownloadCatalog:
             short = selected_cycle(clip)
             suffix = '-dirty-loop' if short and short.get('dirty') else '-minimum-cycle'
             marked_name = clip['download_name'].replace('.gif', suffix+'.gif') if short else clip['download_name']
+            marked_name = marked_angle(marked_name, angles)
             if kind == 'gif':
                 source = self.root/clip['gif']
                 name = sized_name(marked_name, size)
@@ -162,4 +194,5 @@ class DownloadCatalog:
             name += '-dirty-loop' if cycle == 'dirty' else '-minimum-cycle'
         if cycle == 'sync':
             name += '-clapping-sync'
+        name = marked_angle(name+'.zip', angles)[:-4]
         return bundle, f'{name}-{size}px.zip', 'application/zip'

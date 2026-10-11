@@ -51,13 +51,19 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label><input id="synccycle" type="radio" name="clapmode" value="sync" disabled> Clapping-sync alteration</label>
 <small id="cyclehint"></small></fieldset>
 <details><summary>Dirty loop candidates to review</summary><div class="controls" id="dirtylist"></div></details>
+<fieldset class="controls"><legend>Viewing angle</legend>
+<label>X tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" aria-label="X tilt"><output id="pitchvalue">0°</output></label>
+<label>Y turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" aria-label="Y turn"><output id="yawvalue">0°</output></label>
+<label>Z roll <input id="roll" type="range" min="-180" max="180" step="1" value="0" aria-label="Z roll"><output id="rollvalue">0°</output></label>
+<button id="applyangle">Apply</button><button id="resetangle">Reset</button>
+<small id="rotationstatus" role="status" aria-live="polite">Angles apply to previews and every GIF/PNG download. New angles need rendering.</small></fieldset>
 <div class="stage"><img id="frame" alt="Animated character costume preview"></div>
 <div class="timeline"><input id="scrub" type="range" min="0" value="0" step="1" aria-label="Animation frame"><span id="time"></span></div>
 <div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
 <option value="128">Extra small (128 × 128)</option><option value="256" selected>Small (256 × 256)</option>
 <option value="512">Medium (512 × 512)</option><option value="1024">Large (1024 × 1024)</option>
 </select></label><small>Medium and Large enlarge the current renders.</small></div>
-<div class="downloads"><a class="download primary" id="gif" download>Download GIF</a>
+<div class="downloads" id="downloadpanel"><a class="download primary" id="gif" download>Download GIF</a>
 <a class="download" id="animationzip" download>Download this animation in all colors</a>
 <a class="download" id="allzip" download="melee-all-characters-all-animations.zip" href="downloads/melee-all-characters-all-animations.zip">Download all GIFs</a>
 <a class="download" id="still" hidden download>Download paused frame PNG</a>
@@ -83,6 +89,33 @@ downloadsize.value='256';
 const exportBase=location.protocol==='http:'?'':'http://127.0.0.1:8765';
 document.getElementById('servicehint').hidden=location.protocol==='http:';
 let current=0,index=0,playing=true,last=performance.now(),carry=0,lastImage=null;
+const angleInputs=['pitch','yaw','roll'].map(id=>document.getElementById(id));
+const rotationstatus=document.getElementById('rotationstatus'), applyangle=document.getElementById('applyangle'), resetangle=document.getElementById('resetangle');
+let angles=[0,0,0], rotated=null, rotationBusy=false, rotationFailed=false, rotationGeneration=0;
+angleInputs.forEach((input,i)=>{input.value='0';input.oninput=()=>document.getElementById(['pitchvalue','yawvalue','rollvalue'][i]).textContent=`${input.value}°`});
+if(location.protocol!=='http:'){angleInputs.forEach(input=>input.disabled=true);applyangle.disabled=true;resetangle.disabled=true;
+rotationstatus.textContent='Open the local download player to render different viewing angles.'}
+function hasAngle(){return angles.some(v=>v!==0)}
+function angleSuffix(){return hasAngle()?'-view-'+angles.map((v,i)=>'xyz'[i]+v).join('-'):''}
+function angleName(name){return name.replace(/(\.[^.]+)$/,`${angleSuffix()}$1`)}
+function previewUnavailable(){return rotationBusy||rotationFailed}
+function updateRotationState(){frame.hidden=previewUnavailable();play.disabled=previewUnavailable();scrub.disabled=previewUnavailable();
+document.getElementById('downloadpanel').hidden=previewUnavailable()}
+async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
+if(!hasAngle()){if(location.protocol==='http:')rotationstatus.textContent='Default angle. Angles apply to previews and every GIF/PNG download.';updateRotationState();show();return}
+rotationBusy=true;rotationstatus.textContent='Rendering this viewing angle… Downloads will be ready with the preview. All-color and all-GIF downloads render additional costumes as needed.';
+updateRotationState();
+try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
+let response=await fetch(`/rotation?${query}`);if(!response.ok)throw Error(response.status===503?'Renderer is busy; try Apply again shortly.':'Render failed. Check the player service log, then try Apply again or Reset.');
+let result=await response.json();if(generation!==rotationGeneration)return;
+if(result.frames.length!==frameCount())throw Error('Rendered frame count differs from this animation.');
+rotated=result;rotationBusy=false;last=performance.now();carry=0;
+rotationstatus.textContent=`Viewing angle: X ${angles[0]}°, Y ${angles[1]}°, Z ${angles[2]}°. Preview and downloads use this angle.`;
+result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotationState();show();
+}catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
+rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
+applyangle.onclick=()=>{angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
+resetangle.onclick=()=>{angles=[0,0,0];angleInputs.forEach(input=>{input.value='0';input.oninput()});loadRotation()};
 function checkMode(mode){[fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.checked=['full','minimum','dirty','sync'][i]===mode)}
 checkMode('full');
 characters.forEach(c=>{let o=document.createElement('option');o.value=c.slug;o.textContent=c.label;character.append(o)});
@@ -100,7 +133,7 @@ function activeCycle(){let c=clips[current];return cycleMode()==='sync'?c.sync_c
 function useMinimum(){return current>=0&&Boolean(activeCycle())}
 function frameCount(){let c=clips[current];let short=activeCycle();return short?short.length:c.frames.length}
 function sourceIndex(){let short=activeCycle();return index+(short&&!short.frames?short.start:0)}
-function framePath(){let short=activeCycle();return short&&short.frames?short.frames[index]:clips[current].frames[sourceIndex()]}
+function framePath(){if(rotated)return rotated.frames[index];let short=activeCycle();return short&&short.frames?short.frames[index]:clips[current].frames[sourceIndex()]}
 function sourceTime(){let short=activeCycle();return short&&short.frames?short.source_times[index]:clips[current].source_times[sourceIndex()]}
 function markedName(name){let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
@@ -114,19 +147,20 @@ short?`${short.length} frames / ${(short.length/c.fps).toFixed(2)}s instead of $
 scrub.max=frameCount()-1;
 document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frames at ${c.fps} fps / ${(frameCount()/c.fps).toFixed(2)}s / ${cycleMode()==='sync'?'clapping-sync alteration':cycleMode()==='dirty'?'minimum loop (dirty/jittery)':useMinimum()?'minimum cycle (edited loop)':c.authored_loop?'full authored loop':'one-shot action'}`}
 function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
-costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:cycleMode()});return `${exportBase}/export?${query}`}
+costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:cycleMode()});
+if(hasAngle()){['pitch','yaw','roll'].forEach((key,i)=>query.set(key,String(angles[i])))}return `${exportBase}/export?${query}`}
 function updateDownloads(){if(current<0)return;let c=clips[current];let a=animations.find(a=>a.key===c.action_key&&a.character===c.character);
-let original=downloadsize.value==='256'&&!useMinimum();
-gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(markedName(c.download_name));
+let original=downloadsize.value==='256'&&!useMinimum()&&!hasAngle();
+gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(angleName(markedName(c.download_name)));
 open.href=original?c.gif:exportURL('gif','costume')+'&view=1';
-archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(markedName(a.download_name));
+archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(angleName(markedName(a.download_name)));
 allzip.href=original?'downloads/melee-all-characters-all-animations.zip':exportURL('gif','all');
 allzip.textContent=cycleMode()==='sync'?`Download all ${clips.filter(c=>c.sync_cycle).length} synced claps`:`Download all ${clips.length} GIFs`;
-allzip.download=cycleMode()==='sync'?sizedName('melee-all-characters-clapping-sync.zip'):sizedName(markedName('melee-all-characters-all-animations.zip'));
+allzip.download=cycleMode()==='sync'?sizedName(angleName('melee-all-characters-clapping-sync.zip')):sizedName(angleName(markedName('melee-all-characters-all-animations.zip')));
 still.href=original?c.frames[index]:exportURL('png','costume');
-still.download=sizedName(markedName(c.download_name).replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`));
+still.download=sizedName(angleName(markedName(c.download_name).replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`)));
 framezip.href=original?`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`:exportURL('png','colors');
-framezip.download=sizedName(markedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`))}
+framezip.download=sizedName(angleName(markedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`)))}
 function show(){if(current<0)return;let c=clips[current];let src=framePath();if(lastImage!==src){frame.src=src;lastImage=src}scrub.value=index;
 updateDownloads();
 still.hidden=playing;framezip.hidden=playing;
@@ -142,15 +176,15 @@ let c=clips[current];frame.hidden=false;gif.hidden=false;open.hidden=false;scrub
 loop.checked=c.authored_loop;playing=true;play.textContent='Pause';
 gif.href=c.gif;gif.download=c.download_name;gif.textContent=`Download GIF / ${c.costume_label}`;open.href=c.gif;
 updateCycleInfo();
-c.frames.forEach(src=>{let image=new Image();image.src=src});show()}
+c.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle())loadRotation();else show()}
 character.onchange=()=>{colors();actions();select()};action.onchange=select;costume.onchange=select;
 downloadsize.onchange=updateDownloads;
-function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});show()}
+function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle())loadRotation();else show()}
 [fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.onchange=()=>{if(r.checked){checkMode(['full','minimum','dirty','sync'][i]);changeCycle()}});
 play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
 restart.onclick=()=>{if(current<0)return;index=0;last=performance.now();carry=0;playing=true;play.textContent='Pause';show()};
 scrub.oninput=()=>{if(current<0)return;index=Number(scrub.value);playing=false;play.textContent='Play';show()};
-function tick(now){if(current>=0&&playing){let c=clips[current];carry+=Math.min(now-last,250);let step=1000/c.fps;
+function tick(now){if(current>=0&&playing&&!previewUnavailable()){let c=clips[current];carry+=Math.min(now-last,250);let step=1000/c.fps;
 while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.checked)index=0;else{playing=false;play.textContent='Play';break}}show()}
 last=now;requestAnimationFrame(tick)}
 characters.forEach(ch=>{let c=clips.find(c=>c.character===ch.slug&&c.dirty_cycle);if(!c)return;
@@ -238,6 +272,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path("build/melee_anim/preview"))
     parser.add_argument("--require-all", action="store_true", help="require eight animation choices for every actual roster costume")
+    parser.add_argument('--player-only', action='store_true', help='refresh controls using existing download bundles')
     args = parser.parse_args()
     clips = collect_clips(args.root)
     if not clips:
@@ -271,12 +306,18 @@ def main():
         write_bundle(args.root, path, group)
         for i in range(count):
             write_still_bundle(args.root, folder/f'frame-{i+1:04d}.zip', group, i)
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for i, future in enumerate(as_completed([pool.submit(bundles, job) for job in bundle_jobs]), 1):
-            future.result()
-            if i % 10 == 0 or i == len(bundle_jobs):
-                print(f'Packaged {i}/{len(bundle_jobs)} character/animation downloads', flush=True)
-    write_bundle(args.root,downloads/'melee-all-characters-all-animations.zip',clips)
+    if args.player_only:
+        if not (downloads/'melee-all-characters-all-animations.zip').is_file() or any(
+                not path.is_file() or any(not (folder/f'frame-{i+1:04d}.zip').is_file() for i in range(count))
+                for path, folder, _, count in bundle_jobs):
+            parser.error('download bundles are missing; regenerate without --player-only')
+    else:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for i, future in enumerate(as_completed([pool.submit(bundles, job) for job in bundle_jobs]), 1):
+                future.result()
+                if i % 10 == 0 or i == len(bundle_jobs):
+                    print(f'Packaged {i}/{len(bundle_jobs)} character/animation downloads', flush=True)
+        write_bundle(args.root,downloads/'melee-all-characters-all-animations.zip',clips)
     output = args.root/"player.html"
     safe_json = lambda value: json.dumps(value).replace("<", "\\u003c")
     content = TEMPLATE.replace("__CLIPS__",safe_json(clips)).replace("__ANIMATIONS__",safe_json(animations)).replace("__CHARACTERS__",safe_json(characters))

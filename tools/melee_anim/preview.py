@@ -93,11 +93,30 @@ def joint_visibility(bones, tracks, source_frame):
     return visible
 
 
-def camera_basis(yaw):
-    angle = math.radians(yaw)
-    forward = np.array([math.sin(angle), 0.0, math.cos(angle)])
-    right = np.array([math.cos(angle), 0.0, -math.sin(angle)])
-    return np.stack((right, np.array([0.0, 1.0, 0.0]), forward), axis=1)
+def camera_basis(yaw, pitch=0, roll=0):
+    """Camera-to-world basis: Ry(yaw) @ Rx(pitch) @ Rz(roll), degrees.
+
+    Orbit the camera, keeping source poses and world lighting unchanged.
+    Row-vector world coordinates are projected by multiplying this basis.
+    """
+    if not all(math.isfinite(a) for a in (yaw, pitch, roll)):
+        raise ValueError('Camera angles must be finite')
+    x, y, z = map(math.radians, (pitch, yaw, roll))
+    cx, sx, cy, sy, cz, sz = math.cos(x), math.sin(x), math.cos(y), math.sin(y), math.cos(z), math.sin(z)
+    rx = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]])
+    ry = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]])
+    rz = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+    return ry @ rx @ rz
+
+
+def fit_camera(cloud, view, size):
+    """Fit all sampled geometry around a camera-independent world pivot."""
+    center = (cloud.min(axis=0)+cloud.max(axis=0))/2
+    projected = (cloud-center) @ view
+    extent = np.abs(projected[:, :2]).max()
+    if extent <= 0:
+        raise ValueError('Cannot frame degenerate geometry')
+    return center, size*.82/(2*extent)
 
 
 def texture_uv(uv, descriptor):
@@ -217,6 +236,7 @@ def main():
     parser.add_argument("--model", type=Path, default=Path("build/melee_anim/exported/mario/costume_00/model.json"))
     parser.add_argument("--companion", type=Path)
     parser.add_argument("--timeline", type=Path, help="edited 42-frame clapping-sync plan")
+    parser.add_argument("--samples", type=Path, help="exact saved source times and whole-clip framing samples")
     parser.add_argument("--motions", type=Path, default=Path("build/melee_anim/motions.json"))
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
     parser.add_argument("--action", choices=("results-clap", "victory1", "victory2", "victory3", "taunt"), default="results-clap")
@@ -226,6 +246,8 @@ def main():
     parser.add_argument("--fps", type=int, default=50, choices=(25, 50))
     parser.add_argument("--ticks-per-second", type=float, default=60)
     parser.add_argument("--yaw", type=float, default=0)
+    parser.add_argument("--pitch", type=float, default=0)
+    parser.add_argument("--roll", type=float, default=0)
     parser.add_argument("--backend", choices=("python","native"), default="python")
     parser.add_argument("--max-frames", type=int, help="diagnostic truncation, not a complete export")
     args = parser.parse_args()
@@ -235,6 +257,10 @@ def main():
         parser.error("max-frames must be positive")
     if args.section == "wait" and not args.action.startswith("victory"):
         parser.error("wait sections are only available for victory actions")
+    if not all(math.isfinite(v) for v in (args.yaw, args.pitch, args.roll)):
+        parser.error('camera angles must be finite')
+    if args.samples and (args.timeline or args.max_frames):
+        parser.error('samples cannot be combined with timeline or truncation')
     model = json.loads(args.model.read_text())
 
     report = json.loads(args.motions.read_text())
@@ -249,6 +275,13 @@ def main():
         source_times.append(period)
     sync_plan = None
     fit_times = None
+    if args.samples:
+        saved = json.loads(args.samples.read_text())
+        source_times = saved['source_times']
+        fit_times = saved['fit_source_times']
+        if (saved['fps'] != args.fps or not source_times or not fit_times or
+                any(not math.isfinite(t) or not 0 <= t <= period for t in source_times+fit_times)):
+            parser.error('invalid saved sample timing')
     if args.timeline:
         sync_plan = json.loads(args.timeline.read_text())
         if args.action != 'results-clap' or args.section != 'source' or args.max_frames:
@@ -292,7 +325,7 @@ def main():
                     textures[new]=np.asarray(Image.open(args.companion.parent/old).convert("RGBA"));texture["image_file"]=new
         for mesh in companion["meshes"]:mesh["material_index"]+=offset
         model["materials"].extend(companion["materials"])
-    view = camera_basis(args.yaw)
+    view = camera_basis(args.yaw, args.pitch, args.roll)
     # Precompute poses once; fit over the whole selected source interval.
     cache = {}
     def evaluate_pose(frame):
@@ -322,10 +355,9 @@ def main():
     if companion:model["meshes"].extend(companion["meshes"])
     framing = fitted+poses if fit_times else poses
     cloud = np.concatenate([p for frame in framing for p, _ in frame])
-    projected = cloud @ view
-    low, high = projected.min(axis=0), projected.max(axis=0)
-    center = ((low+high)/2) @ view.T
-    scale = args.size*0.82/max(high[0]-low[0], high[1]-low[1])
+    # One world-space pivot for the entire animation, independent of camera
+    # angles. Symmetric projected bounds retain the pivot without clipping.
+    center, scale = fit_camera(cloud, view, args.size)
     images = []
     raster=None
     if args.backend=="native":
@@ -371,6 +403,9 @@ def main():
                 "timing_basis": "explicit prototype preset; not measured emulator timing",
                 "output_duration_seconds": len(images)/args.fps,
                 "complete_interval": args.max_frames is None, "size": args.size, "camera_yaw": args.yaw,
+                "camera_pitch": args.pitch, "camera_roll": args.roll,
+                "camera_rotation_order": "Ry(yaw) @ Rx(pitch) @ Rz(roll)",
+                "camera_center": center.tolist(), "camera_pixels_per_unit": scale,
                 "model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
                 "render_backend": args.backend,
                 "limitations": ["Approximate paired placement" if companion else "Isolated fighter", "no gameplay scripts/props/effects/dynamics/audio",
