@@ -307,6 +307,8 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
     at,size=motion["offset"],motion["size"]
     archive=Archive(data[at:at+size],motion["symbol"])
     metadata,tracks=read_figatree(archive,motion["symbol"])
+    if action.startswith(('attack-','tech-','movement-','other-')) and actor.get('character_prop'):
+        motion={**motion,'character_prop':actor['character_prop']}
     if action.startswith('movement-') and actor.get('movement'):
         motion={**motion,'jump_actor':actor}
         metadata={**metadata,'frames':actor['render_duration']}
@@ -455,12 +457,16 @@ def main():
         for mesh in companion["meshes"]:mesh["material_index"]+=offset
         model["materials"].extend(companion["materials"])
     from .held_items import HeldItem, hold_joint, item_for_motion
-    specification=item_for_motion(args.action,model['fighter_kind'])
+    specification=motion.get('character_prop') or item_for_motion(args.action,model['fighter_kind'])
     held=None;companion_held=None
     if specification:
         held=HeldItem(args.files,specification,period,motion.get('script'))
         table=next(t for t in report['normal_tables'] if t['fighter_kind']==model['fighter_kind'])
-        held_joint=hold_joint(args.files,table,model,Path(__file__).resolve().parents[2])
+        held_joint=hold_joint(args.files,table,model,Path(__file__).resolve().parents[2],specification)
+        if specification.get('behavior')=='needle-release':
+            held.anchor_at=lambda tick:pose_matrices(model['bones'],tracks,tick,metadata['type'],
+                                                    root_scale=model.get('runtime_root_scale'),
+                                                    root_rotation=runtime_root_rotation(model,args.action))[held_joint]
         def add_item_materials(item):
             offset=len(model['materials'])
             for mesh in item.model['meshes']:mesh['material_index']+=offset
@@ -469,7 +475,7 @@ def main():
         if companion:
             companion_held=HeldItem(args.files,specification,period,cm.get('script'))
             table=next(t for t in report['normal_tables'] if t['fighter_kind']==companion['fighter_kind'])
-            companion_held_joint=hold_joint(args.files,table,companion,Path(__file__).resolve().parents[2])
+            companion_held_joint=hold_joint(args.files,table,companion,Path(__file__).resolve().parents[2],specification)
             add_item_materials(companion_held)
     view = camera_basis(args.yaw, args.pitch, args.roll)
     def follow_center(posed,mask):
@@ -537,7 +543,14 @@ def main():
         fit_samples = [evaluate_pose(t) for t in (fit_times or source_times)]
         cloud = np.concatenate([p for frame, mask in fit_samples for (p,_),shown in zip(frame,mask) if shown])
     else:
-        cloud = np.concatenate([p for frame in framing for p, _ in frame])
+        fit_count=len(model['meshes'])-len(held.model['meshes']) if held and specification.get('behavior')=='needle-release' else len(model['meshes'])
+        cloud = np.concatenate([p for frame in framing for p, _ in frame[:fit_count]])
+        if held and specification.get('behavior')=='needle-release':
+            # Keep the muzzle/spawn point in view without shrinking the fighter
+            # to fit the entire free-flight distance of every emitted needle.
+            tick=specification['shot_ticks'][0]
+            spawned,shown=held.pose(held.anchor_at(tick),tick,view)
+            cloud=np.concatenate([cloud]+[p for (p,_),visible in zip(spawned,shown) if visible])
     effect = None
     flash = None
     anchors = [[-2.8,0,0],[2.8,0,0]] if companion else [[0,0,0]]
@@ -616,6 +629,7 @@ def main():
         manifest['held_item']={**held.provenance(),'fighter_hold_joint':held_joint,
                               'companion_hold_joint':companion_held_joint if companion_held else None}
         manifest['framing_policy']='whole-animation fighter and held-item geometry'
+        if specification.get('behavior')=='needle-release':manifest['framing_policy']='stable fighter and emission-point fit; needles leave the image naturally'
     if knockdown:
         manifest['ground_effects_enabled'] = bool(effect and args.ground_effects=='on')
         manifest['ground_effect'] = effect.provenance() if effect else None

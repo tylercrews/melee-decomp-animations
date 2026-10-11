@@ -4,9 +4,14 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Add Fox/Falco neutral blasters, Sheik's held/released six-needle preset and Kirby's Final Cutter blade. Extend to Kirby hammer, Mario/Dr. Mario cape/sheet, Peach Toad/parasol, Link/Young Link bows and Ness bat. Preserve original profiles/costumes and all preview/export paths; correct base and powered Kirby reserved-slot attachments. See investigation section 45.
+- [ ] Add Ness yo-yo, Sheik chain, Game & Watch attack articles and Samus/Link/Young Link tether models with their procedural/state callbacks.
+- [ ] Extend emitted projectiles beyond Sheik's deterministic needle preset (lasers, arrows, Cutter wave, boomerangs, bombs, spells), then collision/bounce/hit effects and full special-move controllers.
+
+
 - [x] Add original Beam Sword, Home-Run Bat, Parasol, Fan, Star Rod and Lip's Stick to their swing attacks across actual costumes, paired actors and Kirby powers. Use source attachment indices and timed Parasol/Fan curves, transparent blending, whole-item camera fit and shared preview/export/cache paths. Include Captain Falcon's six extra smash follow-ups; identify item names in the menu. Verified 140 Python tests / Node controls, 204 full clips / 4,824 frames, all costume/power attachments and exact/sized/color/live exports. See investigation section 44.
 - [ ] Extend Beam Sword's settled held preset to attack-script extension/retraction and full GX glow/material behavior.
-- [ ] Add character-specific spawned props (cape, blasters, Toad, Game & Watch articles, etc.) using source creation/attachment/lifetime callbacks rather than applying generic item IDs.
+- [ ] Extend the implemented character profiles to remaining Game & Watch and procedural articles; retain source creation/attachment/lifetime callbacks.
 - [ ] Add projectiles/collisions and item material/shape/dynamic callbacks where required; generic throwing clips need an explicit item selection because one clip can throw different items.
 
 

@@ -88,7 +88,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <p id="servicehint" hidden>For attacks, viewing angles, or resized downloads, open the <a href="http://127.0.0.1:8765/player.html">local download player</a>.
 If it is closed, start it from the repository with <code>python -m tools.melee_anim.player_server</code>.</p>
 <div class="meta" id="meta"></div>
-<p>This prototype uses original models and motion curves with approximate shading. Beam Sword, Home-Run Bat, Parasol, Fan, Star Rod and Lip's Stick are included in their item attacks. Ground-impact effects are optional; projectiles, other props, complete game scripts, dynamics and audio remain unfinished. Native seams are preserved.</p>
+<p>This prototype uses original models and motion curves with approximate shading. Common swing weapons and supported character props are included in attacks. Ground-impact effects are optional; projectiles, unsupported props, complete game scripts, dynamics and audio remain unfinished. Native seams are preserved.</p>
 <script>
 const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__, powers=__POWERS__;
 const animationTypes=new Map(animations.filter(a=>a.type).map(a=>[a.character+':'+a.key,a.type]));
@@ -192,7 +192,7 @@ function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
 document.getElementById('movementhint').hidden=!c.action_key.startsWith('movement-');
 document.getElementById('itemhint').hidden=!c.held_item;
-document.getElementById('itemhint').textContent=c.held_item?`${c.held_item.name} is included in the preview and GIF/PNG downloads. Projectile and collision effects are not simulated.`:'';
+document.getElementById('itemhint').textContent=c.held_item?`${c.held_item.name} is included in the preview and GIF/PNG downloads. ${c.held_item.charged_preset?'Needles use a six-needle charged preset. ':''}${c.held_item.behavior==='needle-release'?'Needles follow a deterministic free-flight path and leave the image; collisions are not simulated.':'Projectile and collision effects are not simulated.'}`:'';
 jumpcontrols.hidden=!isHop();centerjump.checked=centerJumpEnabled;
 techcontrols.hidden=!c.action_key.startsWith('tech-');groundeffects.disabled=!c.ground_effect;
 techhint.textContent=c.ground_effect?"Towards/away follow the character's facing. With impacts on, the whole effect fits; turning them off zooms in on the character. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.":'Lying animations have no ground-impact effect.';

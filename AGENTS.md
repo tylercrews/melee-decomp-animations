@@ -24,6 +24,12 @@ Parasol commands (opcode 42) and Fan command-variable events (19) drive bounded 
 
 See investigation section 44 for coverage and actual checks. Common throws lack a uniquely identified item; projectiles/collisions, character-specific spawned props and general item material/script/dynamic VMs remain unfinished. Do not claim a full game simulation. Keep original data/QA/generated outputs ignored and restart the server after code/catalog changes.
 
+## Latest feature: character attack props (2026-10-11)
+
+character_props.py adds source-profiled blasters (Fox/Falco neutral), Sheik's held/released needles, Kirby Final Cutter/hammer, Mario cape/Dr. Mario sheet, Peach Toad/parasol, Link/Young Link bows and Ness forward-smash bat. Keep Article slots separate from ItemKind IDs; resolve ftData.x48 in the actual fighter archive, or EfKbData descriptor 0 / gfx5000 for the Cutter blade. Profiles distinguish canonical parts requiring ftPartsTable from raw runtime slots. **Correction to section 44:** Kirby raw slots must always map through bone_slots, including ordinary Kirby; runtime reserved holes also exist in his base form. Runtime slot 44 maps to base mesh joint 31. This fixes earlier common weapon attachments as well as Cutter/hammer and replacement bodies.
+
+Sheik uses an explicit six-needle preset. Release uses original shots at ticks 2/5/8/11/14/17, original speed/lifetime and grounded/aerial direction, with deterministic center spread. Snapshot source spawn poses per shot rather than following the hand after release. Keep the fighter and first emission point in the camera fit, then let projectiles leave the square naturally. No collision/bounce effects are evaluated. Other projectiles and complete dynamic/material callbacks remain unfinished. Cutter phase offsets are isolated-clip presets, not a simulated full up-special controller. 48 prop clips / 237 costume choices are enabled; investigation section 45 records actual validation and remaining props. Prior deferred actor/appearance requests remain deferred. Restart the UI after catalog/code changes; keep assets/QA ignored.
+
 ## Read these first
 
 - [INVESTIGATION.md](INVESTIGATION.md): verified source paths, identifiers, asset availability, and limitations.

@@ -112,17 +112,22 @@ def texture_color_generator(pixels, tev):
     return result
 
 
-def hold_joint(files, table, model, repo):
+def hold_joint(files, table, model, repo, specification=None):
     ar=Archive((Path(files)/table['fighter_archive']).read_bytes())
     parts=ar.pointer(ar.public(table['fighter_root'])+8)
     # ftpickupitem_800948A8 passes this raw part directly to ftLib_GetPartJObj.
     joint=ar.u8(parts+16)
-    if model['fighter_kind']==4 and model.get('kirby_part_mask',0):
+    if specification and 'raw_joint' in specification:joint=specification['raw_joint']
+    elif specification and 'canonical_part' in specification:
+        from .character_props import mapped_joint
+        joint=mapped_joint(files,model['fighter_kind'],specification['canonical_part'])
+    if model['fighter_kind']==4:
         from .kirby_powers import bone_slots, reserved_parts
         slots=reserved_parts(repo)
-        original=bone_slots(46,slots)
-        target=bone_slots(len(model['bones']),slots,model['kirby_part_mask'])
-        joint={slot:i for i,slot in enumerate(target)}[original[joint]]
+        target=bone_slots(len(model['bones']),slots,model.get('kirby_part_mask',0))
+        # fp->parts retains reserved holes even for ordinary Kirby. The DAT
+        # mesh tree is compressed; runtime part slots are not mesh indices.
+        joint={slot:i for i,slot in enumerate(target)}[joint]
     if joint>=len(model['bones']):
         raise FormatError('Held-item joint is outside the selected fighter rig')
     return joint
@@ -132,16 +137,26 @@ class HeldItem:
     def __init__(self, files, specification, duration, script=None):
         self.specification=specification
         self.duration=duration
-        self.path=item_archive(files)
+        self.path=Path(files)/specification['source_archive'] if specification.get('source_archive') else item_archive(files)
         ar=Archive(self.path.read_bytes(),str(self.path))
         self.archive_sha256=hashlib.sha256(self.path.read_bytes()).hexdigest()
-        common=ar.pointer(ar.public('itPublicData')+4)
-        article=ar.pointer(common+4*specification['item_kind'])
-        desc=ar.pointer(article+16)
-        source=inspect_model(self.path,root_offset=ar.pointer(desc))
+        effect=specification.get('effect_table')
+        if effect:
+            effect_desc=ar.public(effect)+8+20*specification['effect_index']
+            article=None;desc=None
+            source=inspect_model(self.path,root_offset=ar.pointer(effect_desc+4))
+        else:
+            if specification.get('fighter_root'):
+                common=ar.pointer(ar.public(specification['fighter_root'])+72)
+                article=ar.pointer(common+4*specification['article_slot'])
+            else:
+                common=ar.pointer(ar.public('itPublicData')+4)
+                article=ar.pointer(common+4*specification['item_kind'])
+            desc=ar.pointer(article+16)
+            source=inspect_model(self.path,root_offset=ar.pointer(desc))
         self.bones=source['joints']
-        attach=ar.u32(desc+8)
-        if not ar.u32(desc+4):
+        attach=0 if effect else ar.u32(desc+8)
+        if not effect and not ar.u32(desc+4):
             # No dynamic bone table: runtime follows the child chain.
             index=0
             for _ in range(attach):
@@ -161,6 +176,23 @@ class HeldItem:
         for b in self.bones[1:]:b['flags']&=~0x10
         self.animations={}
         self.timeline=[(0,specification['animation_id'],1.)]
+        self.visibility_events=[(0,True)]
+        behavior=specification.get('behavior')
+        if behavior=='blaster':
+            # Neutral end begins visible and the source cmd_var1=2 hides it.
+            for time,cmd in script_events(script or {},duration):
+                var=cmd.get('command_variable')
+                if var and var['index']==1:self.visibility_events.append((time,var['value']!=2))
+        elif behavior=='hammer':
+            self.visibility_events=[(0,False)]
+            for time,cmd in script_events(script or {},duration):
+                var=cmd.get('command_variable')
+                if var and var['index']==0 and var['value'] in (1,2):self.visibility_events.append((time,var['value']==1))
+        elif behavior=='cape':
+            self.visibility_events=[(0,True)]
+            for time,cmd in script_events(script or {},duration):
+                var=cmd.get('command_variable')
+                if var and var['index']==1:self.visibility_events.append((time,var['value']!=0))
         for time,cmd in script_events(script or {},duration):
             word=int(cmd['first_word'],16)
             if specification['item_kind']==13 and cmd['opcode']==42:
@@ -174,7 +206,7 @@ class HeldItem:
                 if var['index']==0 and var['value'] in (1,2):
                     animation=(0,1,2,1,2)[specification['variant']] if var['value']==1 else 3
                     self.timeline.append((time,animation,1.))
-        states=ar.pointer(article+12)
+        states=None if effect else ar.pointer(article+12)
         for animation in {a for _,a,_ in self.timeline if a is not None}:
             tracks=[];timing={}
             def visit(index,node):
@@ -182,7 +214,7 @@ class HeldItem:
                 ts=aobj_tracks(ar,aobj,index)
                 tracks.extend(ts)
                 if aobj is not None:timing[index]=(ar.f32(aobj+4),bool(ar.u32(aobj)&0x20000000))
-            matched_tree(ar,self.bones,ar.pointer(states+animation*16),visit)
+            matched_tree(ar,self.bones,ar.pointer(effect_desc+8) if effect else ar.pointer(states+animation*16),visit)
             self.animations[animation]=(tracks,timing)
         ids={m['offset']:i for i,m in enumerate(source['materials'])}
         materials=source['materials']
@@ -219,14 +251,36 @@ class HeldItem:
                         ([[dict(joint_index=polygon['shared_joint_index'],weight=1.)]] if polygon.get('shared_joint_index') is not None else []))
             meshes.append(mesh)
         self.model=dict(bones=self.bones,materials=materials,meshes=meshes)
+        if specification.get('behavior')=='needle-release':
+            self.model['meshes']=[dict(m) for _ in specification['shot_ticks'] for m in meshes]
+        self.anchor_at=None
 
     def pose(self, target, frame, view=None):
         from .preview import deform, joint_visibility, pose_matrices
+        if self.specification.get('behavior')=='needle-release':
+            from .export_model import local_matrix
+            spec=self.specification;geometry=[];shown=[];shots=spec['shot_ticks']
+            meshes_per_shot=len(self.model['meshes'])//len(shots)
+            angle=np.pi/4 if 'Air' in spec['phase'] else 0.
+            # it_802AFF08 emits along game +X for the right-facing preset.
+            # Item root facing rotates its model's local Z into that axis.
+            velocity=spec['projectile_speed']*np.array([np.cos(angle),-np.sin(angle),0.])
+            source=pose_matrices(self.bones,[],0,tree_type=None)
+            for i,tick in enumerate(shots):
+                origin=self.anchor_at(tick) if self.anchor_at else target
+                elapsed=max(0,frame-tick)
+                position=origin[:3,3]+[spec['spawn_offset'][0],spec['spawn_offset'][1],0]+velocity*elapsed
+                transform=local_matrix([angle,np.pi/2,0],[1,1,1],position)
+                matrices=np.asarray([transform@m for m in source])
+                active=tick<=frame<tick+spec['projectile_lifetime']
+                for mesh in self.model['meshes'][i*meshes_per_shot:(i+1)*meshes_per_shot]:
+                    geometry.append(deform(mesh,matrices,self.bones));shown.append(active)
+            return geometry,shown
         # Each HSD_AObj has its own end/loop; hold nonlooping terminal curves.
         evaluated=[]
         start,animation,speed=next(event for event in reversed(self.timeline) if event[0]<=frame)
         tracks,timing=self.animations.get(animation,([],{}))
-        elapsed=(frame-start)*speed
+        elapsed=(frame-start)*speed+self.specification.get('phase_offset',0)
         for track in tracks:
             end,loop=timing[track.joint_index]
             time=elapsed%end if loop and end>0 else min(elapsed,end) if end>0 else elapsed
@@ -246,6 +300,9 @@ class HeldItem:
                 evaluated.extend(Track(joint,ch,0,0,0,b'\x11'+struct.pack('<f',v)+b'\x01'+struct.pack('<f',v)) for ch,v in values.items())
             matrices=pose_matrices(self.bones,evaluated,0,tree_type=None)
         transform=constrained_transform(target,matrices[self.attach_joint])
+        scale=self.specification.get('scale',1.)
+        transform[:3,:3]*=scale
+        transform[:3,3]=target[:3,3]-transform[:3,:3]@matrices[self.attach_joint][:3,3]
         constrained=np.asarray([transform@m for m in matrices])
         if view is not None:
             for b in self.bones:
@@ -253,11 +310,14 @@ class HeldItem:
                     constrained[b['index']]=billboard_matrix(constrained[b['index']],view)
         geometry=[deform(mesh,constrained,self.bones) for mesh in self.model['meshes']]
         shown=joint_visibility(self.bones,evaluated,0)
+        if not next(v for time,v in reversed(self.visibility_events) if time<=frame):shown=[False]*len(shown)
         return geometry,[shown[m['owner_joint_index']] for m in self.model['meshes']]
 
     def provenance(self):
         return {**self.specification,'source_archive':self.path.name,'archive_sha256':self.archive_sha256,
                 'item_attach_joint':self.attach_joint,'joint_animation':any(t for t,_ in self.animations.values()),
                 'animation_timeline':self.timeline,
-                'limitations':['No projectiles, collisions or general item script/material VM',
-                               'Attack-driven Beam Sword extension and full GX glow remain approximate']}
+                'visibility_timeline':self.visibility_events,
+                'limitations':['No collisions or general item script/material VM',
+                               'Six deterministic free-flight needles; no bounce/hit effects' if self.specification.get('behavior')=='needle-release' else 'Emitted projectiles are not played for this attached prop',
+                               'Character-specific dynamic/material callbacks and full GX glow remain approximate']}

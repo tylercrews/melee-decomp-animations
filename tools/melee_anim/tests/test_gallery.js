@@ -539,6 +539,15 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert(servedElements.action.options.some(o=>/Home-Run Bat/.test(o.textContent)));
   servedElements.action.value='attack-44_source';servedElements.action.onchange();
   assert.equal(servedElements.itemhint.hidden,true);
+  for(const [slug,aid,label] of [['fox',296,'Blaster'],['falco',299,'Blaster'],['sheik',298,'Released needles'],['kirby',325,'Final Cutter blade']]){
+    servedElements.character.value=slug;servedElements.character.onchange();
+    servedElements.animationtype.value='attack';servedElements.animationtype.onchange();
+    servedElements.action.value=`attack-${aid}_source`;servedElements.action.onchange();
+    assert.equal(servedElements.itemhint.hidden,false);assert(servedElements.itemhint.textContent.includes(label));
+    const propRequest=requests.at(-1);propRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:vm.runInContext('frameCount()',servedContext)},(_,i)=>`props/${slug}-${i}.png`)})});await settle();
+    assert.equal(new URL(servedElements.animationzip.href,'http://localhost').searchParams.get('action'),`attack-${aid}_source`);
+  }
+  assert.match(servedElements.itemhint.textContent,/Final Cutter/);
   console.log('Held-item labels and action-specific preview/export hint: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');

@@ -146,6 +146,8 @@ def build_attack_catalog(repo, report):
                 continue
             from .held_items import item_for_motion
             prop=item_for_motion(f'attack-{motion["animation_id"]}',kind) if category=='attack' else None
+            from .character_props import character_prop, resolve_profile
+            special=resolve_profile(files,report,character_prop(kind,name)) if category=='attack' else None
             if prop:
                 suffix=(('Jab','Tilt','Smash','Dash attack','Smash follow-up')[prop['variant']] if 'variant' in prop else common.get(motion['animation_id'],name))
                 chosen=(prop['name']+' — '+suffix,'Item attacks')
@@ -171,6 +173,7 @@ def build_attack_catalog(repo, report):
                 if metadata['type'] not in (0,1) or set(metadata['channels'])-{1,2,3,5,6,7,8,9,10,11,12}:
                     reason = 'This clip needs additional animation channel support'; break
                 actors.append({'fighter_kind':member_kind, 'source_fighter_kind':source_kind,
+                               'character_prop':special,
                                'animation_file':table['animation_file'], 'clip':{**selected, **metadata,
                                'effective_loop':metadata['tree_loop'] or selected['motion_loop'],
                                'script':script_graph_summary(archive, selected['script_offset'], sizes)}})
@@ -178,7 +181,7 @@ def build_attack_catalog(repo, report):
             actions.append({'key':f'{prefix}-{motion["animation_id"]}_source', 'animation_id':motion['animation_id'],
                             'animation_type':category, 'ground_effect':recovery[1] if recovery else None,
                             'name':name, 'label':chosen[0], 'group':chosen[1], 'actors':actors,
-                            'held_item':prop,
+                            'held_item':prop or special,
                             'available':reason is None, 'unavailable_reason':reason})
         # Full/short hops share JumpF but have distinct source launch velocities.
         has_jump=all(aid<len(motions) and motions[aid]['size'] for aid in JUMP_PHASE_IDS.values())
@@ -276,6 +279,9 @@ class AttackCache:
             action = clip['action_key'].rsplit('_',1)[0]
             effects = bool(effects and clip.get('ground_effect'))
             paths = [catalog, model, self.repo/'build/melee_anim/motions.json']
+            actor=find_action(selection,json.loads(model.read_text()).get('fighter_kind'),action)
+            if actor.get('character_prop'):
+                paths.extend([self.repo/'orig/GALE01/files'/actor['character_prop']['source_archive'],self.repo/'orig/GALE01/files/PlCo.dat'])
             from .held_items import item_for_motion, item_archive
             if item_for_motion(action,json.loads(model.read_text()).get('fighter_kind')):
                 paths.extend([item_archive(self.repo/'orig/GALE01/files'),self.repo/'orig/GALE01/files/PlCo.dat'])
