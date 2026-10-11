@@ -7,7 +7,7 @@ import uuid
 from zipfile import ZipFile
 
 from tools.melee_anim.preview_batch import action_sections, completed_job
-from tools.melee_anim.preview_gallery import collect_clips, write_bundle
+from tools.melee_anim.preview_gallery import collect_clips, write_bundle, write_still_bundle
 
 
 class DownloadTests(unittest.TestCase):
@@ -82,6 +82,27 @@ class DownloadTests(unittest.TestCase):
             self.assertIn((f"victory{i}", "wait"), jobs)
         with self.assertRaises(ValueError):
             action_sections("taunt", "wait")
+
+    def test_still_bundle_contains_the_selected_frame_of_each_costume(self):
+        folders = [self.fixture(c)[0] for c in (0, 3)]
+        for costume, folder in zip((0, 3), folders):
+            (folder/'frame_0000.png').write_bytes(bytes([costume, 0]))
+            (folder/'frame_0001.png').write_bytes(bytes([costume, 1]))
+        clips = collect_clips(self.root)
+        path = self.root/'frame-0002.zip'
+        path.write_bytes(b'interrupted ZIP')
+        write_still_bundle(self.root, path, clips, 1)
+        with ZipFile(path) as archive:
+            self.assertEqual(len(archive.namelist()), 2)
+            for clip in clips:
+                name = clip['download_name'].replace('.gif', '-frame-0002.png')
+                self.assertEqual(archive.read(name), bytes([clip['costume_id'], 1]))
+        # A re-rendered source must invalidate a previously complete bundle.
+        (folders[0]/'frame_0001.png').write_bytes(b'changed pose')
+        write_still_bundle(self.root, path, clips, 1)
+        with ZipFile(path) as archive:
+            name = clips[0]['download_name'].replace('.gif', '-frame-0002.png')
+            self.assertEqual(archive.read(name), b'changed pose')
 
 
 if __name__ == "__main__":

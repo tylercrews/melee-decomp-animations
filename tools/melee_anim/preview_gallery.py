@@ -7,11 +7,12 @@ stay under ignored build/; no server or external resources are required.
 
 import argparse
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 from pathlib import Path
 import re
-from zipfile import ZipFile, ZIP_STORED
+from zipfile import BadZipFile, ZipFile, ZIP_STORED
 from .catalog import CHARACTERS
 
 COSTUMES = {0: "Red (default)", 1: "Yellow", 2: "Black", 3: "Blue", 4: "Green"}
@@ -151,6 +152,25 @@ def write_bundle(root, path, clips):
         archive.writestr("manifest.json", json.dumps({"files": inventory}, indent=2)+"\n")
 
 
+def write_still_bundle(root, path, clips, index):
+    """Reuse byte-matching complete ZIPs; replace interrupted/stale bundles."""
+    files = {c['download_name'].replace('.gif', f'-frame-{index+1:04d}.png'):
+             (root/c['frames'][index]).read_bytes() for c in clips}
+    if path.is_file():
+        try:
+            with ZipFile(path) as archive:
+                if set(archive.namelist()) == set(files) and all(
+                        archive.read(name) == data for name, data in files.items()):
+                    return
+        except (BadZipFile, OSError, KeyError):
+            pass
+    temporary = path.with_suffix('.zip.tmp')
+    with ZipFile(temporary, 'w', compression=ZIP_STORED) as archive:
+        for name, data in files.items():
+            archive.writestr(name, data)
+    temporary.replace(path)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path("build/melee_anim/preview"))
@@ -169,7 +189,7 @@ def main():
     by_action = defaultdict(list)
     for clip in clips:
         by_action[(clip["character"],clip["action_key"])].append(clip)
-    animations=[];characters=[]
+    animations=[];characters=[];bundle_jobs=[]
     for slug,name in CHARACTERS:
         owned=[c for c in clips if c['character']==slug]
         if not owned:continue
@@ -178,14 +198,21 @@ def main():
             key=f'{action}_{section}';group=by_action[(slug,key)]
             if not group:continue
             filename=f'{slug}-{key.replace("_","-")}-all-colors.zip'
-            write_bundle(args.root,downloads/filename,group)
             stills=downloads/'stills'/f'{slug}-{key}';stills.mkdir(parents=True,exist_ok=True)
             counts={len(c['frames']) for c in group}
             if len(counts)!=1:raise ValueError('Color frame counts differ')
-            for i in range(next(iter(counts))):
-                with ZipFile(stills/f'frame-{i+1:04d}.zip','w',compression=ZIP_STORED) as z:
-                    for c in group:z.write(args.root/c['frames'][i],c['download_name'].replace('.gif',f'-frame-{i+1:04d}.png'))
+            bundle_jobs.append((downloads/filename, stills, group, next(iter(counts))))
             animations.append({'character':slug,'key':key,'label':label,'zip':f'downloads/{filename}','download_name':filename,'color_count':len(group),'stills':stills.relative_to(args.root).as_posix()})
+    def bundles(job):
+        path, folder, group, count = job
+        write_bundle(args.root, path, group)
+        for i in range(count):
+            write_still_bundle(args.root, folder/f'frame-{i+1:04d}.zip', group, i)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for i, future in enumerate(as_completed([pool.submit(bundles, job) for job in bundle_jobs]), 1):
+            future.result()
+            if i % 10 == 0 or i == len(bundle_jobs):
+                print(f'Packaged {i}/{len(bundle_jobs)} character/animation downloads', flush=True)
     write_bundle(args.root,downloads/'melee-all-characters-all-animations.zip',clips)
     output = args.root/"player.html"
     safe_json = lambda value: json.dumps(value).replace("<", "\\u003c")

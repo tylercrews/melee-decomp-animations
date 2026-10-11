@@ -1,28 +1,37 @@
 # Ordered implementation checklist
 
-Updated 2026-10-10 at the user's requested stopping point. Requested animations and costume references are cataloged across all 26 selectable forms. A playable Mario CPU prototype now produces PNG sequences and GIFs; full roster rendering, production fidelity, and MP4 remain future work. See `AGENTS.md`'s immediate handoff for the exact resume order.
+Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 26 selectable character entries / 123 actual costumes have clapping, standard taunt, three victory entrances, and three primary wait clips: 984 GIFs and 81,369 PNG masters. Production fidelity and MP4 remain future work. See `AGENTS.md`'s current handoff for the resume order.
 
-## Next session: bounded fixes before expanding
+## Current workflow and remaining work
 
 - [x] Expand batch selection to all eight Mario animation/section choices for every actual costume ID, including taunt and victory waits.
 - [x] Add independent animation/color selectors that preserve the chosen color.
 - [x] Add uniquely named single-GIF downloads, per-animation color ZIPs, and a full GIF ZIP.
 - [x] Add validated resume and strict full-matrix gallery checks; regression tests cover color/file identity and ZIP contents.
 
-Rebuild all Mario GIFs and download bundles with:
+Rebuild the full roster and download bundles with:
 
 ```powershell
-python -m tools.melee_anim.preview_batch --action all --section all --costume all --resume --jobs 3
+python -m tools.melee_anim.roster_batch --resume --jobs 8
 python -m tools.melee_anim.preview_gallery --require-all
+python -m tools.melee_anim.verify_previews
+node tools/melee_anim/tests/test_gallery.js
 ```
 
-The target is 40 GIFs: clapping, taunt, three victories, and their three authored wait loops, each in red/yellow/black/blue/green. The viewer provides Download GIF for the selected pair, Download this animation for its color bundle, and Download all GIFs for the full collection.
+The target is 984 GIFs across all actual costume selections. The viewer provides the selected GIF, an animation's costume ZIP, and the full collection. Pause or scrub to expose the selected-frame PNG and an all-costume ZIP for that exact displayed frame. A one-based displayed frame 68 is `frame_0067.png`; it is independent of the source-tick number shown beside it.
 
-- [ ] Honor exported front/back PObj culling flags in `preview.render_frame`, then review existing reference poses.
+- [x] Honor exported front/back PObj culling flags in both raster backends; review rendered roster contact sheets.
 - [ ] Make source/output duration rounding explicit and decide one-shot terminal hold behavior. Current 50-frame waits become 42 GIF frames at 50 fps (0.84s); taunt includes one final frame (3.02s).
 - [x] Reject stale extra PNG frames before rendering, and refuse them in resume/gallery validation; preserve unrelated files.
-- [ ] Bound pilot results clip reads to their owning public region before Popo/Nana support.
-- [ ] Run the 57 current Python tests plus player logic tests, adding only meaningful tests for these fixes.
+- [x] Bound results clip reads to their owning public region for compound Popo/Nana archives.
+- [x] Add source scale clamping and joint node/branch visibility; correct Game & Watch's class-4 item visibility.
+- [x] Run 65 Python tests, including synthetic native raster depth/culling and paused-frame ZIP invalidation checks.
+- [x] Render all 984 jobs; retain all 123 costume selections, four Game & Watch runtime colors, and paired Nana models.
+- [x] Add character selection and selected/all-color paused-frame PNG downloads.
+- [x] Verify all 984 GIF jobs, 209 GIF bundle inventories/hashes, 17,348 still ZIP frame filenames, and exact first/frame-68/final images per action.
+- [x] Run Node tests for every character/action/costume and paused-frame 68/101; retain the no-live-browser-test limitation.
+- [ ] Compare rendered poses/loops with original game reference, including props, material changes, and paired placement.
+- [ ] Include evaluator/renderer/script and companion hashes in resume fingerprints; current resume verifies model/settings/file sets.
 - [ ] Add manifest-driven MP4 encoding and `ffprobe` validation after FFmpeg is available.
 
 ## Optional installation steps for later
@@ -140,22 +149,22 @@ Done when: default Mario clapping exports successfully to both formats and is re
 - [x] Export Mario clapping in all five costumes with shared source timing and framing; review costume contact sheets.
 - [ ] Verify costume-specific joint/material/visibility/accessory behavior and create a contact sheet labeled by costume ID.
 - [ ] Add stable filenames, progress reporting, resumable jobs, source-sensitive caching, and failures associated with specific variants.
-- [ ] Verify the `all` path on a four-costume character and a six-costume character.
-- [ ] Verify all four Mr. Game & Watch colors despite their shared model archive.
-- [ ] Handle the Ice Climbers as a paired roster export and preserve the Popo/Nana costume mapping.
-- [ ] Produce a coverage manifest that compares expected jobs with completed, unsupported, and failed exports.
+- [x] Render the `all` path on all four/five/six-costume families; validate expected costume counts.
+- [x] Render all four Mr. Game & Watch colors despite their shared model archive.
+- [x] Add paired Ice Climbers exports with actual Popo/Nana costume mapping; exact game placement remains open.
+- [x] Add `verify_previews.py` producing a full expected/completed coverage report for the current eight-choice scope.
 
 Done when: requesting one supported action with `all` produces exactly one verified artifact set per real costume variant.
 
 ## 8. Finish results animation coverage
 
-- [ ] Add victory variants 1, 2, and 3 with explicit mappings to game variants 0, 1, and 2.
-- [ ] Determine whether each victory has an entrance and subsequent cyclic section; expose separate sections only where verified.
+- [x] Add victory variants 1, 2, and 3 with explicit mappings to game variants 0, 1, and 2.
+- [x] Expose verified entrance/primary wait clips independently, preserving each wait's actual loop flag.
 - [ ] Confirm the unusual variant/state mappings from the demo table; do not interpret reused `Dead*` state labels as death clips.
 - [x] Inspect authored result durations and loop flags, including Fox slot 4 and unflagged Falco `Win3Wait`.
 - [ ] Validate rendered loop continuity separately for every character/variant; inspect pre-terminal limits and derivatives, and label one-shot or edited output honestly.
 - [ ] Add per-character demo callbacks, accessories, dynamics, and visibility behavior needed for accurate results animations.
-- [ ] Batch clapping and all three victory variants across every supported roster costume.
+- [x] Batch clapping and all three victory entrances/waits across all 123 roster costumes.
 - [ ] Review edge cases: paired Ice Climbers, Zelda/Sheik form selection, Mr. Game & Watch orientation/materials, and multiple/team winners.
 
 Done when: a reviewed results-animation coverage matrix has an outcome for every roster/variant/costume combination.
@@ -197,7 +206,8 @@ Done when: both isolated character assets and a composed results scene can be ex
 
 ## 12. Make the working tool comfortable to use
 
-- [ ] Add preview/scrubbing and saved export presets after the CLI pipeline is stable.
+- [x] Add offline character/action/costume preview, scrubbing, GIF saving, and selected/all-costume paused PNG downloads.
+- [ ] Add saved export presets and production settings.
 - [ ] Consider a small GUI with character/action/costume selection and batch progress.
 - [ ] Package setup instructions and reference examples for Windows; document any optional WSL/native helper requirements.
 - [ ] Maintain source and dependency attribution for reused code, and keep fixture tests independent of checked-in original game assets.
@@ -205,8 +215,8 @@ Done when: both isolated character assets and a composed results scene can be ex
 
 Avoid expanding GUI, packaging, full game porting, or complete results UI work ahead of the first verified clapping MP4/GIF.
 
-Current reviewable output: `build/melee_anim/preview/player.html` with 40 Mario animation/color choices, play/pause/seek, selected-GIF saving, per-animation color ZIPs, and the full GIF ZIP. All 40 jobs/2,975 PNG masters and nine ZIPs were verified; 60 Python tests and Node control/download tests pass. Regenerate with `python -m tools.melee_anim.preview_gallery --require-all`. Native shader/scripts and loop perfection remain unverified. Continue with the remaining bounded fixes and MP4 work; avoid repeating extraction/catalog work.
+Current reviewable output: `build/melee_anim/preview/player.html` with 984 character/animation/color choices and exact paused-frame downloads. The full GIF bundle is `downloads/melee-all-characters-all-animations.zip`. Masters, bundles, player, and verification report stay ignored under `build/melee_anim/preview`. Regenerate with the commands above. Native shader/scripts and loop perfection remain unverified; continue with reference/fidelity and MP4 work, avoiding repeated extraction/catalog work.
 
 
 [ ] want more sizes for the produced gifs - extra small (128), medium (512), large (1024)
-[ ] want to be able to rotate the images around a 3d axis
+- [ ] Add user-controlled camera rotation around the model's 3D axes (current CLI has yaw only).

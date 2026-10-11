@@ -1,12 +1,18 @@
 # Implementation plan
 
-Current status, 2026-10-10: extraction and the requested all-character/costume investigation are complete. Mario now has all eight animation/section choices in all five costumes: 40 GIFs/2,975 PNG masters, an offline player with separate color selection, and verified individual/bulk downloads. Full roster rendering, native fidelity, Blender integration, and MP4 remain open. Read `AGENTS.md`'s updated handoff before continuing.
+Current status, 2026-10-10: all 26 selectable character entries, including separate Zelda and Sheik, have eight animation choices in every actual costume: **984 GIF jobs across 123 costumes, with 81,369 PNG masters**. The offline player supports character/animation/costume selection, GIF downloads, and exact paused-frame PNG downloads for one costume or all costumes. Rendering fidelity, Blender integration, and MP4 remain open. Read `AGENTS.md`'s updated handoff before continuing.
 
 ## Recommendation
 
+The full-roster preview milestone uses [roster_batch.py](tools/melee_anim/roster_batch.py), followed by the offline gallery and [verify_previews.py](tools/melee_anim/verify_previews.py). Its saved PNGs are the still-image source; the gallery packages the same frame across actual costume IDs rather than rerendering a different pose. Precomputed ZIPs support direct local-file use. A temporary-file replacement and byte-checked reuse make still packaging resumable, with eight bounded worker threads.
+
+The Windows memory-bitmap backend is a speed improvement for the prototype, not a new requirement to port the game engine. Preserve the neutral model/pose interface for a later Blender renderer. Initial visibility defaults, source near-zero scale handling, node/branch visibility, and owning packed-container bounds are implemented. Native material/lighting fidelity, timed appearance/props, exact Ice Climbers placement, and game-reference validation remain separate milestones.
+
+The current full-roster verification passed: 984/984 expected jobs, 209 GIF bundles, and 17,348 paused-frame bundles; 65 Python tests and Node player tests pass. Generated `coverage.json` records the precise checks and remaining limits. The same exported PNG bytes are used by the player and still downloads; source ticks and displayed output-frame numbers stay distinct.
+
 Build a **Python application that imports Melee assets, plays selected animations in Blender, renders image sequences, and calls FFmpeg to produce MP4 and GIF files**. Use the decompilation as the specification for asset selection, animation evaluation, costumes, and results-screen behavior. Reuse the existing DAT tooling where it saves work.
 
-Blender is a planned production backend, not a requirement for the current prototype. Because it was not installed, the first playback proof uses already-installed NumPy/Pillow to rasterize the real skinned meshes and decoded textures. It establishes a working data-to-animation path and stays available as a diagnostic renderer. `TODO.md` now contains optional Blender setup and FFmpeg installation/verification steps for the user to follow later.
+Blender is a planned production backend, not a requirement for the current prototype. The full roster uses Python/NumPy pose evaluation and the Windows system OpenGL rasterizer in a memory bitmap, with Pillow for PNG/GIF output. It opens no window and needs no additional graphics package. The slower NumPy/Pillow triangle renderer remains available for diagnostics. `TODO.md` contains optional Blender setup and FFmpeg installation/verification steps for later.
 
 Python is the easiest language for the user to maintain and is well suited to catalogs, batch jobs, animation sampling, and export settings. Blender supplies meshes, cameras, skinning, materials, a viewport, and scripted rendering. Its command line supports background execution and Python scripts. We still need to build the Melee importer; Blender does not automatically understand these DAT files. See the [Blender command-line documentation](https://docs.blender.org/manual/en/3.6/advanced/command_line/arguments.html).
 
