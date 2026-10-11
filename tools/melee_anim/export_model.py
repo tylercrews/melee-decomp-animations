@@ -374,7 +374,12 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
         for material in materials:
             material["diffuse_rgba"]=catalog["game_watch"]["costume_rgba"][costume_id]
             material["alpha"]=1.0
-        payload["width_z"]=catalog["game_watch"]["z_width"]
+            # PlGwNr materials use RENDER_CONSTANT (1), without DIFFUSE or
+            # SPECULAR lighting. Preserve the costume's solid silhouette.
+            material["unlit"]=True
+        # ftGw_Init_OnLoad stores this in fp->x34_scale.z, but
+        # Fighter_UpdateModelScale assigns it to the root JObj's LOCAL X.
+        payload["runtime_root_scale"]=[catalog["game_watch"]["root_x_width"],1.0,1.0]
         payload["outline_rgba"]=catalog["game_watch"]["outline_rgba"]
     target = output_dir / "model.json"
     target.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")

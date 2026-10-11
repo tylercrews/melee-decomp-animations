@@ -375,7 +375,7 @@ def costume_catalog(files_root: Path, dol_path: Path, symbols_path: Path, langua
             "selectable_costume_jobs": sum(r["costume_count"] for r in reports if not r["paired_member"]),
             "paired_member_costumes": sum(r["costume_count"] for r in reports if r["paired_member"]),
             "unique_model_archives": len(archives), "fighters": reports,
-            "game_watch": {"attribute_offset": attr, "z_width": gw.f32(attr),
+            "game_watch": {"attribute_offset": attr, "root_x_width": gw.f32(attr),
                            "costume_rgba": [list(gw.read(attr + 4 + i * 4, 4)) for i in range(4)],
                            "outline_rgba": list(gw.read(attr + 20, 4))}}
 

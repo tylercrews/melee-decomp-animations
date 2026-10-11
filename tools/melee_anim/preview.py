@@ -28,7 +28,7 @@ def srt_matrix(rotation, scale, position):
     return local_matrix(rotation, scale, position)
 
 
-def pose_matrices(bones, tracks, source_frame, tree_type=1):
+def pose_matrices(bones, tracks, source_frame, tree_type=1, *, root_scale=None, root_rotation=None):
     rotation = np.array([b["rotation"] for b in bones], dtype=float)
     scale = np.array([b["scale"] for b in bones], dtype=float)
     position = np.array([b["position"] for b in bones], dtype=float)
@@ -51,6 +51,13 @@ def pose_matrices(bones, tracks, source_frame, tree_type=1):
             continue  # HSD node/branch visibility is handled before drawing.
         else:
             raise ValueError(f"Preview does not support side-effect joint channel {channel}")
+    # Fighter_UpdateModelScale and ftPartSetRotY act on TopN before HSD
+    # builds the hierarchy/palette. A post-skin world-axis squash loses this
+    # rotation/scale order and gives Game & Watch the wrong silhouette.
+    if root_scale is not None:
+        scale[0] = root_scale
+    if root_rotation is not None:
+        rotation[0] = root_rotation
     # lbAnim sets/clears classical scaling from FigaTree.type. Results use
     # type 1, while Mario's gameplay taunt uses type 0.
     animated = {t.joint_index for t in tracks}
@@ -60,6 +67,18 @@ def pose_matrices(bones, tracks, source_frame, tree_type=1):
     poses = [{"rotation": rotation[i], "scale": scale[i], "position": position[i]}
              for i in range(len(bones))]
     return np.asarray(world_matrices(effective, poses))
+
+
+def runtime_root_rotation(model, action):
+    """Game & Watch's source runtime facing, separate from camera orbit.
+
+    gm_8017A67C selects -1 for results; the standard right-facing taunt uses
+    +1. Fighter initialization / ftDemo_SetFacingDirection use pi/2*facing.
+    Other fighters retain the existing isolated source-clip presentation.
+    """
+    if model.get("fighter_kind") == 24:
+        return [0.0, math.pi/2 * (1 if action == "taunt" else -1), 0.0]
+    return None
 
 
 def deform(mesh, matrices, bones):
@@ -201,8 +220,9 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
             interpolated = (w0[..., None]*normals[ids[0]] + w1[..., None]*normals[ids[1]]
                             + w2[..., None]*normals[ids[2]])
             interpolated /= np.maximum(np.linalg.norm(interpolated, axis=2)[..., None], 1e-12)
-            shade = 0.6+0.4*np.maximum(0, interpolated @ light)
-            rgb[..., :3] *= shade[..., None]
+            if not material.get("unlit"):
+                shade = 0.6+0.4*np.maximum(0, interpolated @ light)
+                rgb[..., :3] *= shade[..., None]
             mask &= rgb[..., 3]*alpha >= 128
             output = color[ymin:ymax+1, xmin:xmax+1]
             output[mask] = np.clip(rgb[mask], 0, 255).astype(np.uint8)
@@ -332,12 +352,12 @@ def main():
         key = round(frame, 10)
         if key in cache:
             return cache[key]
-        matrices = pose_matrices(model["bones"], tracks, frame, metadata["type"])
+        matrices = pose_matrices(model["bones"], tracks, frame, metadata["type"],
+                                 root_scale=model.get("runtime_root_scale"),
+                                 root_rotation=runtime_root_rotation(model, args.action))
         posed=[deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]]
         shown = joint_visibility(model["bones"], tracks, frame)
         mask = [shown[mesh["owner_joint_index"]] for mesh in model["meshes"]]
-        if model.get("width_z"):
-            for positions,normals in posed:positions[:,2]*=model["width_z"]
         if companion:
             cp=pose_matrices(companion["bones"],ctracks,frame%ct["frames"],ct["type"])
             extra=[deform(mesh,cp,companion["bones"]) for mesh in companion["meshes"]]
@@ -405,6 +425,8 @@ def main():
                 "complete_interval": args.max_frames is None, "size": args.size, "camera_yaw": args.yaw,
                 "camera_pitch": args.pitch, "camera_roll": args.roll,
                 "camera_rotation_order": "Ry(yaw) @ Rx(pitch) @ Rz(roll)",
+                "runtime_root_scale": model.get("runtime_root_scale"),
+                "runtime_root_rotation": runtime_root_rotation(model, args.action),
                 "camera_center": center.tolist(), "camera_pixels_per_unit": scale,
                 "model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
                 "render_backend": args.backend,

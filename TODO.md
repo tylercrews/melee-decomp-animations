@@ -1,8 +1,13 @@
 # Ordered implementation checklist
 
-Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 26 selectable character entries / 123 actual costumes have clapping, standard taunt, three victory entrances, and three primary wait clips: 984 GIFs and 81,369 PNG masters. Production fidelity and MP4 remain future work. See `AGENTS.md`'s current handoff for the resume order.
+Updated 2026-10-11 after Game & Watch's source root-flattening/facing/material correction. All 26 selectable character entries / 123 actual costumes have clapping, standard taunt, three victory entrances, and three primary wait clips: 984 GIFs and 81,369 PNG masters. Production fidelity and MP4 remain future work. See `AGENTS.md`'s current handoff for the resume order.
 
 ## Current workflow and remaining work
+
+- [x] Correct Game & Watch flattening: root local-X width before hierarchy/skinning, results facing -1 / right-taunt facing +1, and source constant costume materials without diffuse shading in both raster backends.
+- [x] Regenerate all 32 Game & Watch animation/costume jobs and four synchronized claps, refresh cycle metadata and GIF/paused-PNG bundles, and verify root/normal transform order and unlit rendering with synthetic fixtures. Keep the existing 50fps timing and 42-frame sync timeline.
+- [x] Verify 97 Python tests, Node controls, full-roster coverage/bundles, live all-color exact PNG bytes for eight G&W choices, GIF/PNG bundles at all four sizes, and rotated sync front/tilted/edge/back views; check generated assets remain ignored.
+- [ ] Reproduce Game & Watch's original class-4 outline geometry and TEV/depth passes; compare results and taunt silhouettes/outline thickness with an original-game reference. Current outline is a one-pixel mask approximation.
 
 - [x] Add root README with Windows/Python/package requirements, root ISO placement and revision, extraction/preparation steps, UI launch, manual commands and troubleshooting.
 - [x] Add `Import Melee Iso.cmd` and `Open Melee Decomp Animation UI.cmd`, backed by a Python launcher and pinned requirements; keep assets/cache/environment/logs ignored.

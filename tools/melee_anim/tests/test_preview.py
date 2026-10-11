@@ -3,12 +3,40 @@ import unittest
 
 import numpy as np
 
-from tools.melee_anim.preview import camera_basis, joint_visibility, pose_matrices, render_frame, srt_matrix, texture_uv
+from tools.melee_anim.preview import camera_basis, deform, joint_visibility, pose_matrices, render_frame, runtime_root_rotation, srt_matrix, texture_uv
 from tools.melee_anim.motions import Track
 import struct
 
 
 class PreviewTests(unittest.TestCase):
+    def test_fighter_root_width_and_facing_precede_child_pose_and_skinning(self):
+        bones = [{"index": 0, "parent": None, "flags": 8, "rotation": [0, 0, 0],
+                  "position": [0, 0, 0], "scale": [1, 1, 1], "inverse_bind_matrix": None},
+                 {"index": 1, "parent": 0, "flags": 8, "rotation": [0, 0, math.pi/2],
+                  "position": [2, 0, 3], "scale": [1, 1, 1], "inverse_bind_matrix": None}]
+        mesh = {"source_positions": [[0, 1, 0]], "source_normals": [[0, 1, 0]],
+                "palette_indices": [0], "envelopes": [[{"joint_index": 1, "weight": 1}]]}
+        for action, sign in [("victory1", -1), ("results-clap", -1), ("taunt", 1)]:
+            matrices = pose_matrices(bones, [], 0, root_scale=[.01, 1, 1],
+                                     root_rotation=runtime_root_rotation({"fighter_kind": 24}, action))
+            positions, normals = deform(mesh, matrices, bones)
+            # Child rotation/translation is flattened locally, then faced.
+            np.testing.assert_allclose(positions, [[sign*3, 0, -sign*.01]], atol=1e-12)
+            np.testing.assert_allclose(normals, [[0, 0, sign]], atol=1e-12)
+        self.assertEqual(bones[0]["scale"], [1, 1, 1])
+        self.assertEqual(bones[0]["rotation"], [0, 0, 0])
+        self.assertIsNone(runtime_root_rotation({"fighter_kind": 0}, "victory1"))
+
+    def test_unlit_costume_color_does_not_depend_on_normals(self):
+        mesh = {"material_index": 0, "uvs": [[0, 0]]*3, "triangles": [[0, 1, 2]]}
+        rgba = [210, 50, 90, 255]
+        model = {"meshes": [mesh], "materials": [{"textures": [], "diffuse_rgba": rgba, "unlit": True}]}
+        p = np.array([[-1, -1, 0], [1, -1, 0], [0, 1, 0]], dtype=float)
+        for direction in ([0., 0., 1.], [0., 0., -1.]):
+            image = render_frame(model, [(p, np.tile(direction, (3, 1)))], {},
+                                 camera_basis(0), 16, 16, np.zeros(3), 6, (0, 0, 0, 255))
+            self.assertEqual(np.asarray(image)[8, 8].tolist(), rgba)
+
     def test_zero_and_small_negative_scale_follow_hsd_clamp(self):
         bone = {"index": 0, "parent": None, "flags": 8, "rotation": [0, 0, 0],
                 "position": [0, 0, 0], "scale": [1, 1, 1]}

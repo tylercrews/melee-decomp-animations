@@ -105,7 +105,8 @@ class NativeRaster:
             verts=np.ascontiguousarray((positions-center)@view,dtype=np.float32)
             verts[:,:2]*=pixels_per_unit*2/width
             rgba=np.array(mat.get("diffuse_rgba") or [255]*4,dtype=np.float32)/255
-            colors=np.tile(rgba,(len(verts),1)); colors[:,:3]*=(.6+.4*np.maximum(0,normals@light))[:,None]
+            shade=np.ones(len(verts)) if mat.get("unlit") else .6+.4*np.maximum(0,normals@light)
+            colors=np.tile(rgba,(len(verts),1)); colors[:,:3]*=shade[:,None]
             colors[:,3]*=mat.get("alpha",1)
             if base:
                 uvset=str(max(0,base.get("source",4)-4)); uv=np.asarray(mesh.get("uv_sets",{}).get(uvset,mesh["uvs"]))
@@ -114,7 +115,7 @@ class NativeRaster:
                 for i,mode in enumerate((base.get("wrap_s",1),base.get("wrap_t",1))):
                     if mode==2:uv[:,i]/=2
                 uv=np.ascontiguousarray(uv,dtype=np.float32)
-                if ((base.get("flags",0)>>16)&15)==5:colors[:,:3]=(.6+.4*np.maximum(0,normals@light))[:,None]
+                if ((base.get("flags",0)>>16)&15)==5:colors[:,:3]=shade[:,None]
                 self.gl.glEnable(0x0DE1);self.gl.glEnableClientState(0x8078)
                 self.gl.glBindTexture(0x0DE1,self.texture(base["image_file"],textures[base["image_file"]],base))
                 self.gl.glTexCoordPointer(2,0x1406,0,uv.ctypes.data)
