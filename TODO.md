@@ -4,6 +4,8 @@ Updated 2026-10-11 after Game & Watch's source root-flattening/facing/material c
 
 ## Current workflow and remaining work
 
+- [x] Move “Extremely large GIF files” out of the option label into dark-yellow text beside the size dropdown, visible only for X-Large, including restored selections. Node visibility/controls checks pass; regenerated player HTML only.
+- [x] Add X-Large 2048px for GIFs, exact still PNGs and bundles, with a caution symbol/extremely-large-GIF warning in the size dropdown; retain size during local-file handoff. Nine focused Python tests, Node controls, live transparent Link minimum GIF and all-five-color Mario frame-68 PNG checks pass. Restarted the local service with the five allowed sizes.
 - [x] Remove the UI checkerboard and show a clear stage; preserve transparent GIF/PNG downloads and native save targets.
 - [x] Reset X/Y/Z on fresh loads and browser history returns; consume one-time local-file handoff fragments, override stale form restoration, and retain requested angles on the initial transfer. Regenerated player only; Node control regressions and live HTTP HTML checks pass.
 
@@ -96,13 +98,13 @@ python -m tools.melee_anim.player_server
 
 The target is 984 GIFs across all actual costume selections. The viewer provides the selected GIF, an animation's costume ZIP, and the full collection. Pause or scrub to expose the selected-frame PNG and an all-costume ZIP for that exact displayed frame. A one-based displayed frame 68 is `frame_0067.png`; it is independent of the source-tick number shown beside it.
 
-For sized downloads, open `http://127.0.0.1:8765/player.html` while the Python player service is running. Extra small is 128px, Small/default 256px, Medium 512px, and Large 1024px. This applies to GIF/PNG and color/full-GIF bundles. Medium/Large currently upscale existing masters; there is no new software to install. Original-size file downloads still work without the service.
+For sized downloads, open `http://127.0.0.1:8765/player.html` while the Python player service is running. Extra small is 128px, Small/default 256px, Medium 512px, Large 1024px, and X-Large 2048px. Selecting X-Large shows a dark-yellow extremely-large-GIF warning beside the dropdown. This applies to GIF/PNG and color/full-GIF bundles. Medium/Large/X-Large currently upscale existing masters; there is no new software to install. Original-size file downloads still work without the service.
 
 - [x] Add download-size selection without resetting the selected costume, animation, or paused frame.
 - [x] Add cached on-demand GIF/PNG resizing, preserving GIF timing/loops and PNG RGBA.
 - [x] Apply size selection to individual and all-color downloads; serialize local-service generation to bound memory.
 - [x] Verify all four sizes with synthetic tests and real Mario exports, plus Game & Watch and paired Ice Climbers loop checks (68 Python tests and Node tests pass).
-- [ ] Add an explicit higher-detail render option later; current 512/1024px exports resample 256px masters.
+- [ ] Add an explicit higher-detail render option later; current 512/1024/2048px exports resample 256px masters.
 
 - [x] Honor exported front/back PObj culling flags in both raster backends; review rendered roster contact sheets.
 - [ ] Make source/output duration rounding explicit and decide one-shot terminal hold behavior. Current 50-frame waits become 42 GIF frames at 50 fps (0.84s); taunt includes one final frame (3.02s).

@@ -1,6 +1,6 @@
 # Melee Decomp Animation UI
 
-Preview Super Smash Bros. Melee character animations and download GIFs or paused-frame PNGs in every actual costume color. The player includes clapping, taunts, three victory animations and their wait animations, X/Y/Z viewing angles, and 128/256/512/1024px downloads. Zelda and Sheik have separate entries; Ice Climbers include both characters.
+Preview Super Smash Bros. Melee character animations and download GIFs or paused-frame PNGs in every actual costume color. The player includes clapping, taunts, three victory animations and their wait animations, X/Y/Z viewing angles, and 128/256/512/1024/2048px downloads. Zelda and Sheik have separate entries; Ice Climbers include both characters.
 
 This is a Windows prototype built on the Melee decompilation. Rendering, lighting and game effects are approximate. MP4 export is future work.
 
@@ -69,6 +69,8 @@ Use this launcher whenever you want the UI. It does not reimport or rerender the
 Select a character, **Animation Type**, and costume. Types are **Victory Pose, Taunt, Clapping, Attack**. An Animation dropdown appears when the type has multiple choices. Victory includes entrances and their authored loops. Attack includes normal attacks, aerials, grounded/aerial specials and their separate phases, grabs/throws, getup/ledge attacks, and item attacks. Selecting an attack renders that costume once and saves it for reuse; an all-color download renders any remaining colors. Some Kirby copy clips require alternate models and are marked unavailable. Projectiles, spawned props, effects, opponents, and game physics are not yet played.
 
 GIFs and PNG stills have transparent backgrounds. The preview is clear, showing the page background through the image. Right-click the character to save its GIF while playing or its exact PNG while paused. The download buttons also save one costume or all colors at the selected size.
+
+Download sizes are Extra small (128), Small (256, default), Medium (512), Large (1024), and **⚠ X-Large (2048)**. Selecting X-Large shows a dark-yellow “Extremely large GIF files” warning beside the dropdown. Sizes above 256 enlarge existing renders rather than adding detail.
 
 Pause or scrub to download a still. Clapping has exclusive full, minimum, dirty/jittery and 0.84-second sync modes. Adjust the viewing-angle sliders and click **Apply**; a new angle needs rendering and is then cached. **Reset** returns to the original view. The aggregate results/taunt GIF collection remains available for those types; attacks use per-animation downloads so one click does not trigger thousands of renders.
 

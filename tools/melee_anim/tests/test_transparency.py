@@ -6,7 +6,7 @@ import unittest
 import numpy as np
 from PIL import Image, ImageDraw
 
-from tools.melee_anim.downloads import resize_gif, resize_png
+from tools.melee_anim.downloads import SIZES, resize_gif, resize_png
 from tools.melee_anim.gif_export import encode_frames, expand_ticks, quantize_rgba
 from tools.melee_anim.preview import camera_basis, render_frame
 
@@ -42,7 +42,7 @@ class TransparencyTests(unittest.TestCase):
 
     def test_all_sizes_preserve_alpha_delay_and_no_matte_or_trails(self):
         data = encode_frames(quantize_rgba(self.sprites()),[20,40],None)
-        for size in (128,256,512,1024):
+        for size in SIZES:
             with Image.open(BytesIO(resize_gif(data,size))) as im:
                 self.assertNotIn('loop',im.info)
                 self.assertEqual(im.n_frames,2)

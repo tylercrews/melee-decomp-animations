@@ -7,14 +7,18 @@ const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 assert.match(html,/\.stage\{background:transparent;/);
 assert(!html.includes('repeating-conic-gradient'),'preview must have no checkerboard');
+assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/);
+assert.match(html,/#sizewarning\{color:#b59a19\}/);
+assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
   performance: {now: () => 0}, Image: class {}, requestAnimationFrame: callback => {context.nextFrame = callback;}});
 vm.runInContext(script, context);
 const data = expression => vm.runInContext(expression, context);
+assert.equal(elements.sizewarning.hidden,true,'default size has no warning');
 assert.equal(elements.action.options.length, 1);
 assert.equal(elements.actionlabel.hidden, true);
 elements.animationtype.value="victory";elements.animationtype.onchange();
@@ -84,8 +88,9 @@ assert.match(elements.time.textContent,/^68\/101/);
 assert.match(elements.still.href,/frame_0067.png$/);
 assert.match(elements.still.download,/frame-0068-256px.png$/);
 assert.match(elements.framezip.href,/frame-0068.zip$/);
-for (const size of [128,512,1024]) {
+for (const size of [128,512,1024,2048]) {
   elements.downloadsize.value=String(size);elements.downloadsize.onchange();
+  assert.equal(elements.sizewarning.hidden,size!==2048,'warning appears only for X-Large');
   assert.equal(data('index'),67,'size changes must preserve the paused frame');
   assert.equal(data('playing'),false);
   assert.equal(elements.still.hidden,false);
@@ -101,6 +106,7 @@ for (const size of [128,512,1024]) {
   }
 }
 elements.downloadsize.value='256';elements.downloadsize.onchange();
+assert.equal(elements.sizewarning.hidden,true,'switching away from X-Large hides the warning');
 assert.match(elements.still.href,/frame_0067.png$/);
 assert(html.includes('download="melee-all-characters-all-animations.zip"'));
 assert(fs.existsSync(path.join(path.dirname(page), 'downloads/melee-all-characters-all-animations.zip')));
@@ -204,11 +210,11 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   for(const id of ['pitch','yaw','roll','applyangle','resetangle'])assert.notEqual(elements[id].disabled,true,'local-file rotation controls must remain usable');
   elements.character.value='mario';elements.character.onchange();elements.action.value='victory3_source';elements.action.onchange();
   elements.costume.value='2';elements.costume.onchange();elements.scrub.value='67';elements.scrub.oninput();
-  elements.downloadsize.value='512';elements.downloadsize.onchange();elements.loop.checked=true;
+  elements.downloadsize.value='2048';elements.downloadsize.onchange();elements.loop.checked=true;
   elements.pitch.value='20';elements.pitch.oninput();elements.yaw.value='45';elements.roll.value='10';elements.applyangle.onclick();
   const handoff=new URL(context.location.href);assert.equal(handoff.origin,'http://127.0.0.1:8765');assert.equal(handoff.pathname,'/player.html');
   const saved=new URLSearchParams(handoff.hash.slice(1));
-  for(const [key,value] of Object.entries({character:'mario',action:'victory3_source',costume:'2',frame:'67',playing:'false',repeat:'true',size:'512',pitch:'20',yaw:'45',roll:'10',cycle:'full'}))assert.equal(saved.get(key),value);
+  for(const [key,value] of Object.entries({character:'mario',action:'victory3_source',costume:'2',frame:'67',playing:'false',repeat:'true',size:'2048',pitch:'20',yaw:'45',roll:'10',cycle:'full'}))assert.equal(saved.get(key),value);
   elements.resetangle.onclick();assert.equal(elements.yaw.value,'0');assert.match(elements.frame.src,/costume_02\/victory3_source\/frame_0067.png$/);
   // The served page restores the file player's exact selection before rendering.
   const restoredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
@@ -226,7 +232,8 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   restoredElements.yaw.value='123';restoredPageShow({persisted:false});
   assert.equal(restoredElements.yaw.value,'45','first handoff keeps its requested angle after form restoration');
   assert.equal(vm.runInContext('index',restoredContext),67);assert.equal(vm.runInContext('playing',restoredContext),false);
-  assert.equal(restoredElements.costume.value,'2');assert.equal(restoredElements.downloadsize.value,'512');
+  assert.equal(restoredElements.costume.value,'2');assert.equal(restoredElements.downloadsize.value,'2048');
+  assert.equal(restoredElements.sizewarning.hidden,false,'restored X-Large shows warning even while rendering');
   assert.equal(restoredElements.loop.checked,true);
   assert.equal(new URL(restoredRequest.url,'http://localhost').searchParams.get('yaw'),'45');
   restoredRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:101},(_,i)=>`rotations/restored/frame_${String(i).padStart(4,'0')}.png`)})});

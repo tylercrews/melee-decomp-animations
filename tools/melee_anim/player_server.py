@@ -17,7 +17,7 @@ from .downloads import DownloadCatalog, SIZES
 def make_server(root, port=8765, catalog=None):
     root = Path(root).resolve()
     catalog = DownloadCatalog(root) if catalog is None else catalog
-    # Serialize exports to bound Pillow's memory use for long 1024px GIFs.
+    # Serialize exports to bound Pillow's memory use for long, large GIFs.
     lock = threading.Lock()
     # Bound waiting render/download requests as well as active work.
     slots = threading.BoundedSemaphore(4)

@@ -37,6 +37,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 #frame{width:min(100%,512px);height:auto}.timeline{display:flex;gap:12px;align-items:center;margin:20px 0}
 #scrub{flex:1}a{color:#81baff}.meta{background:#202a36;padding:16px;border-radius:8px}
 [hidden]{display:none!important}small{color:#b5c0ce}
+#sizewarning{color:#b59a19}
 </style><h1>Melee animation preview</h1>
 <p>Choose a character, animation type, and costume color, then save its GIF or download a bundle of colors.</p>
 <div class="controls">
@@ -66,7 +67,9 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
 <option value="128">Extra small (128 × 128)</option><option value="256" selected>Small (256 × 256)</option>
 <option value="512">Medium (512 × 512)</option><option value="1024">Large (1024 × 1024)</option>
-</select></label><small>Medium and Large enlarge the current renders.</small></div>
+<option value="2048">⚠ X-Large (2048 × 2048)</option>
+</select></label><small id="sizewarning" role="status" aria-live="polite" hidden>Extremely large GIF files</small>
+<small>Medium, Large and X-Large enlarge the current renders.</small></div>
 <div class="downloads" id="downloadpanel"><a class="download primary" id="gif" download>Download GIF</a>
 <a class="download" id="animationzip" download>Download this animation in all colors</a>
 <a class="download" id="allzip" download="melee-all-characters-all-animations.zip" href="downloads/melee-all-characters-all-animations.zip">Download all GIFs</a>
@@ -204,7 +207,8 @@ updateCycleInfo();
 c.frames.forEach(src=>{let image=new Image();image.src=src});if(render)loadRotation()}
 character.onchange=()=>{colors();actions();select()};animationtype.onchange=()=>{actions();select()};
 action.onchange=()=>{animationtype.value=typeForAction(action.value);actions();select()};costume.onchange=select;
-downloadsize.onchange=updateDownloads;
+function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048'}
+downloadsize.onchange=()=>{updateSizeWarning();updateDownloads()};
 function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle())loadRotation();else show()}
 [fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.onchange=()=>{if(r.checked){checkMode(['full','minimum','dirty','sync'][i]);changeCycle()}});
 play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
@@ -220,7 +224,8 @@ if(characters.some(c=>c.slug===incoming.get('character'))){character.value=incom
 if(animations.some(a=>a.character===character.value&&a.key===incoming.get('action')&&!a.unavailable)){animationtype.value=typeForAction(incoming.get('action'));action.value=incoming.get('action');actions()}
 if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===incoming.get('costume')))costume.value=incoming.get('costume');
 if(['full','minimum','dirty','sync'].includes(incoming.get('cycle')))checkMode(incoming.get('cycle'));
-if(['128','256','512','1024'].includes(incoming.get('size')))downloadsize.value=incoming.get('size');
+if(['128','256','512','1024','2048'].includes(incoming.get('size')))downloadsize.value=incoming.get('size');
+updateSizeWarning();
 select(false);
 let savedFrame=Number(incoming.get('frame'));if(Number.isInteger(savedFrame)&&savedFrame>=0&&savedFrame<frameCount())index=savedFrame;
 if(incoming.has('playing')){playing=incoming.get('playing')==='true';play.textContent=playing?'Pause':'Play'}

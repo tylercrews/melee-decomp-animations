@@ -93,10 +93,20 @@ class DownloadSizeTests(unittest.TestCase):
         try:
             with urlopen(base+'/_health') as response:
                 self.assertEqual(json.load(response)['sizes'], list(SIZES))
-            with urlopen(base+'/export?character=synthetic&action=taunt_source&size=1024&kind=png&frame=1') as response:
-                self.assertIn('-frame-0002-1024px.png', response.headers['Content-Disposition'])
+            with urlopen(base+'/export?character=synthetic&action=taunt_source&size=2048&kind=png&frame=1') as response:
+                self.assertIn('-frame-0002-2048px.png', response.headers['Content-Disposition'])
                 with Image.open(BytesIO(response.read())) as im:
-                    self.assertEqual(im.size, (1024, 1024))
+                    self.assertEqual(im.size, (2048, 2048))
+            with urlopen(base+'/export?character=synthetic&action=taunt_source&size=2048&kind=gif&scope=colors') as response:
+                self.assertIn('-all-colors-2048px.zip', response.headers['Content-Disposition'])
+                with ZipFile(BytesIO(response.read())) as archive:
+                    self.assertEqual(len(archive.namelist()), 2)
+                    for name in archive.namelist():
+                        self.assertTrue(name.endswith('-2048px.gif'))
+                        with Image.open(BytesIO(archive.read(name))) as im:
+                            self.assertEqual(im.size, (2048, 2048))
+                            self.assertEqual(im.n_frames, 3)
+                            self.assertEqual(im.info['loop'], 0)
             with self.assertRaises(HTTPError) as error:
                 urlopen(base+'/export?size=123&character=synthetic&action=taunt_source')
             self.assertEqual(error.exception.code, 400)

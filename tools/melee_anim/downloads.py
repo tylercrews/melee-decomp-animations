@@ -12,7 +12,7 @@ from PIL import Image
 from .preview_gallery import collect_clips
 from .rotations import RotationCache, camera_angles, marked_angle
 
-SIZES = (128, 256, 512, 1024)
+SIZES = (128, 256, 512, 1024, 2048)
 
 
 def sized_name(name, size):
