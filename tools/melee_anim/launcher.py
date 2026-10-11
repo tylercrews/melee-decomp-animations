@@ -66,6 +66,7 @@ def preparation_steps(python, iso, jobs=4):
         ('Building the action catalog', [python, '-m', 'tools.melee_anim.catalog']),
         ('Rendering all characters and costumes (resumes completed jobs)',
          [python, '-m', 'tools.melee_anim.roster_batch', '--resume', '--jobs', str(jobs)]),
+        ('Cataloging attacks for on-demand playback', [python, '-m', 'tools.melee_anim.attacks']),
         ('Finding minimum and dirty clapping intervals', [python, '-m', 'tools.melee_anim.cycles']),
         ('Rendering 0.84-second synchronized claps',
          [python, '-m', 'tools.melee_anim.sync_claps', '--resume', '--jobs', str(jobs)]),

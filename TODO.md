@@ -4,6 +4,14 @@ Updated 2026-10-11 after Game & Watch's source root-flattening/facing/material c
 
 ## Current workflow and remaining work
 
+- [x] Add Animation Type: Victory Pose / Taunt / Clapping / Attack; filter options by character/type, hide the single-choice Animation menu, retain costume selection and restore type from shared/local handoff selections.
+- [x] Catalog ordinary attack clips and all real costumes, including normal/angled/aerial attacks, special phases/facings, grabs/pummels/throws, getup/ledge and item attack poses; keep Zelda/Sheik separate and Nana's explicit Popo source fallback.
+- [x] Add on-demand, hash-verified attack rendering and hook selected/all-color GIF/still downloads, all four sizes, and rotated previews/exports into the existing local service. Keep the prebuilt aggregate collection separate from lazy attack jobs.
+- [x] Integrate attack catalog generation into ISO preparation after model export; document first-selection rendering and explicit unsupported Kirby copy rigs in README.
+- [x] Verify 102 Python tests, Node type/attack/async regressions, four sampled poses for all 3,183 available clips, 78 full renders across all 26 characters, 16 live export/rotation checks, and unchanged legacy collection coverage.
+- [ ] Import alternate Kirby copy body rigs for the 33 Jigglypuff/Mewtwo/Falco-copy clips and attach copy accessories; preserve every actual costume mapping rather than substituting a normal rig.
+- [ ] Execute timed attack visibility/material/subaction behavior and required projectiles/props/effects; simulate charge inputs, state transitions and opponents when full moves rather than isolated phases are requested.
+
 - [x] Correct Game & Watch flattening: root local-X width before hierarchy/skinning, results facing -1 / right-taunt facing +1, and source constant costume materials without diffuse shading in both raster backends.
 - [x] Regenerate all 32 Game & Watch animation/costume jobs and four synchronized claps, refresh cycle metadata and GIF/paused-PNG bundles, and verify root/normal transform order and unlit rendering with synthetic fixtures. Keep the existing 50fps timing and 42-frame sync timeline.
 - [x] Verify 97 Python tests, Node controls, full-roster coverage/bundles, live all-color exact PNG bytes for eight G&W choices, GIF/PNG bundles at all four sizes, and rotated sync front/tilted/edge/back views; check generated assets remain ignored.

@@ -80,6 +80,8 @@ class DownloadCatalog:
         self.cache = self.root/'downloads'/'resized'
         self.cache.mkdir(parents=True, exist_ok=True)
         self.rotations = RotationCache(self.root)
+        from .attacks import AttackCache
+        self.attacks = AttackCache(self.root)
 
     def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0):
         angles = camera_angles(pitch, yaw, roll)
@@ -90,13 +92,19 @@ class DownloadCatalog:
             raise ValueError('Unknown character, animation, or costume')
         if cycle == 'sync' and (action != 'results-clap_source' or not clip.get('sync_cycle')):
             raise ValueError('Clapping-sync render is not available for this animation')
+        clip = self.attacks.get(clip)
         clip = self.rotations.get(clip, angles, sync=cycle == 'sync')
         if cycle == 'sync':
             frames = clip['sync_cycle']['frames']
         else:
             short = ((clip.get('dirty_cycle') if cycle == 'dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and action == 'results-clap_source' else None
             frames = clip['frames'][short['start']:short['start']+short['length']] if short else clip['frames']
-        return {'frames': frames, 'angles': angles}
+        times = clip.get('source_times', [])
+        if cycle == 'sync':
+            times = clip['sync_cycle']['source_times']
+        elif short:
+            times = times[short['start']:short['start']+short['length']]
+        return {'frames': frames, 'angles': angles, 'source_times': times}
 
     def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0):
         angles = camera_angles(pitch, yaw, roll)
@@ -106,7 +114,8 @@ class DownloadCatalog:
             raise ValueError('All-character export is only available for GIFs')
         if cycle == 'sync' and action != 'results-clap_source':
             raise ValueError('Clapping-sync alteration is only available for clapping')
-        clips = [c for c in self.clips if scope == 'all' or
+        clips = [c for c in self.clips if scope == 'all' and not c.get('lazy') or
+                 scope != 'all' and
                  c['character'] == character and c['action_key'] == action and
                  (scope == 'colors' or c['costume_id'] == costume)]
         if cycle == 'sync':
@@ -118,9 +127,10 @@ class DownloadCatalog:
         # Reject bad frame requests before starting an expensive render.
         for c in clips:
             short = ((c.get('dirty_cycle') if cycle == 'dirty' else None) or c.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and c['action_key'] == 'results-clap_source' else None
-            length = len(c['sync_cycle']['frames']) if cycle == 'sync' else short['length'] if short else len(c['frames'])
+            length = len(c['sync_cycle']['frames']) if cycle == 'sync' else short['length'] if short else c.get('frame_count',len(c['frames']))
             if kind == 'png' and not 0 <= frame < length:
                 raise ValueError('Frame index is outside this animation')
+        clips = [self.attacks.get(c) for c in clips]
         if any(angles):
             clips = [self.rotations.get(c, angles, sync=cycle == 'sync') for c in clips]
         if cycle == 'sync':

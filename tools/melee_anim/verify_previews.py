@@ -21,7 +21,7 @@ def digest(data):
 
 
 def verify(root):
-    clips = collect_clips(root)
+    clips = collect_clips(root, include_attacks=False)
     expected = {(CHARACTERS[f['character_kind']][0], f'{a}_{s}', c['costume_id'])
                 for f in roster()['fighters'] if not f['paired_member']
                 for c in f['costumes'] for a, s, _ in ACTIONS}

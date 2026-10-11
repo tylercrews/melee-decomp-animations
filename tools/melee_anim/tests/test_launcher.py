@@ -49,11 +49,11 @@ class LauncherTests(unittest.TestCase):
             commands = [call.args[0] for call in run.call_args_list]
             self.assertEqual([c[2].rsplit('.', 1)[-1] for c in commands],
                              ['extract_iso', 'inspect_motions', 'inspect_models', 'catalog', 'roster_batch',
-                              'cycles', 'sync_claps', 'preview_gallery', 'verify_previews'])
+                              'attacks', 'cycles', 'sync_claps', 'preview_gallery', 'verify_previews'])
             self.assertTrue(all(call.args[1] == self.repo for call in run.call_args_list))
             self.assertEqual(commands[0][-1], str(self.iso)); self.assertEqual(commands[1][0], 'venv python')
             self.assertIn('--resume', commands[4]); self.assertEqual(commands[4][-1], '3')
-            self.assertIn('--resume', commands[6]); self.assertIn('--require-all', commands[7])
+            self.assertIn('--resume', commands[7]); self.assertIn('--require-all', commands[8])
         with patch.object(launcher, 'run_step') as run, patch.object(launcher, 'environment_python') as environment:
             launcher.import_iso(self.repo, self.iso, extract_only=True)
             self.assertEqual(run.call_count, 1); environment.assert_not_called()

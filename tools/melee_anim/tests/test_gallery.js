@@ -6,14 +6,18 @@ const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
   performance: {now: () => 0}, Image: class {}, requestAnimationFrame: callback => {context.nextFrame = callback;}});
 vm.runInContext(script, context);
 const data = expression => vm.runInContext(expression, context);
-assert.equal(elements.action.options.length, 8);
+assert.equal(elements.action.options.length, 1);
+assert.equal(elements.actionlabel.hidden, true);
+elements.animationtype.value="victory";elements.animationtype.onchange();
+assert.equal(elements.action.options.length, 6);assert.equal(elements.actionlabel.hidden,false);
+elements.animationtype.value="clapping";elements.animationtype.onchange();
 assert.equal(elements.costume.options.length, 5);
 assert(elements.character.options.length>=1);
 assert.equal(elements.character.options.length, 26);
@@ -40,12 +44,12 @@ elements.play.onclick();
 context.nextFrame(40);
 assert.equal(data('playing'), false);
 assert.equal(data('index'), count - 1);
-for (const clip of data('clips')) {
+for (const clip of data('clips.filter(c=>!c.lazy)')) {
   for (const frame of clip.frames) assert(fs.existsSync(path.join(path.dirname(page), frame)), frame);
   assert(fs.existsSync(path.join(path.dirname(page), clip.gif)), clip.gif);
 }
 
-for (const clip of data('clips')) {
+for (const clip of data('clips.filter(c=>!c.lazy)')) {
   elements.character.value=clip.character;elements.character.onchange();
   elements.costume.value = String(clip.costume_id);
   elements.costume.onchange();
@@ -245,5 +249,37 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   const failed=requests.shift();assert.equal(new URL(failed.url,'http://localhost').searchParams.get('costume'),'1');failed.resolve({ok:false,status:503});await settle();
   assert.equal(servedElements.downloadpanel.hidden,true);assert.match(servedElements.rotationstatus.textContent,/busy/);
   servedElements.resetangle.onclick();assert.equal(servedElements.downloadpanel.hidden,false);
+  // Attack filtering, default-angle lazy preparation, exact frame exports,
+  // and a stale attack response after switching back to a prepared type.
+  servedElements.character.value='mario';servedElements.character.onchange();
+  servedElements.costume.value='2';servedElements.costume.onchange();
+  servedElements.animationtype.value='taunt';servedElements.animationtype.onchange();
+  assert.equal(servedElements.action.options.length,1);assert.equal(servedElements.actionlabel.hidden,true);
+  servedElements.animationtype.value='attack';servedElements.animationtype.onchange();
+  assert.equal(servedElements.costume.value,'2');assert.equal(servedElements.actionlabel.hidden,false);
+  assert(servedElements.action.options.length>30);
+  assert(servedElements.action.options.every(o=>o.value.startsWith('attack-')));
+  assert.equal(servedElements.clapmodes.hidden,true);
+  assert.equal(servedElements.downloadpanel.hidden,true);
+  let attackRequest=requests.shift();assert.equal(new URL(attackRequest.url,'http://localhost').searchParams.get('yaw'),'0');
+  complete(attackRequest,'attack');await settle();
+  assert.match(servedElements.frame.src,/rotations\/attack\/frame_0000.png$/);
+  assert.equal(servedElements.allzip.hidden,true);
+  servedElements.scrub.value='3';servedElements.scrub.oninput();
+  assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('frame'),'3');
+  assert.equal(new URL(servedElements.framezip.href,'http://localhost').searchParams.get('scope'),'colors');
+  servedElements.costume.value='3';servedElements.costume.onchange();
+  const abandoned=requests.shift();
+  servedElements.animationtype.value='clapping';servedElements.animationtype.onchange();
+  abandoned.resolve({ok:true,json:async()=>({frames:[]})});await settle();
+  assert.equal(inspect('rotationBusy'),false);assert.equal(inspect('rotationFailed'),false);
+  assert.equal(servedElements.animationtype.value,'clapping');assert.equal(servedElements.actionlabel.hidden,true);
+  assert.match(servedElements.frame.src,/mario\/costume_03\/results-clap_source/);
+  assert.equal(servedElements.allzip.hidden,false);
+  elements.animationtype.value='attack';elements.animationtype.onchange();
+  const attackHandoff=new URLSearchParams(new URL(context.location.href).hash.slice(1));
+  assert.match(attackHandoff.get('action'),/^attack-/);assert.equal(attackHandoff.get('costume'),'2');
+  assert.equal(attackHandoff.get('yaw'),'0');
+  console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

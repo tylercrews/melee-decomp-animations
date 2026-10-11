@@ -77,7 +77,7 @@ def runtime_root_rotation(model, action):
     Other fighters retain the existing isolated source-clip presentation.
     """
     if model.get("fighter_kind") == 24:
-        return [0.0, math.pi/2 * (1 if action == "taunt" else -1), 0.0]
+        return [0.0, math.pi/2 * (1 if action == "taunt" or action.startswith('attack-') else -1), 0.0]
     return None
 
 
@@ -230,8 +230,13 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
     return Image.fromarray(color)
 
 
-def load_clip(report, action, section, files, kind=0):
-    if action == "taunt":
+def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build/melee_anim/preview/attack-catalog.json')):
+    if action.startswith('attack-'):
+        from .attacks import find_action
+        actor = find_action(json.loads(attack_catalog.read_text()), kind, action)
+        motion = actor['clip']
+        data = (files/actor['animation_file']).read_bytes()
+    elif action == "taunt":
         table=next(x for x in report["taunts"] if x["fighter_kind"]==kind)
         chosen=table["standard_facing"]["right"]
         motion=next(c for c in table["clips"] if c["animation_id"]==chosen["animation_id"] and c["source_fighter_kind"]==chosen["source_fighter_kind"])
@@ -258,8 +263,9 @@ def main():
     parser.add_argument("--timeline", type=Path, help="edited 42-frame clapping-sync plan")
     parser.add_argument("--samples", type=Path, help="exact saved source times and whole-clip framing samples")
     parser.add_argument("--motions", type=Path, default=Path("build/melee_anim/motions.json"))
+    parser.add_argument("--attack-catalog", type=Path, default=Path("build/melee_anim/preview/attack-catalog.json"))
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
-    parser.add_argument("--action", choices=("results-clap", "victory1", "victory2", "victory3", "taunt"), default="results-clap")
+    parser.add_argument("--action", default="results-clap", help="results-clap, victory1/2/3, taunt, or cataloged attack-<animation ID>")
     parser.add_argument("--section", choices=("source", "wait"), default="source")
     parser.add_argument("--output", type=Path, default=Path("build/melee_anim/preview/mario_clap"))
     parser.add_argument("--size", type=int, default=320)
@@ -284,7 +290,7 @@ def main():
     model = json.loads(args.model.read_text())
 
     report = json.loads(args.motions.read_text())
-    motion, metadata, tracks = load_clip(report, args.action, args.section, args.files,model["fighter_kind"])
+    motion, metadata, tracks = load_clip(report, args.action, args.section, args.files,model["fighter_kind"], args.attack_catalog)
     if metadata["node_count"] != len(model["bones"]) or metadata["type"] not in (0, 1):
         parser.error("preview requires matching node hierarchy and supported scaling type")
     period = metadata["frames"]
@@ -334,7 +340,7 @@ def main():
     companion=None
     if args.companion:
         companion=json.loads(args.companion.read_text())
-        cm,ct,ctracks=load_clip(report,args.action,args.section,args.files,companion["fighter_kind"])
+        cm,ct,ctracks=load_clip(report,args.action,args.section,args.files,companion["fighter_kind"], args.attack_catalog)
         vis=visible_drawables(companion)
         companion["meshes"]=[m for m in companion["meshes"] if m["drawable_index"] in vis]
         offset=len(model["materials"])

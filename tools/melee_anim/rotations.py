@@ -56,7 +56,13 @@ class RotationCache:
             data = json.loads(source.read_text())
             paths.append(source)
             paths.extend(source.parent/t['image_file'] for m in data['materials'] for t in m['textures'] if t.get('image_file'))
-            if action == 'taunt':
+            if action.startswith('attack-'):
+                from .attacks import CATALOG, find_action
+                attack_catalog = self.root/CATALOG
+                actor = find_action(json.loads(attack_catalog.read_text()), data['fighter_kind'], action)
+                archive = actor['animation_file']
+                paths.append(attack_catalog)
+            elif action == 'taunt':
                 table = next(t for t in report['taunts'] if t['fighter_kind'] == data['fighter_kind'])
                 source_kind = table['standard_facing']['right']['source_fighter_kind']
                 table = next(t for t in report['taunts'] if t['fighter_kind'] == source_kind)
@@ -109,6 +115,9 @@ class RotationCache:
                            '--yaw', str(angles[1]), '--roll', str(angles[2])]
                 if companion:
                     command += ['--companion', str(companion)]
+                if settings['action'].startswith('attack-'):
+                    from .attacks import CATALOG
+                    command += ['--attack-catalog', str(self.root/CATALOG)]
                 timeline = folder/'timeline.json'
                 if sync:
                     timeline.write_text(json.dumps(settings['sync_plan']))
