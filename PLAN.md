@@ -2,6 +2,8 @@
 
 Current status, 2026-10-10: all 26 selectable character entries, including separate Zelda and Sheik, have eight animation choices in every actual costume: **984 GIF jobs across 123 costumes, with 81,369 PNG masters**. The offline player supports character/animation/costume selection, GIF downloads, and exact paused-frame PNG downloads for one costume or all costumes. Rendering fidelity, Blender integration, and MP4 remain open. Read `AGENTS.md`'s updated handoff before continuing.
 
+Download sizes are implemented as 128/256/512/1024px presets for GIFs, exact paused PNGs, and bundles. Use the local Python player service for resized downloads; original 256px files still work offline. Sizes use Lanczos resampling of existing masters, preserving pose/timing/color identity; Medium/Large add dimensions rather than new detail. On-demand caching avoids multiplying all 81,369 frames into four datasets. A later high-resolution renderer should be a separate explicit quality option, using the same size presets and frame/timing contract.
+
 ## Recommendation
 
 The full-roster preview milestone uses [roster_batch.py](tools/melee_anim/roster_batch.py), followed by the offline gallery and [verify_previews.py](tools/melee_anim/verify_previews.py). Its saved PNGs are the still-image source; the gallery packages the same frame across actual costume IDs rather than rerendering a different pose. Precomputed ZIPs support direct local-file use. A temporary-file replacement and byte-checked reuse make still packaging resumable, with eight bounded worker threads.

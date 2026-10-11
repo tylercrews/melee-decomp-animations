@@ -16,9 +16,18 @@ python -m tools.melee_anim.roster_batch --resume --jobs 8
 python -m tools.melee_anim.preview_gallery --require-all
 python -m tools.melee_anim.verify_previews
 node tools/melee_anim/tests/test_gallery.js
+python -m tools.melee_anim.player_server
 ```
 
 The target is 984 GIFs across all actual costume selections. The viewer provides the selected GIF, an animation's costume ZIP, and the full collection. Pause or scrub to expose the selected-frame PNG and an all-costume ZIP for that exact displayed frame. A one-based displayed frame 68 is `frame_0067.png`; it is independent of the source-tick number shown beside it.
+
+For sized downloads, open `http://127.0.0.1:8765/player.html` while the Python player service is running. Extra small is 128px, Small/default 256px, Medium 512px, and Large 1024px. This applies to GIF/PNG and color/full-GIF bundles. Medium/Large currently upscale existing masters; there is no new software to install. Original-size file downloads still work without the service.
+
+- [x] Add download-size selection without resetting the selected costume, animation, or paused frame.
+- [x] Add cached on-demand GIF/PNG resizing, preserving GIF timing/loops and PNG RGBA.
+- [x] Apply size selection to individual and all-color downloads; serialize local-service generation to bound memory.
+- [x] Verify all four sizes with synthetic tests and real Mario exports, plus Game & Watch and paired Ice Climbers loop checks (68 Python tests and Node tests pass).
+- [ ] Add an explicit higher-detail render option later; current 512/1024px exports resample 256px masters.
 
 - [x] Honor exported front/back PObj culling flags in both raster backends; review rendered roster contact sheets.
 - [ ] Make source/output duration rounding explicit and decide one-shot terminal hold behavior. Current 50-frame waits become 42 GIF frames at 50 fps (0.84s); taunt includes one final frame (3.02s).

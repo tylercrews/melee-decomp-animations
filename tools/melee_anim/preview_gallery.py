@@ -46,6 +46,10 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label><input id="loop" type="checkbox"> Repeat preview</label></div>
 <div class="stage"><img id="frame" alt="Animated character costume preview"></div>
 <div class="timeline"><input id="scrub" type="range" min="0" value="0" step="1" aria-label="Animation frame"><span id="time"></span></div>
+<div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
+<option value="128">Extra small (128 × 128)</option><option value="256" selected>Small (256 × 256)</option>
+<option value="512">Medium (512 × 512)</option><option value="1024">Large (1024 × 1024)</option>
+</select></label><small>Medium and Large enlarge the current renders.</small></div>
 <div class="downloads"><a class="download primary" id="gif" download>Download GIF</a>
 <a class="download" id="animationzip" download>Download this animation in all colors</a>
 <a class="download" id="allzip" download="melee-all-characters-all-animations.zip" href="downloads/melee-all-characters-all-animations.zip">Download all GIFs</a>
@@ -53,6 +57,8 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <a class="download" id="framezip" hidden download>Download paused frame in all colors</a>
 <a id="open" target="_blank" rel="noopener">Open GIF</a></div>
 <small>Repeat preview does not alter the saved GIF. Victory loops are the separate authored wait animations. If a browser opens a local file instead of downloading it, use Save link as.</small>
+<p id="servicehint" hidden>For resized downloads, open the <a href="http://127.0.0.1:8765/player.html">local download player</a>.
+If it is closed, start it from the repository with <code>python -m tools.melee_anim.player_server</code>.</p>
 <div class="meta" id="meta"></div>
 <p>This prototype uses original models and motion curves with approximate shading. Timed game scripts, effects, props, dynamics, and audio are not played; native seams are preserved.</p>
 <script>
@@ -61,7 +67,11 @@ const character=document.getElementById("character"), still=document.getElementB
 const action=document.getElementById('action'), costume=document.getElementById('costume'), frame=document.getElementById('frame'),
 play=document.getElementById('play'), restart=document.getElementById('restart'), loop=document.getElementById('loop'),
 scrub=document.getElementById('scrub'), clock=document.getElementById('time'), gif=document.getElementById('gif'),
-archive=document.getElementById('animationzip'), open=document.getElementById('open');
+archive=document.getElementById('animationzip'), open=document.getElementById('open'),
+downloadsize=document.getElementById('downloadsize'), allzip=document.getElementById('allzip');
+downloadsize.value='256';
+const exportBase=location.protocol==='http:'?'':'http://127.0.0.1:8765';
+document.getElementById('servicehint').hidden=location.protocol==='http:';
 let current=0,index=0,playing=true,last=performance.now(),carry=0,lastImage=null;
 characters.forEach(c=>{let o=document.createElement('option');o.value=c.slug;o.textContent=c.label;character.append(o)});
 character.value=characters.some(c=>c.slug==='mario')?'mario':characters[0].slug;
@@ -72,11 +82,22 @@ function actions(){let old=action.value;let list=animations.filter(a=>a.characte
 list.forEach(a=>{let o=document.createElement('option');o.value=a.key;o.textContent=a.label;action.append(o)});
 action.value=list.some(a=>a.key===old)?old:list[0].key}
 colors();actions();
-document.getElementById('allzip').textContent=`Download all ${clips.length} GIFs`;
+allzip.textContent=`Download all ${clips.length} GIFs`;
+function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
+function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
+costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index)});return `${exportBase}/export?${query}`}
+function updateDownloads(){if(current<0)return;let c=clips[current];let a=animations.find(a=>a.key===c.action_key&&a.character===c.character);
+let original=downloadsize.value==='256';
+gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(c.download_name);
+archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(a.download_name);
+allzip.href=original?'downloads/melee-all-characters-all-animations.zip':exportURL('gif','all');
+allzip.download=sizedName('melee-all-characters-all-animations.zip');
+still.href=original?c.frames[index]:exportURL('png','costume');
+still.download=sizedName(c.download_name.replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`));
+framezip.href=original?`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`:exportURL('png','colors');
+framezip.download=sizedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`)}
 function show(){if(current<0)return;let c=clips[current];let src=c.frames[index];if(lastImage!==src){frame.src=src;lastImage=src}scrub.value=index;
-let a=animations.find(a=>a.key===action.value&&a.character===character.value);
-still.href=c.frames[index];still.download=c.download_name.replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`);
-framezip.href=`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`;framezip.download=`${c.character}-${c.action_key}-frame-${index+1}-all-colors.zip`;
+updateDownloads();
 still.hidden=playing;framezip.hidden=playing;
 clock.textContent=`${index+1}/${c.frames.length} / source ${c.source_times[index].toFixed(2)}`}
 function select(){current=clips.findIndex(c=>c.character===character.value&&c.action_key===action.value&&String(c.costume_id)===costume.value);
@@ -92,6 +113,7 @@ gif.href=c.gif;gif.download=c.download_name;gif.textContent=`Download GIF / ${c.
 document.getElementById('meta').textContent=`${c.symbol} / ${c.period} source frames / ${c.fps} fps preview / ${c.authored_loop?'authored loop':'one-shot action'}`;
 c.frames.forEach(src=>{let image=new Image();image.src=src});show()}
 character.onchange=()=>{colors();actions();select()};action.onchange=select;costume.onchange=select;
+downloadsize.onchange=updateDownloads;
 play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
 restart.onclick=()=>{if(current<0)return;index=0;last=performance.now();carry=0;playing=true;play.textContent='Pause';show()};
 scrub.oninput=()=>{if(current<0)return;index=Number(scrub.value);playing=false;play.textContent='Play';show()};

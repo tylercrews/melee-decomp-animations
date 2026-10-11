@@ -34,6 +34,7 @@ python -m tools.melee_anim.preview --action taunt --size 256 --output build/mele
 python -m tools.melee_anim.roster_batch --resume --jobs 8
 python -m tools.melee_anim.preview_gallery --require-all
 python -m tools.melee_anim.verify_previews
+python -m tools.melee_anim.player_server
 python -m unittest discover -s tools/melee_anim/tests -v
 node tools/melee_anim/tests/test_gallery.js
 ```
@@ -101,6 +102,12 @@ The initial Windows session's default MSYS Git failed to initialize its signal p
 Leave existing user changes intact, keep the checklist current, and describe backend decisions and remaining fidelity gaps in the plan so future work does not repeat this investigation.
 
 ## Current handoff after full-roster rendering
+
+Latest addition: the player has Download size options **Extra small 128, Small 256 (default), Medium 512, Large 1024**, applying to GIFs, paused PNGs, all-costume bundles, and the full GIF collection. Larger sizes resample the existing 256px exports with Lanczos; they are not new higher-detail renders. Size changes preserve playback/pause state, output frame index, action, and costume. Saved filenames include `-128px` / `-256px` / `-512px` / `-1024px`.
+
+Run `python -m tools.melee_anim.player_server`, then open `http://127.0.0.1:8765/player.html`. The local service is running in the current session (exec session 56802). It binds only to 127.0.0.1, serves the preview directory, and uses the already installed Pillow. Direct `player.html` file use still supports the original 256px downloads; other sizes use that local service. Restart the service after regenerating/changing the clip catalog. No new dependency was installed.
+
+`downloads.py` resizes an existing GIF while preserving decoded frame delays and loop metadata, and resizes the exact selected PNG master. Cache keys include source bytes, size, format, and a resizer version; cache/bundle writes are atomic under ignored `build/melee_anim/preview/downloads/resized`. All-color PNG bundles use the same zero-based frame index for every actual costume. The HTTP service validates fixed catalog identities/options and serializes exports to bound 1024px GIF memory. It generates/caches files on demand; do not eagerly generate four complete PNG datasets. 68 Python tests and Node player tests pass, plus real Mario victory-3 GIF/still/all-color downloads at all four sizes, Game & Watch's four 128px looping GIFs, and paired Ice Climbers at 512px.
 
 The latest requests are implemented: all 26 selectable character entries (Zelda/Sheik separate), every one of their 123 actual costumes, and eight preview choices per costume. These are clap, standard right-facing taunt, victory entrances 1/2/3, and their three primary authored waits. There are 984 GIF jobs / 81,369 PNG masters. Left-facing and Fox/Falco stage taunts, plus Fox's extra wait slot 4, remain cataloged extensions.
 
