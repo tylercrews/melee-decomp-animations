@@ -131,13 +131,19 @@ class NativeRaster:
         error=self.gl.glGetError()
         if error:raise RuntimeError(f"Native raster OpenGL error {error:#x}")
         pixels=np.flipud(pixels).copy()
+        # Memory-DIB OpenGL formats need not expose an alpha channel. Derive
+        # coverage from the depth buffer, never from character/background RGB.
+        depth=np.empty((height,width),dtype=np.float32)
+        self.gl.glReadPixels(0,0,width,height,0x1902,0x1406,depth.ctypes.data)
+        mask=np.flipud(depth)<.999999
+        pixels[:,:,3]=np.where(mask,255,background[3])
         if model.get('outline_rgba'):
-            depth=np.empty((height,width),dtype=np.float32)
-            self.gl.glReadPixels(0,0,width,height,0x1902,0x1406,depth.ctypes.data)
-            mask=np.flipud(depth)<.999999
             expanded=np.asarray(Image.fromarray((mask*255).astype(np.uint8)).filter(ImageFilter.MaxFilter(3)))>0
             border=expanded&~mask;outline=np.array(model['outline_rgba'])
-            pixels[border,:3]=(outline[:3]*(outline[3]/255)+np.array(background[:3])*(1-outline[3]/255)).astype(np.uint8)
+            if background[3]==0:
+                pixels[border]=outline
+            else:
+                pixels[border,:3]=(outline[:3]*(outline[3]/255)+np.array(background[:3])*(1-outline[3]/255)).astype(np.uint8)
         return Image.fromarray(pixels)
 
     def close(self):

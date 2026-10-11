@@ -35,6 +35,8 @@ def verify(root):
         source = root/clip['gif']
         hashes[clip['download_name']] = digest(source.read_bytes())
         with Image.open(source) as im:
+            if im.info.get('transparency') is None or im.convert('RGBA').getpixel((0,0))[3] != 0:
+                raise ValueError(f'GIF background is not transparent: {source}')
             looping = im.info.get('loop') == 0
             duration = 0
             for i in range(im.n_frames):
@@ -44,9 +46,12 @@ def verify(root):
                 raise ValueError(f'GIF loop/duration mismatch: {source}')
             png = root/clip['frames'][min(67, len(clip['frames'])-1)]
             with Image.open(png) as still:
+                still.verify()
+            with Image.open(png) as still:
+                if still.mode != 'RGBA' or still.getpixel((0,0))[3] != 0:
+                    raise ValueError(f'PNG background is not transparent: {png}')
                 if still.size != im.size:
                     raise ValueError(f'PNG/GIF size mismatch: {png}')
-                still.verify()
     downloads = root/'downloads'
     def check_gif_bundle(path, group):
         with ZipFile(path) as archive:
@@ -88,7 +93,7 @@ def verify(root):
               'completed_jobs': len(clips), 'expected_jobs': len(expected), 'missing_jobs': [],
               'png_masters': sum(len(c['frames']) for c in clips), 'gif_bundles': len(grouped)+1,
               'still_frame_bundles': still_bundle_count,
-              'checks': ['all GIF durations and loop flags', 'actual costume coverage',
+              'checks': ['transparent GIF/PNG backgrounds', 'all GIF durations and loop flags', 'actual costume coverage',
                          'distinct GIF hashes within each action', 'all GIF ZIP inventories and hashes',
                          'all still ZIP filenames', 'first/frame 68/final still ZIP bytes per action'],
               'limitations': ['prototype shading and runtime behavior', 'no emulator reference comparison',

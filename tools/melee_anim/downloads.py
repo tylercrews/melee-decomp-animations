@@ -34,25 +34,16 @@ def resize_gif(data, size, preserve_frames=False):
     """Preserve each decoded frame's delay and authored GIF loop metadata."""
     if size not in SIZES:
         raise ValueError('Unsupported download size')
-    frames, durations = [], []
+    images, durations = [], []
     with Image.open(BytesIO(data)) as source:
         palette = source.copy()
         looping = source.info.get('loop')
         for i in range(source.n_frames):
             source.seek(i)
             durations.append(source.info.get('duration', 20))
-            frame = source.convert('RGB').resize((size, size), Image.Resampling.LANCZOS)
-            frames.append(frame.quantize(palette=palette, dither=Image.Dither.NONE))
-    out = BytesIO()
-    if preserve_frames:
-        from .gif_export import encode_frames
-        return encode_frames(frames, durations, looping)
-    options = dict(save_all=True, append_images=frames[1:], duration=durations,
-                   disposal=2, optimize=False)
-    if looping is not None:
-        options['loop'] = looping
-    frames[0].save(out, format='GIF', **options)
-    return out.getvalue()
+            images.append(source.convert('RGBA').resize((size, size), Image.Resampling.LANCZOS))
+    from .gif_export import encode_frames, quantize_rgba
+    return encode_frames(quantize_rgba(images,palette),durations,looping)
 
 
 def cycle_gif(root, clip, size, cycle=None):
@@ -60,17 +51,16 @@ def cycle_gif(root, clip, size, cycle=None):
     cycle = clip['minimum_cycle'] if cycle is None else cycle
     with Image.open(root/clip['gif']) as source:
         palette = source.copy()
-    frames = []
+    images = []
     for path in clip['frames'][cycle['start']:cycle['start']+cycle['length']]:
         with Image.open(root/path) as source:
-            image = source.convert('RGB')
+            image = source.convert('RGBA')
             if image.size != (size, size):
                 image = image.resize((size, size), Image.Resampling.LANCZOS)
-            frames.append(image.quantize(palette=palette, dither=Image.Dither.NONE))
-    output = BytesIO()
-    frames[0].save(output, format='GIF', save_all=True, append_images=frames[1:],
-                   duration=1000//clip['fps'], loop=0, disposal=2, optimize=False)
-    return output.getvalue()
+            images.append(image)
+    from .gif_export import encode_frames, quantize_rgba
+    frames = quantize_rgba(images,palette)
+    return encode_frames(frames,[1000//clip['fps']]*len(frames),0)
 
 
 class DownloadCatalog:
@@ -165,7 +155,7 @@ class DownloadCatalog:
                 fingerprint = repr((short['start'], short['length'], clip['fps'])).encode()
                 for path in clip['frames'][short['start']:short['start']+short['length']]:
                     fingerprint += hashlib.sha256((self.root/path).read_bytes()).digest()
-            key = hashlib.sha256(b'resize-v2\0'+str(size).encode()+b'\0'+kind.encode()+b'\0'+data+fingerprint).hexdigest()
+            key = hashlib.sha256(b'resize-v3-alpha\0'+str(size).encode()+b'\0'+kind.encode()+b'\0'+data+fingerprint).hexdigest()
             target = self.cache/f'{key}.{kind}'
             if not target.is_file():
                 with Image.open(BytesIO(data)) as original:

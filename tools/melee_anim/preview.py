@@ -393,25 +393,15 @@ def main():
     started = time.monotonic()
     for i, pose in enumerate(poses):
         drawn = [p if shown else (None, None) for p, shown in zip(pose, visibility[i])]
-        image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, center, scale, (34, 38, 46, 255))
+        image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, center, scale, (34, 38, 46, 0))
         image.save(args.output/f"frame_{i:04d}.png")
-        images.append(image.convert("RGB"))
+        images.append(image.convert("RGBA"))
         if i == 0 or (i+1) % 20 == 0 or i == len(poses)-1:
             print(f"Rendered {i+1}/{len(poses)} frames ({time.monotonic()-started:.1f}s)", flush=True)
-    # One shared palette avoids per-frame palette shimmer in this diagnostic.
-    tile = Image.new("RGB", (args.size*min(8, len(images)), args.size))
-    for i in range(min(8, len(images))):
-        tile.paste(images[i*len(images)//min(8, len(images))], (i*args.size, 0))
-    palette = tile.quantize(colors=256)
-    frames = [im.quantize(palette=palette, dither=Image.Dither.NONE) for im in images]
-    options = {"save_all": True, "append_images": frames[1:], "duration": 1000//args.fps, "disposal": 2}
-    if looping and not args.max_frames:
-        options["loop"] = 0
-    if sync_plan:
-        from .gif_export import encode_frames
-        (args.output/'preview.gif').write_bytes(encode_frames(frames, [1000//args.fps]*len(frames), 0))
-    else:
-        frames[0].save(args.output/"preview.gif", **options)
+    from .gif_export import encode_frames, quantize_rgba
+    frames = quantize_rgba(images)
+    (args.output/'preview.gif').write_bytes(encode_frames(frames,[1000//args.fps]*len(frames),
+                                            0 if (looping and not args.max_frames) or sync_plan else None))
     if raster:raster.close()
     strip = Image.new("RGB", (args.size*4, args.size+28), (34, 38, 46))
     draw = ImageDraw.Draw(strip)
@@ -429,6 +419,7 @@ def main():
                 "timing_basis": "explicit prototype preset; not measured emulator timing",
                 "output_duration_seconds": len(images)/args.fps,
                 "complete_interval": args.max_frames is None, "size": args.size, "camera_yaw": args.yaw,
+                "transparent_background": True, "alpha_source": "raster coverage; GIF threshold 128; RGBA PNG master",
                 "camera_pitch": args.pitch, "camera_roll": args.roll,
                 "camera_rotation_order": "Ry(yaw) @ Rx(pitch) @ Rz(roll)",
                 "runtime_root_scale": model.get("runtime_root_scale"),

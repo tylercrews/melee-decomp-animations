@@ -31,7 +31,7 @@ class DownloadTests(unittest.TestCase):
                     "costume_id": costume, "sample_source_times": [0, 1],
                     "fps": 50, "camera_yaw": 0, "nominal_ticks_per_second": 60,
                     "source_period_frames": 2, "source_symbol": "synthetic_clip",
-                    "authored_loop": False, "size": 256,
+                    "authored_loop": False, "size": 256, "transparent_background": True,
                     "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest()}
         (folder/"preview-manifest.json").write_text(json.dumps(manifest))
         for i in range(2):

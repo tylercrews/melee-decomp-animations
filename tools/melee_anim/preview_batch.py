@@ -38,6 +38,7 @@ def completed_job(folder, model, action, section, size):
         if not (m["complete_interval"] and m["action"] == action and m["section"] == section
                 and m["size"] == size and m["fps"] == 50 and m["camera_yaw"] == 0
                 and m["nominal_ticks_per_second"] == 60
+                and m.get('transparent_background') is True
                 and m["model_sha256"] == hashlib.sha256(model.read_bytes()).hexdigest()):
             return False
         frames = {f"frame_{i:04d}.png" for i in range(len(m["sample_source_times"]))}

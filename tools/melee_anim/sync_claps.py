@@ -189,7 +189,7 @@ def main():
             companion_hash = hashlib.sha256(companion.read_bytes()).hexdigest() if companion.is_file() else None
             if args.resume and old.is_file():
                 data = json.loads(old.read_text())
-                if (data.get('sync_plan') == plan and data.get('uniform_gif_ticks') and data.get('model_sha256') == fingerprint and
+                if (data.get('sync_plan') == plan and data.get('uniform_gif_ticks') and data.get('transparent_background') is True and data.get('model_sha256') == fingerprint and
                         data.get('companion_sha256') == companion_hash and (folder/'preview.gif').is_file() and
                         {p.name for p in folder.glob('frame_*.png')} == {f'frame_{i:04d}.png' for i in range(FRAME_COUNT)}):
                     continue

@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -22,6 +22,7 @@ assert.equal(elements.costume.options.length, 5);
 assert(elements.character.options.length>=1);
 assert.equal(elements.character.options.length, 26);
 assert.match(elements.frame.src, /frame_0000.png$/);
+assert.equal(elements.saveimage.src,data('clips[current].gif'),'native right-click target is the actual GIF while playing');
 elements.play.onclick();
 assert.equal(data('playing'), false);
 assert.equal(elements.play.textContent, 'Play');
@@ -29,6 +30,7 @@ elements.scrub.value = '3';
 elements.scrub.oninput();
 assert.equal(data('index'), 3);
 assert.match(elements.frame.src, /frame_0003.png$/);
+assert.equal(elements.saveimage.src,elements.still.href,'native right-click target is the exact PNG while paused');
 elements.restart.onclick();
 assert.equal(data('index'), 0);
 assert.equal(data('playing'), true);
@@ -223,6 +225,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   const first=requests.shift();assert.equal(new URL(first.url,'http://localhost').searchParams.get('yaw'),'45');
   complete(first,'first');await settle();
   assert.equal(inspect('index'),67);assert.equal(inspect('playing'),false);
+  assert.equal(servedElements.saveimage.src,servedElements.still.href);
   assert.equal(servedElements.frame.src,'rotations/first/frame_0067.png');
   assert.equal(servedElements.frame.hidden,false);assert.equal(servedElements.downloadpanel.hidden,false);
   for(const id of ['gif','animationzip','allzip','still','framezip']){
@@ -264,6 +267,9 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   let attackRequest=requests.shift();assert.equal(new URL(attackRequest.url,'http://localhost').searchParams.get('yaw'),'0');
   complete(attackRequest,'attack');await settle();
   assert.match(servedElements.frame.src,/rotations\/attack\/frame_0000.png$/);
+  assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.get('kind'),'gif');
+  assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.get('view'),'1');
+  assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.has('frame'),false,'animation ticks do not reload right-click GIF');
   assert.equal(servedElements.allzip.hidden,true);
   servedElements.scrub.value='3';servedElements.scrub.oninput();
   assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('frame'),'3');

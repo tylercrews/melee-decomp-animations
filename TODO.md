@@ -4,6 +4,11 @@ Updated 2026-10-11 after Game & Watch's source root-flattening/facing/material c
 
 ## Current workflow and remaining work
 
+- [x] Add true raster-coverage alpha to PNG masters and a reserved GIF transparency index; keep black/background-gray geometry opaque, clear prior poses with GIF disposal, and preserve every held tick.
+- [x] Preserve alpha through GIF/PNG resizing, minimum/dirty slices and sync encoding; retain source outline alpha in PNGs and invalidate opaque render/resize caches.
+- [x] Add a CSS checkerboard plus real GIF/PNG native right-click targets while preserving timed playback, scrubbing, size, mode and viewing-angle controls.
+- [x] Rerender all 984 prebuilt jobs and 123 sync jobs, refresh cycles/gallery/bundles, and verify every transparent frame plus timing, exact still bytes, all-size/all-color/rotated/attack exports and right-click targets. All 86,535 frame masks match between GIF and PNG; 105 Python tests, Node controls and 28 live export checks pass. Native browser context-menu clicks remain manual verification.
+
 - [x] Add Animation Type: Victory Pose / Taunt / Clapping / Attack; filter options by character/type, hide the single-choice Animation menu, retain costume selection and restore type from shared/local handoff selections.
 - [x] Catalog ordinary attack clips and all real costumes, including normal/angled/aerial attacks, special phases/facings, grabs/pummels/throws, getup/ledge and item attack poses; keep Zelda/Sheik separate and Nana's explicit Popo source fallback.
 - [x] Add on-demand, hash-verified attack rendering and hook selected/all-color GIF/still downloads, all four sizes, and rotated previews/exports into the existing local service. Keep the prebuilt aggregate collection separate from lazy attack jobs.

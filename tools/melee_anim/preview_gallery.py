@@ -32,7 +32,8 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 .controls,.downloads{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:20px 0}
 .controls label{display:flex;align-items:center;gap:8px}.download{display:inline-block;text-decoration:none}
 .download.primary{background:#235da8;border-color:#3878cb}.download:hover{filter:brightness(1.15)}
-.stage{background:#22262e;border:1px solid #354151;border-radius:12px;display:flex;justify-content:center;min-height:400px;align-items:center}
+.stage{background:repeating-conic-gradient(#dde1e7 0% 25%,#f6f7f9 0% 50%) 50%/24px 24px;border:1px solid #354151;border-radius:12px;display:flex;justify-content:center;min-height:400px;align-items:center}
+.framewrap{position:relative;width:min(100%,512px)}#saveimage{position:absolute;inset:0;width:100%;height:100%;opacity:0}
 #frame{width:min(100%,512px);height:auto}.timeline{display:flex;gap:12px;align-items:center;margin:20px 0}
 #scrub{flex:1}a{color:#81baff}.meta{background:#202a36;padding:16px;border-radius:8px}
 [hidden]{display:none!important}small{color:#b5c0ce}
@@ -59,7 +60,8 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label>Z roll <input id="roll" type="range" min="-180" max="180" step="1" value="0" aria-label="Z roll"><output id="rollvalue">0°</output></label>
 <button id="applyangle">Apply</button><button id="resetangle">Reset</button>
 <small id="rotationstatus" role="status" aria-live="polite">Angles apply to previews and every GIF/PNG download. New angles need rendering.</small></fieldset>
-<div class="stage"><img id="frame" alt="Animated character costume preview"></div>
+<div class="stage"><div class="framewrap"><img id="frame" alt="Animated character costume preview"><img id="saveimage" aria-hidden="true" alt="" title="Right-click to save"></div></div>
+<small>The checkerboard shows transparency. Right-click the character to save its GIF while playing or its PNG while paused.</small>
 <div class="timeline"><input id="scrub" type="range" min="0" value="0" step="1" aria-label="Animation frame"><span id="time"></span></div>
 <div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
 <option value="128">Extra small (128 × 128)</option><option value="256" selected>Small (256 × 256)</option>
@@ -79,6 +81,7 @@ If it is closed, start it from the repository with <code>python -m tools.melee_a
 <script>
 const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__;
 const character=document.getElementById("character"), still=document.getElementById("still"), framezip=document.getElementById("framezip");
+const saveimage=document.getElementById('saveimage');
 const animationtype=document.getElementById('animationtype'), actionlabel=document.getElementById('actionlabel');
 const action=document.getElementById('action'), costume=document.getElementById('costume'), frame=document.getElementById('frame'),
 play=document.getElementById('play'), restart=document.getElementById('restart'), loop=document.getElementById('loop'),
@@ -103,7 +106,7 @@ function hasAngle(){return angles.some(v=>v!==0)}
 function angleSuffix(){return hasAngle()?'-view-'+angles.map((v,i)=>'xyz'[i]+v).join('-'):''}
 function angleName(name){return name.replace(/(\.[^.]+)$/,`${angleSuffix()}$1`)}
 function previewUnavailable(){return rotationBusy||rotationFailed}
-function updateRotationState(){frame.hidden=previewUnavailable();play.disabled=previewUnavailable();scrub.disabled=previewUnavailable();
+function updateRotationState(){frame.hidden=previewUnavailable();saveimage.hidden=previewUnavailable();play.disabled=previewUnavailable();scrub.disabled=previewUnavailable();
 document.getElementById('downloadpanel').hidden=previewUnavailable()}
 async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
 if(!hasAngle()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();return}
@@ -173,6 +176,13 @@ framezip.download=sizedName(angleName(markedName(`${c.character}-${c.action_key.
 function show(){if(current<0||previewUnavailable())return;let c=clips[current];let src=framePath();if(lastImage!==src){frame.src=src;lastImage=src}scrub.value=index;
 updateDownloads();
 still.hidden=playing;framezip.hidden=playing;
+// A real image receives the browser's native Save image as operation. The
+// timed PNG underneath preserves scrubbing/repeat semantics; the save target
+// is the actual GIF while playing and the exact PNG while paused. Remove the
+// irrelevant GIF frame query so animation ticks never refetch the same GIF.
+let savedSrc=playing?open.href.replace(/([?&])frame=\d+(&|$)/,'$1').replace(/[?&]$/,''):still.href;
+if(saveimage.getAttribute?saveimage.getAttribute('src')!==savedSrc:saveimage.src!==savedSrc)saveimage.src=savedSrc;
+saveimage.title=playing?'Right-click to save transparent GIF':'Right-click to save transparent PNG';
 clock.textContent=`${index+1}/${frameCount()} / source ${sourceTime().toFixed(2)}`}
 function select(render=true){current=clips.findIndex(c=>c.character===character.value&&c.action_key===action.value&&String(c.costume_id)===costume.value);
 index=0;carry=0;last=performance.now();
