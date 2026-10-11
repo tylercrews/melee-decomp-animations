@@ -4,6 +4,11 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Verify Movement: 127 Python / Node tests, 234 complete default-costume clips, 1,108 actual costume pose checks, all 26 shared full/short framing/height comparisons and live rotated/powered/paired exact-frame/color/size exports. Review standing/full/short comparison sheets.
+
+- [x] Add Movement with standing, authored idle variants, walking speeds, running/dashing, and distinct full/short neutral hops for every character/costume, including Kirby powers and paired Nana. Compose original jump phases with source movement attributes; share framing between hop heights.
+- [ ] Extend movement presets with horizontal input/displacement, velocity-scaled walk/run timing, stage/slope collision, fast fall, input/state transitions, transition blending and movement/landing effects; compare jump timing/heights with game references.
+
 - [x] Restore green visor reflection textures for Samus and Kirby-Samus in native/Python previews, rotations and exports. Rebuild five-costume results/taunt masters, exact syncs, color/still/aggregate bundles and player HTML; cover all six Kirby costume claps and additional action families. Preserve timing and alpha; 124 Python tests / Node controls passed.
 
 - [x] Verify Kirby Power: 121 Python / Node tests; all 150 powered costume models/claps and 20,100 GIF-PNG alpha/timing checks; 43,680 four-pose-mapped combinations; 63 full victory/copy/type probes; live exact-frame, rotations, all modes and six-color/all-size exports. Review all 25 hats and correct diffuse/specular texture selection for colored helmets/crowns.

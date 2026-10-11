@@ -6,13 +6,14 @@ const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 assert.match(html,/<option value="tech">Knockdown<\/option>/);
+assert.match(html,/<option value="movement">Movement<\/option>/);
 assert.match(html,/\.stage\{background:transparent;/);
 assert(!html.includes('repeating-conic-gradient'),'preview must have no checkerboard');
 assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/);
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -444,6 +445,27 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(vm.runInContext('playing',powerContext),false);
   assert.equal(new URL(powerRequest.url,'http://localhost').searchParams.get('power'),'mewtwo');
   console.log('Kirby Power visibility, zero-angle preparation, paused-frame retention, sync, native exports, stale requests and file handoff: PASS');
+  servedElements.character.value='mario';servedElements.character.onchange();
+  servedElements.animationtype.value='movement';servedElements.animationtype.onchange();
+  assert.equal(servedElements.movementhint.hidden,false);
+  assert.equal(servedElements.clapmodes.hidden,true);assert.equal(servedElements.techcontrols.hidden,true);
+  assert(servedElements.action.options.some(o=>o.value==='movement-fullhop_source'));
+  assert(servedElements.action.options.some(o=>o.value==='movement-shorthop_source'));
+  assert(servedElements.action.options.some(o=>o.value==='movement-2_source'));
+  servedElements.action.value='movement-fullhop_source';servedElements.action.onchange();
+  const movementRequest=requests.at(-1);
+  assert.equal(new URL(movementRequest.url,'http://localhost').searchParams.get('action'),'movement-fullhop_source');
+  movementRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:vm.runInContext('frameCount()',servedContext)},(_,i)=>`movement/full-${i}.png`)})});await settle();
+  servedElements.scrub.value='4';servedElements.scrub.oninput();
+  assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('action'),'movement-fullhop_source');
+  assert.equal(new URL(servedElements.framezip.href,'http://localhost').searchParams.get('frame'),'4');
+  for(const c of data('characters')){
+    const list=data(`clips.filter(c=>c.character==='${c.slug}'&&c.action_key.startsWith('movement-'))`);
+    assert(list.some(c=>c.action_key==='movement-fullhop_source'));
+    assert(list.some(c=>c.action_key==='movement-shorthop_source'));
+    for(const a of new Set(list.map(c=>c.action_key)))assert.equal(list.filter(c=>c.action_key===a).length,c.costumes.length);
+  }
+  console.log('Movement dropdown, all-character/costume coverage, lazy jump preview and exact-frame export controls: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

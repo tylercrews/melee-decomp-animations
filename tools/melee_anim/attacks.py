@@ -22,6 +22,7 @@ from .hsd import Archive, Dol, load_symbols, read_global
 from .inspect_motions import motion_entries, read_exact_motion, script_graph_summary
 from .motions import read_figatree
 from .techs import TECH_LABELS, tech_label
+from .movement import JUMP_PHASE_IDS, movement_label, read_jump_parameters, jump_duration
 
 
 CATALOG = 'attack-catalog.json'
@@ -127,7 +128,8 @@ def build_attack_catalog(repo, report):
             if kind == 13 and name in ('Special','SpecialAir'):
                 semantic = 'SpecialSSmash' if name == 'Special' else 'SpecialAirSSmash'
             recovery = tech_label(semantic)
-            chosen = (recovery[0], 'Ground recovery') if recovery else attack_label(semantic)
+            locomotion=movement_label(motion['animation_id'],name)
+            chosen = (locomotion,'Movement') if locomotion else (recovery[0], 'Ground recovery') if recovery else attack_label(semantic)
             if chosen is None:
                 chosen = attack_label(name)
             if chosen is None:
@@ -157,11 +159,33 @@ def build_attack_catalog(repo, report):
                                'animation_file':table['animation_file'], 'clip':{**selected, **metadata,
                                'effective_loop':metadata['tree_loop'] or selected['motion_loop'],
                                'script':script_graph_summary(archive, selected['script_offset'], sizes)}})
-            category = 'tech' if recovery else 'attack'
+            category = 'movement' if locomotion else 'tech' if recovery else 'attack'
             actions.append({'key':f'{category}-{motion["animation_id"]}_source', 'animation_id':motion['animation_id'],
                             'animation_type':category, 'ground_effect':recovery[1] if recovery else None,
                             'name':name, 'label':chosen[0], 'group':chosen[1], 'actors':actors,
                             'available':reason is None, 'unavailable_reason':reason})
+        # Full/short hops share JumpF but have distinct source launch velocities.
+        for mode,title in [('fullhop','Full hop'),('shorthop','Short hop')]:
+            actors=[]
+            for member in [primary]+([companion] if companion else []):
+                mk=member['fighter_kind'];sk=10 if mk==11 else mk
+                table,archive,member_motions=sources[sk];phases={}
+                if sk not in regions:regions[sk]=(files/table['animation_file']).read_bytes()
+                blob=regions[sk]
+                for phase,aid in JUMP_PHASE_IDS.items():
+                    selected=member_motions[aid]
+                    if not selected['size']:raise ValueError(f'Missing grounded jump phase {slug}/{mk}/{phase}')
+                    metadata,_=read_figatree(read_exact_motion(blob,selected,table['animation_file']),selected['symbol'])
+                    phases[phase]={**selected,**metadata}
+                own_table,own_archive,_=sources[mk]
+                parameters=read_jump_parameters(own_archive,own_table['fighter_root'])
+                duration=jump_duration(parameters,mode,phases['landing']['frames'])
+                actors.append({'fighter_kind':mk,'source_fighter_kind':sk,'animation_file':table['animation_file'],
+                               'clip':{**phases['jump'],'effective_loop':False},'movement':{'mode':mode,'parameters':parameters,'phases':phases,'duration_ticks':duration}})
+            duration=max(a['movement']['duration_ticks'] for a in actors)
+            for actor in actors:actor['render_duration']=duration
+            actions.append({'key':f'movement-{mode}_source','animation_type':'movement','animation_id':16,'name':mode,'label':title,'group':'Movement',
+                            'ground_effect':None,'actors':actors,'duration_ticks':duration,'available':True,'unavailable_reason':None})
         counts = Counter(a['label'] for a in actions)
         used = Counter()
         for a in actions:
@@ -173,6 +197,7 @@ def build_attack_catalog(repo, report):
         entries.append({'character':slug, 'character_label':label, 'costumes':primary['costumes'],
                         'fighter_kind':kind, 'actions':actions})
         print(f'{label}: {sum(a["available"] and a["animation_type"]=="attack" for a in actions)} attacks, '
+              f'{sum(a["available"] and a["animation_type"]=="movement" for a in actions)} movements, '
               f'{sum(a["available"] and a["animation_type"]=="tech" for a in actions)} tech/ground clips; '
               f'{sum(not a["available"] for a in actions)} unavailable', flush=True)
     return {'schema':'melee_anim.attacks.v1', 'dol_sha1':report['dol_sha1'], 'characters':entries,
@@ -194,12 +219,13 @@ def virtual_clips(root):
             for costume in fighter['costumes']:
                 cid = costume['costume_id']; slug = fighter['character']
                 color = color_label(costume, fighter['fighter_kind'])
-                times = sample_times(clip['frames'], clip['effective_loop'])
+                period=action.get('duration_ticks',clip['frames'])
+                times = sample_times(period, clip['effective_loop'])
                 filename = f'{slug}-{action["key"].replace("_","-")}-costume-{cid:02d}-{color.split()[0].lower()}.gif'
                 result.append({'character':slug, 'character_label':fighter['character_label'],
                                'action_key':action['key'], 'action_label':action['label'], 'animation_type':action.get('animation_type','attack'),
                                'ground_effect':action.get('ground_effect'),
-                               'costume_id':cid, 'costume_label':color, 'fps':50, 'period':clip['frames'],
+                               'costume_id':cid, 'costume_label':color, 'fps':50, 'period':period,
                                'authored_loop':clip['effective_loop'], 'symbol':clip['symbol'],
                                'frame_count':len(times), 'download_name':filename, 'frames':[], 'source_times':[],
                                'gif':'', 'lazy':True})

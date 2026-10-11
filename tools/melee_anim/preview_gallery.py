@@ -45,7 +45,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label id="powerlabel" hidden>Kirby Power <select id="kirbypower" aria-label="Kirby Power" autocomplete="off"></select></label>
 <label>Animation Type <select id="animationtype" aria-label="Animation Type">
 <option value="victory">Victory Pose</option><option value="taunt">Taunt</option>
-<option value="clapping">Clapping</option><option value="attack">Attack</option><option value="tech">Knockdown</option></select></label>
+<option value="clapping">Clapping</option><option value="attack">Attack</option><option value="tech">Knockdown</option><option value="movement">Movement</option></select></label>
 <label id="actionlabel">Animation <select id="action" aria-label="Animation"></select></label>
 <label>Costume <select id="costume" aria-label="Costume color"></select></label>
 <button id="play">Pause</button><button id="restart">Restart</button>
@@ -56,6 +56,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label><input id="dirtycycle" type="radio" name="clapmode" value="dirty" disabled> Minimum loop (dirty/jittery)</label>
 <label><input id="synccycle" type="radio" name="clapmode" value="sync" disabled> Clapping-sync alteration</label>
 <small id="cyclehint"></small></fieldset>
+<p id="movementhint" hidden>Standing includes the normal idle loop; alternate idles vary by character. Walking, running and dashing preview the original motion in place. Full/short hops use neutral jump squat, flight and landing with source movement attributes and shared framing; stage physics and movement effects are not simulated.</p>
 <div id="techcontrols" class="controls" hidden>
 <label><input id="groundeffects" type="checkbox" checked> Ground-impact effects</label>
 <small id="techhint">Towards/away follow the character's facing. The whole impact fits in the image; larger bursts make the character smaller. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.</small></div>
@@ -159,7 +160,7 @@ function colors(){let list=characters.find(c=>c.slug===character.value).costumes
 powerlabel.hidden=character.value!=='kirby';kirbypower.value=kirbyPower;
 list.forEach(c=>{let o=document.createElement('option');o.value=String(c.id);o.textContent=c.label;costume.append(o)});
 costume.value=list.some(c=>String(c.id)===old)?old:String(list[0].id)}
-function typeForAction(key){return key.startsWith('tech-')?'tech':key.startsWith('attack-')?'attack':key.startsWith('victory')?'victory':key==='taunt_source'?'taunt':'clapping'}
+function typeForAction(key){return key.startsWith('movement-')?'movement':key.startsWith('tech-')?'tech':key.startsWith('attack-')?'attack':key.startsWith('victory')?'victory':key==='taunt_source'?'taunt':'clapping'}
 function actions(){let old=action.value;let list=animations.filter(a=>a.character===character.value&&typeForAction(a.key)===animationtype.value);action.options.length=0;
 list.forEach(a=>{let o=document.createElement('option');o.value=a.key;o.textContent=a.unavailable?a.label+' — unavailable (copy model needed)':a.label;o.disabled=Boolean(a.unavailable);action.append(o)});
 action.value=list.some(a=>a.key===old&&!a.unavailable)?old:list.find(a=>!a.unavailable).key;
@@ -176,6 +177,7 @@ function sourceTime(){let c=clips[current];let short=activeCycle();return short&
 function markedName(name){name=powerName(name);let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
+document.getElementById('movementhint').hidden=!c.action_key.startsWith('movement-');
 techcontrols.hidden=!c.action_key.startsWith('tech-');groundeffects.disabled=!c.ground_effect;
 techhint.textContent=c.ground_effect?"Towards/away follow the character's facing. The whole impact fits in the image; larger bursts make the character smaller. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.":'Lying animations have no ground-impact effect.';
 synccycle.disabled=!c.sync_cycle;document.getElementById('clapmodes').hidden=c.action_key!=='results-clap_source';
@@ -407,7 +409,7 @@ def main():
             for a in fighter['actions']:
                 if not a['available']:
                     animations.append({'character':fighter['character'],'key':a['key'],'label':a['label'],
-                                       'type':'attack','unavailable':a['unavailable_reason']})
+                                       'type':a.get('animation_type','attack'),'unavailable':a['unavailable_reason']})
     clips.extend(attack_clips)
     characters.sort(key=lambda character: character['label'].casefold())
     safe_json = lambda value: json.dumps(value).replace("<", "\\u003c")

@@ -63,7 +63,7 @@ class RotationCache:
             data = json.loads(source.read_text())
             paths.append(source)
             paths.extend(source.parent/t['image_file'] for m in data['materials'] for t in m['textures'] if t.get('image_file'))
-            if action.startswith(('attack-','tech-')):
+            if action.startswith(('attack-','tech-','movement-')):
                 from .attacks import CATALOG, find_action
                 attack_catalog = self.root/CATALOG
                 actor = find_action(json.loads(attack_catalog.read_text()), data['fighter_kind'], action)
@@ -130,7 +130,7 @@ class RotationCache:
                 if power!='none':command += ['--kirby-power',power]
                 if companion:
                     command += ['--companion', str(companion)]
-                if settings['action'].startswith(('attack-','tech-')):
+                if settings['action'].startswith(('attack-','tech-','movement-')):
                     from .attacks import CATALOG
                     command += ['--attack-catalog', str(self.root/CATALOG)]
                 if settings['action'].startswith('tech-'):

@@ -78,7 +78,7 @@ def runtime_root_rotation(model, action):
     Other fighters retain the existing isolated source-clip presentation.
     """
     if model.get("fighter_kind") == 24 or model.get('kirby_power')=='game-and-watch':
-        return [0.0, math.pi/2 * (1 if action == "taunt" or action.startswith(('attack-','tech-')) else -1), 0.0]
+        return [0.0, math.pi/2 * (1 if action == "taunt" or action.startswith(('attack-','tech-','movement-')) else -1), 0.0]
     return None
 
 
@@ -266,7 +266,7 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
 
 
 def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build/melee_anim/preview/attack-catalog.json')):
-    if action.startswith(('attack-','tech-')):
+    if action.startswith(('attack-','tech-','movement-')):
         from .attacks import find_action
         actor = find_action(json.loads(attack_catalog.read_text()), kind, action)
         motion = actor['clip']
@@ -288,6 +288,9 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
     at,size=motion["offset"],motion["size"]
     archive=Archive(data[at:at+size],motion["symbol"])
     metadata,tracks=read_figatree(archive,motion["symbol"])
+    if action.startswith('movement-') and actor.get('movement'):
+        motion={**motion,'jump_actor':actor}
+        metadata={**metadata,'frames':actor['render_duration']}
     return motion,metadata,tracks
 
 
@@ -347,6 +350,12 @@ def main():
         metadata={**metadata,'node_count':len(model['bones'])}
     if metadata["node_count"] != len(model["bones"]) or metadata["type"] not in (0, 1):
         parser.error("preview requires matching node hierarchy and supported scaling type")
+    jump_scenes=None
+    if motion.get('jump_actor'):
+        from .movement import JumpScene
+        mapper=(lambda ts,n:remap_tracks(ts,n,len(model['bones']),reserved_parts(repo),model.get('kirby_part_mask',0))) if model['fighter_kind']==4 else None
+        jump_scenes={mode:JumpScene(motion['jump_actor'],args.files,mode,mapper) for mode in ('fullhop','shorthop')}
+        jump_mode=motion['jump_actor']['movement']['mode']
     period = metadata["frames"]
     looping = motion.get("effective_loop", motion.get("motion_loop", False))
     count = max(1, math.ceil(period/args.ticks_per_second*args.fps))
@@ -409,6 +418,7 @@ def main():
     if args.companion:
         companion=json.loads(args.companion.read_text())
         cm,ct,ctracks=load_clip(report,args.action,args.section,args.files,companion["fighter_kind"], args.attack_catalog)
+        companion_jumps={mode:JumpScene(cm['jump_actor'],args.files,mode) for mode in ('fullhop','shorthop')} if jump_scenes else None
         vis=visible_drawables(companion)
         companion["meshes"]=[m for m in companion["meshes"] if m["drawable_index"] in vis]
         offset=len(model["materials"])
@@ -422,28 +432,32 @@ def main():
     view = camera_basis(args.yaw, args.pitch, args.roll)
     # Precompute poses once; fit over the whole selected source interval.
     cache = {}
-    def evaluate_pose(frame):
-        key = round(frame, 10)
+    def evaluate_pose(frame,scene_mode=None):
+        key = (round(frame, 10),scene_mode)
         if key in cache:
             return cache[key]
-        matrices = pose_matrices(model["bones"], tracks, frame, metadata["type"],
+        pose_meta,pose_tracks,pose_time,height=jump_scenes[scene_mode or jump_mode].sample(frame) if jump_scenes else (metadata,tracks,frame,0.)
+        matrices = pose_matrices(model["bones"], pose_tracks, pose_time, pose_meta["type"],
                                  root_scale=model.get("runtime_root_scale"),
                                  root_rotation=runtime_root_rotation(model, args.action))
         posed=[deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]]
-        shown = joint_visibility(model["bones"], tracks, frame)
+        shown = joint_visibility(model["bones"], pose_tracks, pose_time)
         mask = [shown[mesh["owner_joint_index"]] for mesh in model["meshes"]]
         if hat:
             extra=attach_geometry(hat_bind,matrices[6],hat_world[0])
             posed.extend(extra)
             hat_shown=joint_visibility(hat['bones'],[],frame)
             mask.extend(shown[6] and hat_shown[mesh['owner_joint_index']] for mesh in hat['meshes'])
+        if height:
+            for positions,_ in posed:positions[:,1]+=height
         if companion:
-            cp=pose_matrices(companion["bones"],ctracks,frame%ct["frames"],ct["type"])
+            cmeta,cts,ctime,cheight=companion_jumps[scene_mode or jump_mode].sample(frame) if jump_scenes else (ct,ctracks,frame%ct['frames'],0.)
+            cp=pose_matrices(companion["bones"],cts,ctime,cmeta["type"])
             extra=[deform(mesh,cp,companion["bones"]) for mesh in companion["meshes"]]
             for positions,normals in posed:positions[:,0]-=2.8
-            for positions,normals in extra:positions[:,0]+=2.8
+            for positions,normals in extra:positions[:,0]+=2.8;positions[:,1]+=cheight
             posed.extend(extra)
-            shown = joint_visibility(companion["bones"], ctracks, frame % ct["frames"])
+            shown = joint_visibility(companion["bones"], cts, ctime)
             mask.extend(shown[mesh["owner_joint_index"]] for mesh in companion["meshes"])
         cache[key] = (posed, mask)
         return posed, mask
@@ -451,9 +465,17 @@ def main():
     poses = [p for p, _ in sampled]
     visibility = [v for _, v in sampled]
     fitted = [evaluate_pose(frame)[0] for frame in fit_times] if fit_times else poses
+    if jump_scenes:
+        # Both heights use exactly the same geometry union/framing, so a short
+        # hop does not look as tall as a full hop due to per-clip camera zoom.
+        fitted=[]
+        for mode in ('fullhop','shorthop'):
+            duration=max(jump_scenes[mode].duration,companion_jumps[mode].duration if companion else 0)
+            count=max(1,math.ceil(duration/args.ticks_per_second*args.fps))
+            for i in range(count+1):fitted.append(evaluate_pose(duration*i/count,mode)[0])
     if hat:model['meshes'].extend(hat['meshes'])
     if companion:model["meshes"].extend(companion["meshes"])
-    framing = fitted+poses if fit_times else poses
+    framing = fitted if jump_scenes else fitted+poses if fit_times else poses
     knockdown = args.action.startswith('tech-')
     if knockdown:
         fit_samples = [evaluate_pose(t) for t in (fit_times or source_times)]
@@ -549,6 +571,10 @@ def main():
             'body_archive_sha256':hashlib.sha256(power_info['body'].read_bytes()).hexdigest() if power_info['body'] else None,
             'attachment_part':6 if hat else None,'reserved_part_mask':power_info['mask'],
             'limitations':['Hat dynamics remain at bind pose; copied projectiles, items and complete runtime scripts are not executed']}
+    if jump_scenes:
+        manifest['movement_scenario']=jump_scenes[jump_mode].provenance()
+        manifest['framing_policy']='shared complete full-hop and short-hop geometry bounds'
+        if companion:manifest['companion_movement_scenario']=companion_jumps[jump_mode].provenance()
     if sync_plan:
         manifest['sync_plan'] = sync_plan
         manifest['output_mode'] = 'clapping-sync alteration'
