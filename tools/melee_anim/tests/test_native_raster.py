@@ -33,6 +33,10 @@ class NativeRasterTests(unittest.TestCase):
         try:
             im=raster.render({'meshes':[mesh],'materials':[mat]},[(p,np.tile([0.,0,1],(3,1)))],textures,np.eye(3),32,32,np.zeros(3),12,(0,0,0,0))
             self.assertEqual(im.getpixel((16,16)),(0,255,0,255))
+            # Ordinary eye materials opt into the same full-BLEND semantics.
+            mat.pop('copy_diffuse_only');mat['diffuse_texture_only']=True
+            im=raster.render({'meshes':[mesh],'materials':[mat]},[(p,np.tile([0.,0,1],(3,1)))],textures,np.eye(3),32,32,np.zeros(3),12,(0,0,0,0))
+            self.assertEqual(im.getpixel((16,16)),(0,255,0,255))
         finally:raster.close()
 
     def test_unlit_costume_color_does_not_depend_on_normals(self):

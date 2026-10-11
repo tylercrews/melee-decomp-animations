@@ -4,6 +4,10 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Correct Pikachu/Pichu eye BLEND=1 colors for all four costumes each; rebuild 64 source previews / 5,844 masters and eight sync claps, refresh cycles and GIF/still/aggregate bundles, and verify both raster backends and actual exports. See investigation section 42.
+- [ ] Implement timed eye/blink/face image and palette scripts; this eye color fix preserves frame-zero selection.
+
+
 - [x] Add both Multi-Man wireframes, Sandbag, Master/Crazy Hand and Giga Bowser to the alphabetical Character menu using original one-costume fighter entries. Automatically export/catalog through the existing import action step; support available movement/hop/taunt/attack/Knockdown/Other clips and Sandbag Hit, valid type fallback, alpha/cameras/sizes/paused and color exports. Correct Giga Bowser's diffuse-vs-bump texture selection. Verified 130 Python tests / Node controls, all 889 choices at four poses, 12 default full renders / 1,160 transparent frames, six rotated probes, exact/color/five-size exports and a final visual review. See investigation section 41.
 - [ ] Extend Hit to the 26 regular forms using original damage/tumble/capture clips, with explicit source/runtime limitations. Keep Sandbag's category labeled Hit.
 - [ ] Implement Sandbag's source OnLoad RObj joint constraints/rotation limits; validate reaction/tumble poses against game references.

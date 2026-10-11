@@ -316,8 +316,10 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
         exported = dict(material)
         if copy_classes is not None:
             exported['copy_diffuse_only']=True
-        if kind==31:
-            # Giga Bowser's leading bump-map stages are not diffuse RGB.
+        if kind in (12,23,31):
+            # Giga Bowser's leading bump stages are not diffuse RGB. Pikachu
+            # and Pichu's eyes use COLORMAP_BLEND with blending=1: TObjMakeTExp
+            # replaces the incoming RGB, rather than multiplying gray diffuse.
             exported['diffuse_texture_only']=True
         if kind==13 or reflection_preview:
             exported['diffuse_texture_only']=True

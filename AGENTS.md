@@ -8,6 +8,12 @@ The first targets are the three victory animations and loser clapping animations
 
 The user explicitly clarified that **every color means every actual costume variant available to each character**, whose count varies. Record the selected action for all those variants. Do not use a universal costume count, arbitrary tinting, or distinct archive filenames as the definition of a costume. Python is the user's most comfortable language; keep the ordinary workflow understandable in Python.
 
+## Latest material fix: Pikachu/Pichu eyes (2026-10-11)
+
+Kinds 12 (Pikachu) and 23 (Pichu) each have four costumes. Original eye materials use TEX_COLORMAP_BLEND=3 with blending 1.0, which TObjMakeTExp treats as texture RGB replacement. Multiplying by gray diffuse [179,179,179] dimmed the eyes and their surrounding face patches. export_fighter now enables the existing diffuse_texture_only path for these kinds, alongside Giga Bowser. Both raster backends already handle full BLEND on that path. Preserve original textures, UVs, palettes and lighting. This is the outer color-map operation; inspected eye TEV active flags are zero. Timed blink/face scripts remain unfinished.
+
+Rebuilt eight models, 64 results/taunt clips (5,844 PNG masters), eight 42-frame sync claps, cycle fingerprints, original all-color GIF/PNG ZIPs and aggregate bundle. Ordinary/rotation caches hash models/modules and regenerate on demand. Restart the service around exporter changes to avoid stale imported code. 131 Python tests and Node controls pass. Actual export/visual verification and remaining gaps are in investigation section 42; QA assets remain ignored.
+
 ## Read these first
 
 - [INVESTIGATION.md](INVESTIGATION.md): verified source paths, identifiers, asset availability, and limitations.

@@ -9,6 +9,20 @@ import struct
 
 
 class PreviewTests(unittest.TestCase):
+    def test_full_eye_blend_matches_replace_without_gray_diffuse_tint(self):
+        tex={'coordinate_type':0,'flags':0x30010,'blend':1.,'image_file':'eye','texture_matrix':np.eye(4).tolist()}
+        mat={'textures':[tex],'diffuse_rgba':[179,179,179,255],'diffuse_texture_only':True}
+        mesh={'material_index':0,'uvs':[[0,0]]*3,'triangles':[[0,1,2]]}
+        p=np.array([[-1.,-1,0],[1.,-1,0],[0.,1,0]])
+        pixels=np.tile(np.array([250,210,75,255],dtype='uint8'),(2,2,1))
+        def draw():
+            return np.asarray(render_frame({'meshes':[mesh],'materials':[mat]},[(p,np.tile([0.,0,1],(3,1)))],{'eye':pixels},np.eye(3),32,32,np.zeros(3),12,(0,0,0,0)))
+        blended=draw()
+        tex['flags']=0x50010
+        np.testing.assert_array_equal(blended,draw())
+        tex['flags']=0x30010;mat['diffuse_texture_only']=False
+        self.assertGreater(int(blended[16,16,0]),int(draw()[16,16,0]))
+
     def test_reflection_coordinates_follow_camera_normals_and_hsd_bias(self):
         normals=np.eye(3)
         np.testing.assert_allclose(reflection_uv(normals,np.eye(3)),[[1,.5],[.5,0],[.5,.5]])
