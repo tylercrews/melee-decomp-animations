@@ -19,6 +19,7 @@ import numpy as np
 from .hsd import Archive, FormatError
 from .inspect_models import attribute_size, costume_catalog, inspect_model, linked, visibility_tables
 from .motions import Track
+from .roster import roster, visibility_defaults, visible_drawables
 from .texture import decode_image, image_size, write_png
 
 
@@ -102,7 +103,7 @@ def skin_source_mesh(mesh, bones, worlds):
 
 def decode_mesh(ar, polygon):
     """Decode primitive corners, preserving UV seams and skin palette indices."""
-    attrs = sorted((a for a in polygon["attributes"] if a["type"]), key=lambda a: a["attribute"])
+    attrs = sorted((a for a in polygon["attributes"] if a["type"]), key=lambda a: 10 if a["attribute"] == 25 else a["attribute"])
     at = polygon["offset"]
     display = ar.read(ar.pointer(at + 16), ar.u16(at + 14) << 5)
     cursor, vertices, triangles, keys = 0, [], [], []
@@ -135,30 +136,37 @@ def decode_mesh(ar, polygon):
                             raise FormatError("invalid position matrix index")
                         vertex["matrix"] = value // 3
                     continue
-                if attr not in (9, 10, 13, 14, 15, 16, 17, 18, 19, 20):
+                if attr in (11, 12):
+                    if typ in (2,3):
+                        index=int.from_bytes(take(typ-1),"big");ar.read(desc["array"]+index*desc["stride"],attribute_size(desc))
+                    else:take(attribute_size(desc))
+                    continue
+                if attr not in (9, 10, 25, 13, 14, 15, 16, 17, 18, 19, 20):
                     raise FormatError(f"unsupported pilot vertex attribute {attr}")
                 size = attribute_size(desc)
                 if typ in (2, 3):
-                    index = int.from_bytes(take(typ - 1), "big")
-                    value = ar.read(desc["array"] + index * desc["stride"], size)
+                    n=3 if attr in (10,25) and desc["components"]==2 else 1
+                    indices=[int.from_bytes(take(typ-1),"big") for _ in range(n)]
+                    if n==3:size//=3
+                    value = ar.read(desc["array"] + indices[0] * desc["stride"], size)
                 elif typ == 1:
                     value = take(size)
                 else:
                     raise FormatError("unsupported vertex attribute mode")
                 code = ("B", "b", "H", "h", "f")[desc["component_type"]]
-                components = 3 if attr in (9, 10) else 1 + desc["components"]
+                components = len(value)//(1,1,2,2,4)[desc["component_type"]]
                 decoded = struct.unpack(f">{components}{code}", value)
                 fraction = 1 if code == "f" else 2 ** desc["frac"]
                 decoded = [v / fraction for v in decoded]
                 if attr == 9:
-                    vertex["position"] = decoded
+                    vertex["position"] = (decoded+[0,0,0])[:3]
                     position_key = value
-                elif attr == 10:
-                    vertex["normal"] = decoded
+                elif attr in (10,25):
+                    vertex["normal"] = decoded[:3]
                 else:
                     vertex["uvs"][str(attr - 13)] = decoded
-            if "position" not in vertex or "normal" not in vertex:
-                raise FormatError("mesh lacks positions/normals")
+            if "position" not in vertex:raise FormatError("mesh lacks positions")
+            vertex.setdefault("normal",[0,0,1])
             vertices.append(vertex)
             keys.append((position_key, vertex["matrix"]))
         primitive = opcode & 0xF8
@@ -239,9 +247,12 @@ def texture_matrix(texture):
     return np.diag(s + [1]) @ local_matrix(rotation, [1, 1, 1], [0, 0, 0]) @ local_matrix([0, 0, 0], [1, 1, 1], t)
 
 
-def export_mario(files_root: Path, output_dir: Path, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt")):
-    catalog = costume_catalog(files_root, dol_path, symbols_path)
-    costume = next(f for f in catalog["fighters"] if f["fighter_kind"] == 0)["costumes"][costume_id]
+def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt")):
+    catalog = roster(files_root)
+    fighter=next(f for f in catalog["fighters"] if f["fighter_kind"]==kind)
+    costume=fighter["costumes"][costume_id]
+    motions=json.loads(Path("build/melee_anim/motions.json").read_text())
+    data_root=next(f for f in motions["results"] if f["fighter_kind"]==kind)
     path = files_root / costume["file"]
     model = inspect_model(path, costume["joint_symbol"])
     ar = Archive(path.read_bytes(), str(path))
@@ -249,8 +260,16 @@ def export_mario(files_root: Path, output_dir: Path, costume_id=0, dol_path=Path
     worlds = world_matrices(bones)
     for bone, matrix in zip(bones, worlds):
         bone["world_bind_matrix"] = matrix.tolist()
-    visibility = visibility_tables(files_root / "PlMr.dat", "ftDataMario", 5)
-    selected = set(visibility["costumes"][costume_id]["classes"][0]["groups"][0][0])
+    visibility = visibility_tables(files_root/data_root["fighter_archive"],data_root["fighter_root"],fighter["costume_count"])
+    groups=visibility["costumes"][costume_id]["classes"][0]["groups"]
+    states=visibility_defaults(kind,costume_id,len(groups))
+    base=list(range(len(model["drawables"])))
+    selected=set(base)
+    # Remove alternatives belonging solely to other rendering classes (LOD, metal).
+    other={i for cls in visibility["costumes"][costume_id]["classes"][1:] for group in cls["groups"] for option in group for i in option}
+    normal={i for group in groups for option in group for i in option}
+    selected-=other-normal
+    vis={"groups":groups,"defaults":states,"base":sorted(selected)}
     used_materials = {d["material"] for d in model["drawables"] if d["index"] in selected}
     material_ids, materials = {}, []
     animations = texture_animations(ar, model["root_symbol"])
@@ -297,7 +316,7 @@ def export_mario(files_root: Path, output_dir: Path, costume_id=0, dol_path=Path
                     palette_descriptors = [ar.pointer(palette_table + i * 4) for i in range(npalettes)] if palette_table is not None else []
                     if 10 in values and palette_descriptors:
                         palette = palette_descriptors[int(values[10])]
-                    descriptor["animation_images"] = [image_file(im, palette) for im in image_descriptors]
+                    descriptor["animation_images"] = [image_file(im, palette_descriptors[min(i,len(palette_descriptors)-1)] if palette_descriptors else palette) for i,im in enumerate(image_descriptors)]
                     if 1 in values:
                         image = image_descriptors[int(values[1])]
                         descriptor["initial_image_index"] = int(values[1])
@@ -313,34 +332,43 @@ def export_mario(files_root: Path, output_dir: Path, costume_id=0, dol_path=Path
         if polygon["drawable_index"] not in selected:
             continue
         owner = bones[polygon["joint_index"]]
-        if polygon["mode"] != "envelope" or not owner["flags"] & 2:
-            raise FormatError("Mario exporter currently requires skeleton-root envelope meshes")
+        if polygon["mode"] == "shape":raise FormatError("Shape-animation mesh not supported")
         mesh = decode_mesh(ar, polygon)
         mesh.update({"name": f"dobj_{polygon['drawable_index']:02d}_pobj_{polygon['index']:02d}",
                      "polygon_index": polygon["index"], "drawable_index": polygon["drawable_index"],
                      "material_index": material_ids[model["drawables"][polygon["drawable_index"]]["material"]],
-                     "envelopes": polygon["envelopes"], "owner_joint_index": polygon["joint_index"],
+                     "envelopes": polygon.get("envelopes") or [[{"joint_index":polygon["joint_index"],"weight":1.0}]]+([[{"joint_index":polygon["shared_joint_index"],"weight":1.0}]] if polygon.get("shared_joint_index") is not None else []), "owner_joint_index": polygon["joint_index"],
                      "cull_flags": polygon["flags"],
-                     "weights": [polygon["envelopes"][p] for p in mesh["palette_indices"]]})
+                     })
+        mesh["weights"]=[mesh["envelopes"][p] for p in mesh["palette_indices"]]
         positions, normals = skin_source_mesh(mesh, bones, worlds)
         mesh["positions_bind"], mesh["normals_bind"] = positions.tolist(), normals.tolist()
         meshes.append(mesh)
     all_positions = np.concatenate([np.asarray(m["positions_bind"]) for m in meshes])
     payload = {"schema": "melee_anim.model.v1", "matrix_convention": "row-major 4x4; column vectors; game axes Y up",
-               "character": "Mario", "fighter_kind": 0, "costume_id": costume_id,
+               "character": data_root["fighter_root"].removeprefix("ftData"), "fighter_kind": kind, "costume_id": costume_id,
                "source_archive": path.name, "source_sha256": model["archive_sha256"],
                "bones": bones, "meshes": meshes, "materials": materials, "images": list(images.values()),
                "bounds_bind": [all_positions.min(axis=0).tolist(), all_positions.max(axis=0).tolist()],
-               "visibility": {"class": 0, "group": 0, "option": 0, "drawable_indices": sorted(selected)},
+               "visibility": vis,
                "texture_script_map": visibility["costumes"][costume_id]["script_texture_indices_to_global_tobj_indices"],
                "limitations": ["Material TEV/reflection semantics retained as metadata; renderer implements them",
                                "No runtime props, effects, or fighter dynamic systems are evaluated"]}
+    if kind==24:
+        for material in materials:
+            material["diffuse_rgba"]=catalog["game_watch"]["costume_rgba"][costume_id]
+            material["alpha"]=1.0
+        payload["width_z"]=catalog["game_watch"]["z_width"]
+        payload["outline_rgba"]=catalog["game_watch"]["outline_rgba"]
     target = output_dir / "model.json"
     target.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")
     return target, {"bones": len(bones), "meshes": len(meshes), "materials": len(materials),
                     "textures": len(images), "vertices": len(all_positions),
                     "triangles": sum(len(m["triangles"]) for m in meshes), "bounds_bind": payload["bounds_bind"]}
 
+
+def export_mario(files_root,output_dir,costume_id=0,dol_path=Path("orig/GALE01/sys/main.dol"),symbols_path=Path("config/GALE01/symbols.txt")):
+    return export_fighter(files_root,output_dir,0,costume_id,dol_path,symbols_path)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

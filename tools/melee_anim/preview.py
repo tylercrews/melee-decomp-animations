@@ -157,28 +157,31 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
     return Image.fromarray(color)
 
 
-def load_clip(report, action, section, files):
+def load_clip(report, action, section, files, kind=0):
     if action == "taunt":
-        choices = [x for x in report["mario_gameplay_examples"] if x["animation_id"] == 239]
-        motion = choices[0]
-        data = (files / "PlMrAJ.dat").read_bytes()
+        table=next(x for x in report["taunts"] if x["fighter_kind"]==kind)
+        chosen=table["standard_facing"]["right"]
+        motion=next(c for c in table["clips"] if c["animation_id"]==chosen["animation_id"] and c["source_fighter_kind"]==chosen["source_fighter_kind"])
+        source=next(x for x in report["taunts"] if x["fighter_kind"]==chosen["source_fighter_kind"])
+        data=(files/source["animation_file"]).read_bytes()
     else:
-        table = next(x for x in report["results"] if x["fighter_root"] == "ftDataMario")
-        animation_id = {"results-clap": 9, "victory1": 0, "victory2": 2, "victory3": 5}[action]
-        if section == "wait" and action.startswith("victory"):
-            animation_id += 1
-        motion = table["motions"][animation_id]
-        outer = Archive((files / table["results_archive"]).read_bytes())
-        data = outer.data[table["motion_file_data_offset"]:]
-    at, size = motion["offset"], motion["size"]
-    archive = Archive(data[at:at+size], motion["symbol"])
-    metadata, tracks = read_figatree(archive, motion["symbol"])
-    return motion, metadata, tracks
+        table=next(x for x in report["results"] if x["fighter_kind"]==kind)
+        aid={"results-clap":9,"victory1":0,"victory2":2,"victory3":5}[action]
+        if section=="wait" and action.startswith("victory"):aid+=1
+        motion=table["motions"][aid]
+        outer=Archive((files/table["results_archive"]).read_bytes())
+        base,length=outer.public_extent(table["motion_file_symbol"])
+        data=outer.data[base:base+length]
+    at,size=motion["offset"],motion["size"]
+    archive=Archive(data[at:at+size],motion["symbol"])
+    metadata,tracks=read_figatree(archive,motion["symbol"])
+    return motion,metadata,tracks
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path, default=Path("build/melee_anim/exported/mario/costume_00/model.json"))
+    parser.add_argument("--companion", type=Path)
     parser.add_argument("--motions", type=Path, default=Path("build/melee_anim/motions.json"))
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
     parser.add_argument("--action", choices=("results-clap", "victory1", "victory2", "victory3", "taunt"), default="results-clap")
@@ -188,6 +191,7 @@ def main():
     parser.add_argument("--fps", type=int, default=50, choices=(25, 50))
     parser.add_argument("--ticks-per-second", type=float, default=60)
     parser.add_argument("--yaw", type=float, default=0)
+    parser.add_argument("--backend", choices=("python","native"), default="python")
     parser.add_argument("--max-frames", type=int, help="diagnostic truncation, not a complete export")
     args = parser.parse_args()
     if not 64 <= args.size <= 1024 or args.ticks_per_second <= 0:
@@ -197,10 +201,9 @@ def main():
     if args.section == "wait" and not args.action.startswith("victory"):
         parser.error("wait sections are only available for victory actions")
     model = json.loads(args.model.read_text())
-    if model.get("character", "mario").lower() != "mario":
-        parser.error("This pilot only supports the verified Mario rig")
+
     report = json.loads(args.motions.read_text())
-    motion, metadata, tracks = load_clip(report, args.action, args.section, args.files)
+    motion, metadata, tracks = load_clip(report, args.action, args.section, args.files,model["fighter_kind"])
     if metadata["node_count"] != len(model["bones"]) or metadata["type"] not in (0, 1):
         parser.error("pilot requires the matching Mario node hierarchy and supported scaling type")
     period = metadata["frames"]
@@ -218,21 +221,61 @@ def main():
         parser.error(f"Output has extra frame files; choose a fresh output directory: {sorted(stale)[:5]}")
     textures = {t["image_file"]: np.asarray(Image.open(args.model.parent/t["image_file"]).convert("RGBA"))
                 for m in model["materials"] for t in m["textures"] if t.get("image_file")}
+    from .roster import visible_drawables
+    states=model.get("visibility",{}).get("defaults")
+    if states is not None:
+        states=states.copy()
+        for command in motion.get("script",{}).get("commands",[]):
+            if command["opcode"] in (1,2):break
+            if "visibility_group" in command:
+                i=command["visibility_group"]
+                if 0<=i<len(states):states[i]=command["visibility_value"]
+        visible=visible_drawables(model,states)
+        model["meshes"]=[m for m in model["meshes"] if m["drawable_index"] in visible]
+    companion=None
+    if args.companion:
+        companion=json.loads(args.companion.read_text())
+        cm,ct,ctracks=load_clip(report,args.action,args.section,args.files,companion["fighter_kind"])
+        vis=visible_drawables(companion)
+        companion["meshes"]=[m for m in companion["meshes"] if m["drawable_index"] in vis]
+        offset=len(model["materials"])
+        for material in companion["materials"]:
+            for texture in material["textures"]:
+                if texture.get("image_file"):
+                    old=texture["image_file"];new="companion/"+old
+                    textures[new]=np.asarray(Image.open(args.companion.parent/old).convert("RGBA"));texture["image_file"]=new
+        for mesh in companion["meshes"]:mesh["material_index"]+=offset
+        model["materials"].extend(companion["materials"])
     view = camera_basis(args.yaw)
     # Precompute poses once; fit over the whole selected source interval.
     poses = []
     for frame in source_times:
         matrices = pose_matrices(model["bones"], tracks, frame, metadata["type"])
-        poses.append([deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]])
+        posed=[deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]]
+        if model.get("width_z"):
+            for positions,normals in posed:positions[:,2]*=model["width_z"]
+        if companion:
+            cp=pose_matrices(companion["bones"],ctracks,frame%ct["frames"],ct["type"])
+            extra=[deform(mesh,cp,companion["bones"]) for mesh in companion["meshes"]]
+            for positions,normals in posed:positions[:,0]-=2.8
+            for positions,normals in extra:positions[:,0]+=2.8
+            posed.extend(extra)
+        poses.append(posed)
+    if companion:model["meshes"].extend(companion["meshes"])
     cloud = np.concatenate([p for frame in poses for p, _ in frame])
     projected = cloud @ view
     low, high = projected.min(axis=0), projected.max(axis=0)
     center = ((low+high)/2) @ view.T
     scale = args.size*0.82/max(high[0]-low[0], high[1]-low[1])
     images = []
+    raster=None
+    if args.backend=="native":
+        from .native_raster import NativeRaster
+        raster=NativeRaster(args.size)
+        print(f"Offscreen raster: {raster.renderer}",flush=True)
     started = time.monotonic()
     for i, pose in enumerate(poses):
-        image = render_frame(model, pose, textures, view, args.size, args.size, center, scale, (34, 38, 46, 255))
+        image = (raster.render if raster else render_frame)(model, pose, textures, view, args.size, args.size, center, scale, (34, 38, 46, 255))
         image.save(args.output/f"frame_{i:04d}.png")
         images.append(image.convert("RGB"))
         if i == 0 or (i+1) % 20 == 0 or i == len(poses)-1:
@@ -247,6 +290,7 @@ def main():
     if looping and not args.max_frames:
         options["loop"] = 0
     frames[0].save(args.output/"preview.gif", **options)
+    if raster:raster.close()
     strip = Image.new("RGB", (args.size*4, args.size+28), (34, 38, 46))
     draw = ImageDraw.Draw(strip)
     for i in range(4):
@@ -254,7 +298,7 @@ def main():
         strip.paste(images[frame_id], (i*args.size, 28))
         draw.text((i*args.size+8, 8), f"source frame {source_times[frame_id]:.2f}", fill="white")
     strip.save(args.output/"contact_sheet.png")
-    manifest = {"prototype": "Mario CPU textured pose preview; approximate shading, scripts not executed",
+    manifest = {"prototype": "Roster textured pose preview; approximate shading and runtime behavior",
                 "character": model["character"], "costume_id": model["costume_id"],
                 "source_model_archive": model["source_archive"],
                 "action": args.action, "section": args.section, "source_symbol": motion["symbol"],
@@ -264,7 +308,7 @@ def main():
                 "output_duration_seconds": len(images)/args.fps,
                 "complete_interval": args.max_frames is None, "size": args.size, "camera_yaw": args.yaw,
                 "model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
-                "limitations": ["Mario rig only", "no gameplay scripts/props/effects/dynamics/audio",
+                "limitations": ["Approximate paired placement" if companion else "Isolated fighter", "no gameplay scripts/props/effects/dynamics/audio",
                                 "approximate materials/lighting/reflection", "source finger seam preserved",
                                 "no rendered game-reference validation yet"]}
     (args.output/"preview-manifest.json").write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")
