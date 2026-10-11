@@ -230,15 +230,16 @@ def material(ar: Archive, at: int) -> dict:
             "textures": textures, "pixel_engine": ar.pointer(at + 20)}
 
 
-def inspect_model(path: Path, symbol: str | None = None) -> dict:
+def inspect_model(path: Path, symbol: str | None = None, *, root_offset: int | None = None) -> dict:
     blob = path.read_bytes()
     ar = Archive(blob, str(path))
-    if symbol is None:
+    if symbol is None and root_offset is None:
         names = [name for name in ar.publics if name.endswith("_Share_joint")]
         if len(names) != 1:
             raise FormatError(f"{path}: choose root with --symbol; candidates={names}")
         symbol = names[0]
-    bones = joints(ar, ar.public(symbol))
+    root = ar.public(symbol) if root_offset is None else root_offset
+    bones = joints(ar, root)
     bone_offsets = {b["offset"]: b["index"] for b in bones}
     drawables, polygons, materials = [], [], {}
     for b in bones:
@@ -292,7 +293,7 @@ def inspect_model(path: Path, symbol: str | None = None) -> dict:
                "relocation_count": len(ar.relocations), "extern_count": len(ar.extern_entries)}
     topology = [(b["parent"], b["rotation"], b["scale"], b["position"]) for b in bones]
     summary["bind_topology_sha256"] = hashlib.sha256(json.dumps(topology).encode()).hexdigest()
-    return {"file": path.name, "root_symbol": symbol, "root_offset": ar.public(symbol),
+    return {"file": path.name, "root_symbol": symbol, "root_offset": root,
             "archive_sha256": hashlib.sha256(blob).hexdigest(), "summary": summary,
             "joints": bones, "drawables": drawables, "polygons": polygons,
             "materials": list(materials.values())}

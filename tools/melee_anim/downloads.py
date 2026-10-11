@@ -73,16 +73,18 @@ class DownloadCatalog:
         from .attacks import AttackCache
         self.attacks = AttackCache(self.root)
 
-    def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0):
+    def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off'):
         angles = camera_angles(pitch, yaw, roll)
         if cycle not in ('full', 'minimum', 'dirty', 'sync'):
             raise ValueError('Unsupported clapping mode')
+        if effects not in ('on','off') or effects=='on' and not action.startswith('tech-'):
+            raise ValueError('Ground effects are only available for Tech animations')
         clip = next((c for c in self.clips if c['character'] == character and c['action_key'] == action and c['costume_id'] == costume), None)
         if clip is None:
             raise ValueError('Unknown character, animation, or costume')
         if cycle == 'sync' and (action != 'results-clap_source' or not clip.get('sync_cycle')):
             raise ValueError('Clapping-sync render is not available for this animation')
-        clip = self.attacks.get(clip)
+        clip = self.attacks.get(clip,effects=effects=='on')
         clip = self.rotations.get(clip, angles, sync=cycle == 'sync')
         if cycle == 'sync':
             frames = clip['sync_cycle']['frames']
@@ -96,10 +98,12 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
-    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0):
+    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off'):
         angles = camera_angles(pitch, yaw, roll)
         if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum', 'dirty', 'sync'):
             raise ValueError('Unsupported download option')
+        if effects not in ('on','off') or effects=='on' and (not action.startswith('tech-') or scope=='all'):
+            raise ValueError('Ground effects require a selected Tech animation')
         if scope == 'all' and kind != 'gif':
             raise ValueError('All-character export is only available for GIFs')
         if cycle == 'sync' and action != 'results-clap_source':
@@ -120,7 +124,7 @@ class DownloadCatalog:
             length = len(c['sync_cycle']['frames']) if cycle == 'sync' else short['length'] if short else c.get('frame_count',len(c['frames']))
             if kind == 'png' and not 0 <= frame < length:
                 raise ValueError('Frame index is outside this animation')
-        clips = [self.attacks.get(c) for c in clips]
+        clips = [self.attacks.get(c,effects=effects=='on') for c in clips]
         if any(angles):
             clips = [self.rotations.get(c, angles, sync=cycle == 'sync') for c in clips]
         if cycle == 'sync':

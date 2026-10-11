@@ -1,8 +1,15 @@
 # Ordered implementation checklist
 
-Updated 2026-10-11 after Game & Watch's source root-flattening/facing/material correction. All 26 selectable character entries / 123 actual costumes have clapping, standard taunt, three victory entrances, and three primary wait clips: 984 GIFs and 81,369 PNG masters. Production fidelity and MP4 remain future work. See `AGENTS.md`'s current handoff for the resume order.
+Updated 2026-10-11 after Tech/ground-motion playback and optional core impact effects. There are also 861 on-demand Tech costume choices. All 26 selectable character entries / 123 actual costumes have clapping, standard taunt, three victory entrances, and three primary wait clips: 984 GIFs and 81,369 PNG masters. Production fidelity and MP4 remain future work. See `AGENTS.md`'s current handoff for the resume order.
 
 ## Current workflow and remaining work
+
+- [x] Add Tech type with in-place/forward/back techs, missed-tech face-up/down landings, and face-up/down lying loops for all 26 characters / 123 costumes (182 clips / 861 costume choices), including paired Nana fallback.
+- [x] Import the original EfCoData core tech flash / ground burst with source SRT/visibility, textures, vertex colors and animated color/blend; make effects optional, enabled by default for impact clips and disabled for lying clips.
+- [x] Carry the toggle through on-demand rendering/cache hashes, rotations, sizes, selected/all-color GIFs and exact still PNGs, native right-click targets and local-file transfers. Preserve paused frame and identical on/off camera framing; distinguish effect-enabled filenames.
+- [x] Verify 109 Python tests, Node controls, all 861 costume choices / 889 actor skeletons at four poses, 312 default-costume on/off jobs / 10,479 transparent GIF/PNG frame pairs, and 22 live rotation/exact-still/all-color/all-size export checks. Review Mario/G&W/Ice Climbers/Zelda/Sheik comparisons. This is prototype validation, not original-game fidelity certification.
+- [ ] Implement common particle-bank playback for missed-tech dust (gfx 1031 → generator 0x3C) and the successful-tech effect's joint channel-40 sparkle generator callback, with deterministic particles. Match original TEV/billboard/depth/vertex-color blending and surface-specific effects against a game reference.
+- [ ] Add full tumble/fall → contact → tech/missed-tech → lying/recovery scenarios, ground collision/slopes, runtime translation and state transitions; current Tech entries are isolated source clips.
 
 - [x] Move “Extremely large GIF files” out of the option label into dark-yellow text beside the size dropdown, visible only for X-Large, including restored selections. Node visibility/controls checks pass; regenerated player HTML only.
 - [x] Add X-Large 2048px for GIFs, exact still PNGs and bundles, with a caution symbol/extremely-large-GIF warning in the size dropdown; retain size during local-file handoff. Nine focused Python tests, Node controls, live transparent Link minimum GIF and all-five-color Mario frame-68 PNG checks pass. Restarted the local service with the five allowed sizes.
@@ -273,7 +280,8 @@ Done when: taunt and forward-smash exports are repeatable, correctly identified,
 
 - [ ] Catalog grounded/aerial directional hit reactions and severity variants.
 - [ ] Add tumble (`DamageFall`) and distinguish its pose cycle from knockback trajectory/rotation.
-- [ ] Add knockdown/bounce, downed wait, downed damage, getup, getup attack, rolls, and tech-related motions.
+- [x] Add isolated knockdown/bounce, downed wait and ground tech poses with actual costumes and optional core impact effects.
+- [ ] Add downed damage, ordinary getup/getup rolls and complete ground-state transitions; getup attacks are already available under Attack.
 - [ ] Define scenario parameters for trajectory-dependent recordings: starting state, facing, velocity/rotation, floor contact, hitlag, and transitions.
 - [ ] Validate facing and face-up/face-down variants against reference playback.
 - [ ] Batch supported pose clips/scenarios across every costume.

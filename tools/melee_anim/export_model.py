@@ -140,8 +140,10 @@ def decode_mesh(ar, polygon):
                     continue
                 if attr in (11, 12):
                     if typ in (2,3):
-                        index=int.from_bytes(take(typ-1),"big");ar.read(desc["array"]+index*desc["stride"],attribute_size(desc))
-                    else:take(attribute_size(desc))
+                        index=int.from_bytes(take(typ-1),"big");value=ar.read(desc["array"]+index*desc["stride"],attribute_size(desc))
+                    else:value=take(attribute_size(desc))
+                    if attr == 11 and desc['component_type'] == 4:
+                        vertex['color'] = [v/255 for v in value]+[1]*(4-len(value))
                     continue
                 if attr not in (9, 10, 25, 13, 14, 15, 16, 17, 18, 19, 20):
                     raise FormatError(f"unsupported pilot vertex attribute {attr}")
@@ -195,6 +197,7 @@ def decode_mesh(ar, polygon):
             "source_normals": [v["normal"] for v in vertices],
             "palette_indices": [v["matrix"] for v in vertices],
             "uvs": [v["uvs"].get("0", [0, 0]) for v in vertices],
+            "colors": [v.get('color',[1,1,1,1]) for v in vertices],
             "uv_sets": {key: [v["uvs"].get(key, [0, 0]) for v in vertices]
                         for key in sorted({k for v in vertices for k in v["uvs"]})},
             "triangles": triangles, "degenerate_triangle_slots_dropped": original_count - len(triangles)}

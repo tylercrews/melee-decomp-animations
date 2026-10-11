@@ -11,7 +11,7 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -234,6 +234,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(vm.runInContext('index',restoredContext),67);assert.equal(vm.runInContext('playing',restoredContext),false);
   assert.equal(restoredElements.costume.value,'2');assert.equal(restoredElements.downloadsize.value,'2048');
   assert.equal(restoredElements.sizewarning.hidden,false,'restored X-Large shows warning even while rendering');
+  assert.equal(restoredElements.groundeffects.checked,true,'non-Tech handoffs must not disable default impact effects');
   assert.equal(restoredElements.loop.checked,true);
   assert.equal(new URL(restoredRequest.url,'http://localhost').searchParams.get('yaw'),'45');
   restoredRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:101},(_,i)=>`rotations/restored/frame_${String(i).padStart(4,'0')}.png`)})});
@@ -326,6 +327,58 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   const attackHandoff=new URLSearchParams(new URL(context.location.href).hash.slice(1));
   assert.match(attackHandoff.get('action'),/^attack-/);assert.equal(attackHandoff.get('costume'),'2');
   assert.equal(attackHandoff.get('yaw'),'0');
+  for(const c of data('characters')){
+    const techs=data('clips').filter(clip=>clip.character===c.slug&&clip.animation_type==='tech');
+    assert.equal(techs.length,c.costumes.length*7,'seven tech/ground choices per actual costume');
+    assert.equal(new Set(techs.map(clip=>clip.action_key)).size,7);
+  }
+  assert.equal(data('clips.filter(c=>c.animation_type===\'tech\').length'),861);
+  assert.equal(servedElements.techcontrols.hidden,true);
+  servedElements.animationtype.value='tech';servedElements.animationtype.onchange();
+  assert.equal(servedElements.action.options.length,7);assert.equal(servedElements.techcontrols.hidden,false);
+  assert.equal(servedElements.groundeffects.disabled,false);
+  let techRequest=requests.shift();assert.equal(new URL(techRequest.url,'http://localhost').searchParams.get('effects'),'on');
+  complete(techRequest,'tech-on');await settle();
+  assert.equal(servedElements.allzip.hidden,true);
+  assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.get('effects'),'on');
+  assert.match(servedElements.gif.download,/-ground-effects-/);
+  servedElements.scrub.value='3';servedElements.scrub.oninput();
+  servedElements.groundeffects.checked=false;servedElements.groundeffects.onchange();
+  let off=requests.shift();assert.equal(new URL(off.url,'http://localhost').searchParams.get('effects'),'off');
+  complete(off,'tech-off');await settle();
+  assert.equal(inspect('index'),3);assert.equal(inspect('playing'),false);
+  assert.equal(servedElements.saveimage.src,servedElements.still.href);
+  for(const id of ['gif','animationzip','still','framezip']){
+    assert.equal(new URL(servedElements[id].href,'http://localhost').searchParams.get('effects'),'off');
+    assert(!servedElements[id].download.includes('ground-effects'));
+  }
+  servedElements.groundeffects.checked=true;servedElements.groundeffects.onchange();const obsoleteTech=requests.shift();
+  servedElements.groundeffects.checked=false;servedElements.groundeffects.onchange();complete(requests.shift(),'new-off');await settle();
+  complete(obsoleteTech,'old-on');await settle();assert.match(servedElements.frame.src,/new-off/);
+  servedElements.action.value='tech-184_source';servedElements.action.onchange();
+  assert.equal(servedElements.groundeffects.disabled,true);assert.match(servedElements.techhint.textContent,/no ground-impact/);
+  complete(requests.shift(),'lying');await settle();
+  assert.equal(new URL(servedElements.gif.href,'http://localhost').searchParams.get('effects'),'off');
+  elements.animationtype.value='tech';elements.animationtype.onchange();
+  elements.groundeffects.checked=false;elements.groundeffects.onchange();
+  const techHandoff=new URLSearchParams(new URL(context.location.href).hash.slice(1));
+  assert.match(techHandoff.get('action'),/^tech-/);assert.equal(techHandoff.get('effects'),'off');
+  const techRestoredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  let techRestoreRequest,techPageShow;
+  const techRestoredContext=vm.createContext({document:{getElementById:id=>techRestoredElements[id],createElement:()=>({})},
+    location:{protocol:'http:',hash:'#character=mario&action=tech-199_source&effects=off&costume=2&frame=3&playing=false'},URLSearchParams,
+    performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},
+    addEventListener:(name,callback)=>{if(name==='pageshow')techPageShow=callback},
+    fetch:url=>new Promise(resolve=>{techRestoreRequest={url,resolve}})});
+  vm.runInContext(script,techRestoredContext);
+  assert.equal(techRestoredElements.animationtype.value,'tech');assert.equal(techRestoredElements.groundeffects.checked,false);
+  assert.equal(new URL(techRestoreRequest.url,'http://localhost').searchParams.get('effects'),'off');
+  techRestoredElements.groundeffects.checked=true;techPageShow({persisted:false});
+  assert.equal(techRestoredElements.groundeffects.checked,false,'late form restoration cannot disagree with the actual rendered effect state');
+  techRestoreRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:vm.runInContext('frameCount()',techRestoredContext)},(_,i)=>`tech-restored/frame_${String(i).padStart(4,'0')}.png`)})});
+  await settle();assert.equal(vm.runInContext('index',techRestoredContext),3);
+  assert.equal(new URL(techRestoredElements.still.href,'http://localhost').searchParams.get('effects'),'off');
+  console.log('All-character/costume Tech choices, impact toggle, paused frame, export URLs and stale effects: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

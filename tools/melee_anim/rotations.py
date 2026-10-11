@@ -56,12 +56,14 @@ class RotationCache:
             data = json.loads(source.read_text())
             paths.append(source)
             paths.extend(source.parent/t['image_file'] for m in data['materials'] for t in m['textures'] if t.get('image_file'))
-            if action.startswith('attack-'):
+            if action.startswith(('attack-','tech-')):
                 from .attacks import CATALOG, find_action
                 attack_catalog = self.root/CATALOG
                 actor = find_action(json.loads(attack_catalog.read_text()), data['fighter_kind'], action)
                 archive = actor['animation_file']
                 paths.append(attack_catalog)
+                if action.startswith('tech-'):
+                    paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
             elif action == 'taunt':
                 table = next(t for t in report['taunts'] if t['fighter_kind'] == data['fighter_kind'])
                 source_kind = table['standard_facing']['right']['source_fighter_kind']
@@ -74,6 +76,7 @@ class RotationCache:
         # Include evaluators, texture codecs and the renderer, not merely models.
         paths.extend(Path(__file__).parent.glob('*.py'))
         settings = {'version': 'camera-v1', 'angles': angles, 'action': action, 'section': section,
+                    'ground_effects':manifest.get('ground_effects_enabled',False),
                     'source_times': selected['sample_source_times'], 'fps': selected['fps'],
                     'sync_plan': selected.get('sync_plan') if sync else None,
                     'fit_source_times': manifest['sample_source_times'], 'size': 256,
@@ -115,9 +118,11 @@ class RotationCache:
                            '--yaw', str(angles[1]), '--roll', str(angles[2])]
                 if companion:
                     command += ['--companion', str(companion)]
-                if settings['action'].startswith('attack-'):
+                if settings['action'].startswith(('attack-','tech-')):
                     from .attacks import CATALOG
                     command += ['--attack-catalog', str(self.root/CATALOG)]
+                if settings['action'].startswith('tech-'):
+                    command += ['--ground-effects','on' if settings['ground_effects'] else 'off']
                 timeline = folder/'timeline.json'
                 if sync:
                     timeline.write_text(json.dumps(settings['sync_plan']))

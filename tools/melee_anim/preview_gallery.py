@@ -44,7 +44,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label>Character <select id="character" aria-label="Character"></select></label>
 <label>Animation Type <select id="animationtype" aria-label="Animation Type">
 <option value="victory">Victory Pose</option><option value="taunt">Taunt</option>
-<option value="clapping">Clapping</option><option value="attack">Attack</option></select></label>
+<option value="clapping">Clapping</option><option value="attack">Attack</option><option value="tech">Tech</option></select></label>
 <label id="actionlabel">Animation <select id="action" aria-label="Animation"></select></label>
 <label>Costume <select id="costume" aria-label="Costume color"></select></label>
 <button id="play">Pause</button><button id="restart">Restart</button>
@@ -55,6 +55,9 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label><input id="dirtycycle" type="radio" name="clapmode" value="dirty" disabled> Minimum loop (dirty/jittery)</label>
 <label><input id="synccycle" type="radio" name="clapmode" value="sync" disabled> Clapping-sync alteration</label>
 <small id="cyclehint"></small></fieldset>
+<div id="techcontrols" class="controls" hidden>
+<label><input id="groundeffects" type="checkbox" checked> Ground-impact effects</label>
+<small id="techhint">Towards/away follow the character's facing. Effects include the ground burst or tech flash; extra dust/sparkle particles are not included yet.</small></div>
 <fieldset class="controls"><legend>Viewing angle</legend>
 <label>X tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="X tilt"><output id="pitchvalue">0°</output></label>
 <label>Y turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="Y turn"><output id="yawvalue">0°</output></label>
@@ -80,11 +83,14 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <p id="servicehint" hidden>For attacks, viewing angles, or resized downloads, open the <a href="http://127.0.0.1:8765/player.html">local download player</a>.
 If it is closed, start it from the repository with <code>python -m tools.melee_anim.player_server</code>.</p>
 <div class="meta" id="meta"></div>
-<p>This prototype uses original models and motion curves with approximate shading. Timed game scripts, effects, props, dynamics, and audio are not played; native seams are preserved.</p>
+<p>This prototype uses original models and motion curves with approximate shading. Tech impact effects are optional; other game effects, timed scripts, props, dynamics, and audio are not played. Native seams are preserved.</p>
 <script>
 const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__;
 const character=document.getElementById("character"), still=document.getElementById("still"), framezip=document.getElementById("framezip");
 const saveimage=document.getElementById('saveimage');
+const groundeffects=document.getElementById('groundeffects'),techcontrols=document.getElementById('techcontrols'),techhint=document.getElementById('techhint');
+let groundEffectsEnabled=true;
+groundeffects.checked=groundEffectsEnabled;
 const animationtype=document.getElementById('animationtype'), actionlabel=document.getElementById('actionlabel');
 const action=document.getElementById('action'), costume=document.getElementById('costume'), frame=document.getElementById('frame'),
 play=document.getElementById('play'), restart=document.getElementById('restart'), loop=document.getElementById('loop'),
@@ -106,6 +112,8 @@ let angles=[0,0,0], rotated=null, rotationBusy=false, rotationFailed=false, rota
 angleInputs.forEach((input,i)=>{input.value='0';input.oninput=()=>document.getElementById(['pitchvalue','yawvalue','rollvalue'][i]).textContent=`${input.value}°`});
 if(location.protocol!=='http:')rotationstatus.textContent='Choose an angle. Apply opens the local rendering player with your current selections.';
 function hasAngle(){return angles.some(v=>v!==0)}
+function effectSetting(){return clips[current].ground_effect&&groundEffectsEnabled?'on':'off'}
+function effectName(name){return effectSetting()==='on'?name.replace(/(\.[^.]+)$/,'-ground-effects$1'):name}
 function angleSuffix(){return hasAngle()?'-view-'+angles.map((v,i)=>'xyz'[i]+v).join('-'):''}
 function angleName(name){return name.replace(/(\.[^.]+)$/,`${angleSuffix()}$1`)}
 function previewUnavailable(){return rotationBusy||rotationFailed}
@@ -113,11 +121,12 @@ function updateRotationState(){frame.hidden=previewUnavailable();saveimage.hidde
 document.getElementById('downloadpanel').hidden=previewUnavailable()}
 async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
 if(!hasAngle()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();return}
-if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
+if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting()});
 location.href=`${exportBase}/player.html#${query}`;return}
-rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this attack animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
+rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
 updateRotationState();
 try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
+if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
 let response=await fetch(`/rotation?${query}`);if(!response.ok)throw Error(response.status===503?'Renderer is busy; try Apply again shortly.':'Render failed. Check the player service log, then try Apply again or Reset.');
 let result=await response.json();if(generation!==rotationGeneration)return;
 if(result.frames.length!==frameCount())throw Error('Rendered frame count differs from this animation.');
@@ -127,7 +136,7 @@ result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotation
 }catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
 rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
 applyangle.onclick=()=>{angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
-function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()})}
+function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled}
 resetangle.onclick=()=>{angles=[0,0,0];syncAngleInputs();loadRotation()};
 // Form restoration can run after this script; also reset a cached page when
 // returning through browser history. Explicit file-to-server handoffs still
@@ -141,7 +150,7 @@ character.value=characters.some(c=>c.slug==='mario')?'mario':characters[0].slug;
 function colors(){let list=characters.find(c=>c.slug===character.value).costumes;let old=costume.value;costume.options.length=0;
 list.forEach(c=>{let o=document.createElement('option');o.value=String(c.id);o.textContent=c.label;costume.append(o)});
 costume.value=list.some(c=>String(c.id)===old)?old:String(list[0].id)}
-function typeForAction(key){return key.startsWith('attack-')?'attack':key.startsWith('victory')?'victory':key==='taunt_source'?'taunt':'clapping'}
+function typeForAction(key){return key.startsWith('tech-')?'tech':key.startsWith('attack-')?'attack':key.startsWith('victory')?'victory':key==='taunt_source'?'taunt':'clapping'}
 function actions(){let old=action.value;let list=animations.filter(a=>a.character===character.value&&typeForAction(a.key)===animationtype.value);action.options.length=0;
 list.forEach(a=>{let o=document.createElement('option');o.value=a.key;o.textContent=a.unavailable?a.label+' — unavailable (copy model needed)':a.label;o.disabled=Boolean(a.unavailable);action.append(o)});
 action.value=list.some(a=>a.key===old&&!a.unavailable)?old:list.find(a=>!a.unavailable).key;
@@ -158,6 +167,8 @@ function sourceTime(){let c=clips[current];let short=activeCycle();return short&
 function markedName(name){let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
+techcontrols.hidden=!c.action_key.startsWith('tech-');groundeffects.disabled=!c.ground_effect;
+techhint.textContent=c.ground_effect?"Towards/away follow the character's facing. Effects include the ground burst or tech flash; extra dust/sparkle particles are not included yet.":'Lying animations have no ground-impact effect.';
 synccycle.disabled=!c.sync_cycle;document.getElementById('clapmodes').hidden=c.action_key!=='results-clap_source';
 if(cycleMode()==='full')checkMode('full');
 let short=activeCycle()||c.minimum_cycle||c.dirty_cycle;
@@ -168,20 +179,21 @@ scrub.max=frameCount()-1;
 document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frames at ${c.fps} fps / ${(frameCount()/c.fps).toFixed(2)}s / ${cycleMode()==='sync'?'clapping-sync alteration':cycleMode()==='dirty'?'minimum loop (dirty/jittery)':useMinimum()?'minimum cycle (edited loop)':c.authored_loop?'full authored loop':'one-shot action'}`}
 function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
 costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:cycleMode()});
+if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
 if(hasAngle()){['pitch','yaw','roll'].forEach((key,i)=>query.set(key,String(angles[i])))}return `${exportBase}/export?${query}`}
 function updateDownloads(){if(current<0)return;let c=clips[current];let a=animations.find(a=>a.key===c.action_key&&a.character===c.character);
 let original=downloadsize.value==='256'&&!useMinimum()&&!hasAngle()&&!c.lazy;
-gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(angleName(markedName(c.download_name)));
+gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(angleName(effectName(markedName(c.download_name))));
 open.href=original?c.gif:exportURL('gif','costume')+'&view=1';
-archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(angleName(markedName(a.download_name)));
+archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(angleName(effectName(markedName(a.download_name))));
 allzip.href=original?'downloads/melee-all-characters-all-animations.zip':exportURL('gif','all');
 allzip.hidden=Boolean(c.lazy);
 allzip.textContent=cycleMode()==='sync'?`Download all ${clips.filter(c=>c.sync_cycle).length} synced claps`:`Download all ${preparedCount} results/taunt GIFs`;
 allzip.download=cycleMode()==='sync'?sizedName(angleName('melee-all-characters-clapping-sync.zip')):sizedName(angleName(markedName('melee-all-characters-all-animations.zip')));
 still.href=original?c.frames[index]:exportURL('png','costume');
-still.download=sizedName(angleName(markedName(c.download_name).replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`)));
+still.download=sizedName(angleName(effectName(markedName(c.download_name)).replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`)));
 framezip.href=original?`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`:exportURL('png','colors');
-framezip.download=sizedName(angleName(markedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`)))}
+framezip.download=sizedName(angleName(effectName(markedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`))))}
 function show(){if(current<0||previewUnavailable())return;let c=clips[current];let src=framePath();if(lastImage!==src){frame.src=src;lastImage=src}scrub.value=index;
 updateDownloads();
 still.hidden=playing;framezip.hidden=playing;
@@ -208,7 +220,8 @@ c.frames.forEach(src=>{let image=new Image();image.src=src});if(render)loadRotat
 character.onchange=()=>{colors();actions();select()};animationtype.onchange=()=>{actions();select()};
 action.onchange=()=>{animationtype.value=typeForAction(action.value);actions();select()};costume.onchange=select;
 function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048'}
-downloadsize.onchange=()=>{updateSizeWarning();updateDownloads()};
+downloadsize.onchange=()=>{updateSizeWarning();show()};
+groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[current].ground_effect)loadRotation()};
 function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle())loadRotation();else show()}
 [fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.onchange=()=>{if(r.checked){checkMode(['full','minimum','dirty','sync'][i]);changeCycle()}});
 play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
@@ -225,6 +238,7 @@ if(animations.some(a=>a.character===character.value&&a.key===incoming.get('actio
 if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===incoming.get('costume')))costume.value=incoming.get('costume');
 if(['full','minimum','dirty','sync'].includes(incoming.get('cycle')))checkMode(incoming.get('cycle'));
 if(['128','256','512','1024','2048'].includes(incoming.get('size')))downloadsize.value=incoming.get('size');
+if(action.value.startsWith('tech-')&&['on','off'].includes(incoming.get('effects'))){groundEffectsEnabled=incoming.get('effects')==='on';groundeffects.checked=groundEffectsEnabled}
 updateSizeWarning();
 select(false);
 let savedFrame=Number(incoming.get('frame'));if(Number.isInteger(savedFrame)&&savedFrame>=0&&savedFrame<frameCount())index=savedFrame;
@@ -373,7 +387,7 @@ def main():
     for (slug,key), group in attack_groups.items():
         filename = f'{slug}-{key.replace("_","-")}-all-colors.zip'
         animations.append({'character':slug,'key':key,'label':group[0]['action_label'],
-                           'type':'attack','lazy':True,'color_count':len(group),
+                           'type':group[0]['animation_type'],'lazy':True,'color_count':len(group),
                            'download_name':filename,'zip':'','stills':''})
     catalog_path = args.root/'attack-catalog.json'
     if catalog_path.is_file():

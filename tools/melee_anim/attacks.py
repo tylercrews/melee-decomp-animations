@@ -1,4 +1,4 @@
-"""Catalog original attack clips; render requested costumes on demand.
+"""Catalog original attack/ground-recovery clips; render costumes on demand.
 
 Animation IDs come from ftData.xC, never the demo table or motion-state IDs.
 Generated catalogs, PNG/GIF masters and content-addressed caches stay in build/.
@@ -21,6 +21,7 @@ from .catalog import CHARACTERS
 from .hsd import Archive, Dol, load_symbols, read_global
 from .inspect_motions import motion_entries, read_exact_motion, script_graph_summary
 from .motions import read_figatree
+from .techs import TECH_LABELS, tech_label
 
 
 CATALOG = 'attack-catalog.json'
@@ -125,7 +126,8 @@ def build_attack_catalog(repo, report):
             # symbols Special / SpecialAir as the smash-input missile clips.
             if kind == 13 and name in ('Special','SpecialAir'):
                 semantic = 'SpecialSSmash' if name == 'Special' else 'SpecialAirSSmash'
-            chosen = attack_label(semantic)
+            recovery = tech_label(semantic)
+            chosen = (recovery[0], 'Ground recovery') if recovery else attack_label(semantic)
             if chosen is None:
                 chosen = attack_label(name)
             if chosen is None:
@@ -155,7 +157,9 @@ def build_attack_catalog(repo, report):
                                'animation_file':table['animation_file'], 'clip':{**selected, **metadata,
                                'effective_loop':metadata['tree_loop'] or selected['motion_loop'],
                                'script':script_graph_summary(archive, selected['script_offset'], sizes)}})
-            actions.append({'key':f'attack-{motion["animation_id"]}_source', 'animation_id':motion['animation_id'],
+            category = 'tech' if recovery else 'attack'
+            actions.append({'key':f'{category}-{motion["animation_id"]}_source', 'animation_id':motion['animation_id'],
+                            'animation_type':category, 'ground_effect':recovery[1] if recovery else None,
                             'name':name, 'label':chosen[0], 'group':chosen[1], 'actors':actors,
                             'available':reason is None, 'unavailable_reason':reason})
         counts = Counter(a['label'] for a in actions)
@@ -164,11 +168,15 @@ def build_attack_catalog(repo, report):
             if counts[a['label']] > 1:
                 used[a['label']] += 1
                 a['label'] += f' — variant {used[a["label"]]}'
+        order = {name:i for i,name in enumerate(TECH_LABELS)}
+        actions.sort(key=lambda a:(a['animation_type']=='tech',order.get(common.get(a['animation_id']),-1)))
         entries.append({'character':slug, 'character_label':label, 'costumes':primary['costumes'],
                         'fighter_kind':kind, 'actions':actions})
-        print(f'{label}: {sum(a["available"] for a in actions)} attack clips; {sum(not a["available"] for a in actions)} unavailable', flush=True)
+        print(f'{label}: {sum(a["available"] and a["animation_type"]=="attack" for a in actions)} attacks, '
+              f'{sum(a["available"] and a["animation_type"]=="tech" for a in actions)} tech/ground clips; '
+              f'{sum(not a["available"] for a in actions)} unavailable', flush=True)
     return {'schema':'melee_anim.attacks.v1', 'dol_sha1':report['dol_sha1'], 'characters':entries,
-            'limitations':['Isolated source poses; no opponent, projectiles, item/effect spawning, charge inputs or game physics',
+            'limitations':['Isolated source poses; no opponent, projectiles, items, charge inputs or game physics; Tech impact meshes are optional',
                            'Multipart attacks are separate source clips, not simulated state transitions']}
 
 
@@ -189,7 +197,8 @@ def virtual_clips(root):
                 times = sample_times(clip['frames'], clip['effective_loop'])
                 filename = f'{slug}-{action["key"].replace("_","-")}-costume-{cid:02d}-{color.split()[0].lower()}.gif'
                 result.append({'character':slug, 'character_label':fighter['character_label'],
-                               'action_key':action['key'], 'action_label':action['label'], 'animation_type':'attack',
+                               'action_key':action['key'], 'action_label':action['label'], 'animation_type':action.get('animation_type','attack'),
+                               'ground_effect':action.get('ground_effect'),
                                'costume_id':cid, 'costume_label':color, 'fps':50, 'period':clip['frames'],
                                'authored_loop':clip['effective_loop'], 'symbol':clip['symbol'],
                                'frame_count':len(times), 'download_name':filename, 'frames':[], 'source_times':[],
@@ -212,7 +221,7 @@ class AttackCache:
         self.repo = Path(repo).resolve() if repo else Path(__file__).resolve().parents[2]
         self.lock = threading.RLock()
 
-    def get(self, clip):
+    def get(self, clip, effects=False):
         if not clip.get('lazy'):
             return clip
         with self.lock:
@@ -221,14 +230,17 @@ class AttackCache:
             catalog = self.root/CATALOG
             selection = json.loads(catalog.read_text())
             action = clip['action_key'].rsplit('_',1)[0]
+            effects = bool(effects and clip.get('ground_effect'))
             paths = [catalog, model, self.repo/'build/melee_anim/motions.json']
+            if action.startswith('tech-'):
+                paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
             for source in [model]+([companion] if companion.is_file() else []):
                 data = json.loads(source.read_text()); actor = find_action(selection, data['fighter_kind'], action)
                 paths += [source, self.repo/'orig/GALE01/files'/actor['animation_file']]
                 paths += [source.parent/t['image_file'] for m in data['materials'] for t in m['textures'] if t.get('image_file')]
             paths += list(Path(__file__).parent.glob('*.py'))
             digest = hashlib.sha256(b'attack-v1-256px-50fps-60ticks')
-            digest.update(repr((clip['character'],clip['costume_id'],action)).encode())
+            digest.update(repr((clip['character'],clip['costume_id'],action,effects)).encode())
             for path in sorted(set(paths)):
                 digest.update(str(path).encode()); digest.update(hashlib.sha256(path.read_bytes()).digest())
             folder = self.root/'attacks'/digest.hexdigest(); marker = folder/'complete.json'
@@ -246,6 +258,8 @@ class AttackCache:
                            '--attack-catalog',str(catalog),'--output',str(folder),'--size','256','--backend','native' if os.name=='nt' else 'python']
                 if companion.is_file():
                     command += ['--companion',str(companion)]
+                if action.startswith('tech-'):
+                    command += ['--ground-effects','on' if effects else 'off']
                 with (folder/'render.log').open('w') as log:
                     result = subprocess.run(command,cwd=self.repo,stdout=log,stderr=subprocess.STDOUT,timeout=600,
                                             env={**os.environ,'OPENBLAS_NUM_THREADS':'1','OMP_NUM_THREADS':'1'})
@@ -258,7 +272,9 @@ class AttackCache:
                 temporary = marker.with_suffix('.tmp'); temporary.write_text(json.dumps(hashes)); temporary.replace(marker)
             manifest = json.loads((folder/'preview-manifest.json').read_text())
             relative = folder.relative_to(self.root).as_posix()
-            return {**clip,'frames':[f'{relative}/frame_{i:04d}.png' for i in range(clip['frame_count'])],
+            name = clip['download_name'].replace('.gif','-ground-effects.gif') if effects else clip['download_name']
+            return {**clip,'download_name':name,'ground_effects_enabled':effects,
+                    'frames':[f'{relative}/frame_{i:04d}.png' for i in range(clip['frame_count'])],
                     'source_times':manifest['sample_source_times'],'gif':f'{relative}/preview.gif'}
 
 
@@ -271,7 +287,7 @@ def main():
     catalog = build_attack_catalog(repo, report)
     args.root.mkdir(parents=True,exist_ok=True)
     (args.root/CATALOG).write_text(json.dumps(catalog,separators=(',',':'))+'\n')
-    print(f'Cataloged {len(virtual_clips(args.root))} attack/costume choices', flush=True)
+    print(f'Cataloged {len(virtual_clips(args.root))} attack/tech costume choices', flush=True)
 
 
 if __name__=='__main__':

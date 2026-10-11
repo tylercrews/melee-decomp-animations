@@ -2,7 +2,8 @@
 
 This CPU renderer uses NumPy and Pillow. It preserves source pose channels and
 HSD envelope matrices, but approximates lighting/materials and does not run
-fighter scripts, effects, props, dynamics, audio, or the original results UI.
+the full fighter runtime, props, dynamics, audio, or the original results UI.
+Optional Tech ground effects reproduce a focused subset of source effect data.
 Blender remains the planned production renderer. Outputs stay under build/.
 """
 
@@ -77,7 +78,7 @@ def runtime_root_rotation(model, action):
     Other fighters retain the existing isolated source-clip presentation.
     """
     if model.get("fighter_kind") == 24:
-        return [0.0, math.pi/2 * (1 if action == "taunt" or action.startswith('attack-') else -1), 0.0]
+        return [0.0, math.pi/2 * (1 if action == "taunt" or action.startswith(('attack-','tech-')) else -1), 0.0]
     return None
 
 
@@ -231,7 +232,7 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
 
 
 def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build/melee_anim/preview/attack-catalog.json')):
-    if action.startswith('attack-'):
+    if action.startswith(('attack-','tech-')):
         from .attacks import find_action
         actor = find_action(json.loads(attack_catalog.read_text()), kind, action)
         motion = actor['clip']
@@ -264,8 +265,9 @@ def main():
     parser.add_argument("--samples", type=Path, help="exact saved source times and whole-clip framing samples")
     parser.add_argument("--motions", type=Path, default=Path("build/melee_anim/motions.json"))
     parser.add_argument("--attack-catalog", type=Path, default=Path("build/melee_anim/preview/attack-catalog.json"))
+    parser.add_argument('--ground-effects', choices=('on','off'), default='off', help='original tech flash/missed-tech ground burst')
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
-    parser.add_argument("--action", default="results-clap", help="results-clap, victory1/2/3, taunt, or cataloged attack-<animation ID>")
+    parser.add_argument("--action", default="results-clap", help="results-clap, victory1/2/3, taunt, or cataloged attack-/tech-<animation ID>")
     parser.add_argument("--section", choices=("source", "wait"), default="source")
     parser.add_argument("--output", type=Path, default=Path("build/melee_anim/preview/mario_clap"))
     parser.add_argument("--size", type=int, default=320)
@@ -287,6 +289,8 @@ def main():
         parser.error('camera angles must be finite')
     if args.samples and (args.timeline or args.max_frames):
         parser.error('samples cannot be combined with timeline or truncation')
+    if args.ground_effects=='on' and not args.action.startswith('tech-'):
+        parser.error('ground effects are only available for Tech animations')
     model = json.loads(args.model.read_text())
 
     report = json.loads(args.motions.read_text())
@@ -381,6 +385,18 @@ def main():
     if companion:model["meshes"].extend(companion["meshes"])
     framing = fitted+poses if fit_times else poses
     cloud = np.concatenate([p for frame in framing for p, _ in frame])
+    effect = None
+    anchors = [[-2.8,0,0],[2.8,0,0]] if companion else [[0,0,0]]
+    if args.action.startswith('tech-'):
+        from .techs import ground_effect
+        from .ground_effects import GroundEffect
+        effect_kind = ground_effect(args.action)
+        if effect_kind:
+            effect = GroundEffect(args.files,effect_kind)
+            # Fit identically with effects on/off: toggling should not change
+            # the character scale, camera pivot or exact selected frame.
+            extra = [p for t in source_times for anchor in anchors for _,p in effect.geometry(t,anchor,view)]
+            if extra:cloud=np.concatenate([cloud]+extra)
     # One world-space pivot for the entire animation, independent of camera
     # angles. Symmetric projected bounds retain the pivot without clipping.
     center, scale = fit_camera(cloud, view, args.size)
@@ -394,6 +410,9 @@ def main():
     for i, pose in enumerate(poses):
         drawn = [p if shown else (None, None) for p, shown in zip(pose, visibility[i])]
         image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, center, scale, (34, 38, 46, 0))
+        if effect and args.ground_effects=='on':
+            layer = effect.render(source_times[i],anchors,view,args.size,center,scale)
+            image = Image.alpha_composite(layer,image)
         image.save(args.output/f"frame_{i:04d}.png")
         images.append(image.convert("RGBA"))
         if i == 0 or (i+1) % 20 == 0 or i == len(poses)-1:
@@ -427,9 +446,13 @@ def main():
                 "camera_center": center.tolist(), "camera_pixels_per_unit": scale,
                 "model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
                 "render_backend": args.backend,
-                "limitations": ["Approximate paired placement" if companion else "Isolated fighter", "no gameplay scripts/props/effects/dynamics/audio",
+                "limitations": ["Approximate paired placement" if companion else "Isolated fighter", "no complete gameplay scripts/props/particles/dynamics/audio",
                                 "approximate materials/lighting/reflection", "source finger seam preserved",
                                 "no rendered game-reference validation yet"]}
+    if args.action.startswith('tech-'):
+        manifest['ground_effects_enabled'] = bool(effect and args.ground_effects=='on')
+        manifest['ground_effect'] = effect.provenance() if effect else None
+        manifest['effect_anchors'] = anchors if effect else []
     if sync_plan:
         manifest['sync_plan'] = sync_plan
         manifest['output_mode'] = 'clapping-sync alteration'

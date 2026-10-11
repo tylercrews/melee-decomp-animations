@@ -99,5 +99,29 @@ class AttackTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(),(self.root/preview['frames'][1]).read_bytes())
             self.assertEqual(len(self.calls),1)
 
+    def test_tech_effect_toggle_has_separate_cache_and_names_without_mutation(self):
+        action=self.catalog['characters'][0]['actions'][0]
+        action.update(key='tech-199_source',animation_type='tech',ground_effect='tech')
+        (self.repo/'orig/GALE01/files/EfCoData.dat').write_bytes(b'synthetic effect archive fingerprint')
+        (self.root/'attack-catalog.json').write_text(json.dumps(self.catalog))
+        self.clip=virtual_clips(self.root)[0]
+        self.assertEqual(self.clip['animation_type'],'tech')
+        self.assertEqual(self.clip['ground_effect'],'tech')
+        with patch('tools.melee_anim.attacks.subprocess.run',side_effect=self.render):
+            off=self.cache.get(self.clip,effects=False)
+            on=self.cache.get(self.clip,effects=True)
+            self.assertNotEqual(on['gif'],off['gif'])
+            self.assertIn('-ground-effects.gif',on['download_name'])
+            self.assertNotIn('ground-effects',off['download_name'])
+            self.assertNotIn('ground-effects',self.clip['download_name'])
+            self.assertEqual(self.cache.get(self.clip,effects=True),on)
+            self.assertEqual(len(self.calls),2)
+            self.assertEqual(self.calls[0][self.calls[0].index('--ground-effects')+1],'off')
+            self.assertEqual(self.calls[1][self.calls[1].index('--ground-effects')+1],'on')
+            catalog=DownloadCatalog(self.root,clips=[self.clip]);catalog.attacks=self.cache
+            with self.assertRaises(ValueError):catalog.preview(character='game-and-watch',action='tech-199_source',effects='invalid')
+            with self.assertRaises(ValueError):catalog.export(character='game-and-watch',action='tech-199_source',effects='on',scope='all')
+            self.assertEqual(len(catalog.preview(character='game-and-watch',action='tech-199_source',effects='on')['frames']),3)
+
 
 if __name__=='__main__':unittest.main()
