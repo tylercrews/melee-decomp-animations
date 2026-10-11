@@ -1,23 +1,27 @@
 # Melee animation investigation
 
-Investigated 2026-10-10 at source commit `79b13a32467f7c4f91d6f831f0b9f891b7fb1146`. This report describes the actual checkout and the code paths inspected. Line references refer to that snapshot and may move as the code changes.
+Initial source investigation and subsequent asset inspection: 2026-10-10, using source commit `79b13a32467f7c4f91d6f831f0b9f891b7fb1146`. The supplied ISO has now been extracted and checked. Line references refer to that source snapshot and may move as the code changes. Section 11 records the asset-backed findings and runnable inspection tools.
 
 ## Findings
 
-**The repository contains the code that selects, loads, evaluates, and renders the requested animations. It does not currently contain their model, texture, or keyframe assets.** We can identify the results archives, costume tables, and relevant gameplay states from source, but cannot play the animations or certify their exact lengths and loop seams until the game files are supplied.
+**The supplied `melee.iso` has been extracted into the ignored `orig/GALE01` directory. Its executable matches this repository exactly.** We have now validated the costume references, nested results clips, ordinary motion references, model descriptors, and packed animation channels. A rendered character player has not yet been implemented; scalar-channel inspection is not full visual or runtime validation.
 
 | Requested asset | What was found | What still needs game data/runtime verification |
 | --- | --- | --- |
-| Three victory animations per character | Results archive table; deterministic variant selection; demo constructor and motion IDs | Nested clip public names, durations, appearance, scripts/props, and any natural looping section |
-| Loser clapping for every character/costume | Results variant 4, demo animation 9, actual costume enumeration, and live panel rendering | Keyframes, loop flags/range, costume appearance, and visual seam quality |
-| Taunt / forward smash | Common and character-specific action entries, state-to-animation mappings, and scripts | Actual clip roots, supported angle/facing variants, props/effects, and capture timing |
-| Hit / tumble / ground animations | Extensive reaction, launch, tumble, knockdown, prone, getup, roll, and tech states | Clip data and scenario-dependent motion/physics/transition behavior |
+| Three victory animations per character | Archive and exact nested publics, durations, nonlooping victory clips, and separate `Win*Wait` assets | Rendered appearance, props/scripts, runtime transition behavior, and visual loop quality |
+| Loser clapping for every character/costume | All 27 internal fighter `Lose` clips marked to loop; actual costume references validated | Full model/visibility/dynamics evaluation and visible seam quality |
+| Taunt / forward smash | Common/special entries and scripts; exact Mario clips and supported angle/facing entries | Complete props/effects, action behavior, rendered appearance, and capture timing |
+| Hit / tumble / ground animations | State families and actual Mario motion publics/durations | Scenario-dependent physics, collision, transitions, and visual playback |
 
 The user's clarified costume requirement is: **record a requested action for every actual costume variant of that character**. Counts vary. The source tables here list 4, 5, or 6 costumes for selectable roster entries; do not impose a fixed count or treat each variant as an arbitrary recolor.
 
 ## 1. What is in this checkout?
 
-`orig/GALE01/files/` and `orig/GALE01/sys/` contain only `.gitkeep`. Recursive inspection found no `.dat`, `.usd`, `.dol`, `.iso`, or `.gcm` files in this checkout. There are no extracted character models, textures, or playable animation curves available locally.
+At the initial source-only investigation these directories contained only `.gitkeep`. They now contain **1,209 game files and five system files**, totaling **1,430,666,499 bytes**, extracted by [extract_iso.py](tools/melee_anim/extract_iso.py). The game files include 838 `.dat` and 56 `.usd` files, all 26 character results archives, models, textures, sound/video files, and the required fighter data. The extraction manifest is local at `orig/GALE01/extraction-manifest.json`; each extracted file was reread and checked against its ISO extent by SHA-256.
+
+The image identifies itself as **GALE01 disc revision 2**, title `Super Smash Bros Melee`. Its SHA-256 is `0de05981a34156b9cedcef73c73d4244ac05cf6149ab3c9cfed917698819e464`. The extracted original DOL SHA-1 is `08e0bf20134dfcb260699671004527b2d6bb1a45`, exactly matching the configuration. This establishes compatibility with the configured executable, not rendered fidelity.
+
+The ISO, manifest, all 1,214 extracted game/system files, reports under `build/melee_anim`, and Python bytecode are Git-ignored. Git ignore checks explicitly covered every manifest path. Extraction reruns verified every output again and wrote zero game/system files. The ISO is opened read-only.
 
 The expected inputs are defined by:
 
@@ -25,7 +29,7 @@ The expected inputs are defined by:
 - [config/GALE01/dat.yml](config/GALE01/dat.yml): archive directory `orig/GALE01/files`, matching `*.dat`.
 - [.gitignore](.gitignore): original extracted files and executable/build outputs are ignored.
 
-GALE01 is the configured version; identify the user's actual executable revision by its hash, rather than assuming the game ID alone guarantees compatible offsets and data. Extraction of local game data is the immediate prerequisite for rendering. A complete extracted files directory is more useful than only the executable.
+GALE01 remains the configured version; continue checking the executable hash for any replacement dump. The extraction prerequisite is now complete. Building a renderer/importer over the verified descriptors and curves is the next step.
 
 The upstream goal is matching C reconstruction of the PowerPC program, as described in [docs/getting_started.md](docs/getting_started.md). That does not make this checkout an asset bundle or a desktop animation player, and this investigation did not measure overall decompilation completeness.
 
@@ -112,7 +116,7 @@ GmRstMMr.dat
 
 See [ftdemo.c](src/melee/ft/ftdemo.c), `ftDemo_SetArchiveData`, line 134; [ftdata.c](src/melee/ft/ftdata.c), `ftData_80085B98`, line 1701, and the nested loading routines starting at lines 1734 and 1786. Results constructors preload demo entries 0-9, but which additional records/scripts are used for transitions must be checked against the actual data.
 
-The result public is a **packed container**, not a single ready-to-render skeletal animation. [config/GALE01/dat_symbols.txt](config/GALE01/dat_symbols.txt), line 69, currently types `ftDemo*MotionFile*` as raw bytes. Exact nested public names, offsets, sizes, frame lengths, and flags are in the absent assets; do not invent them from a naming convention.
+The result public is a **packed container**, not a single ready-to-render skeletal animation. [config/GALE01/dat_symbols.txt](config/GALE01/dat_symbols.txt), line 69, still types `ftDemo*MotionFile*` as raw bytes. The new focused Python inspector now validates actual nested public names, owning-container boundaries, exact sizes, frame lengths, and flags without requiring that general type walk to understand them. See section 11.
 
 ## 3. Costumes are separate from action selection
 
@@ -128,7 +132,7 @@ Concrete Mario mapping from [ftmariostrings.c](src/melee/ft/kinds/ftMario/ftmari
 | 3 | `PlMrBu.dat` | `PlyMario5KBu_Share_joint` |
 | 4 | `PlMrGr.dat` | `PlyMario5KGr_Share_joint` |
 
-The corresponding `*_Share_matanim_joint` names are listed beside the joints. `PlMr.dat` contains fighter data under `ftDataMario`; `PlMrAJ.dat` is the ordinary gameplay motion file. A chosen action can be paired with each costume using these tables, but actual joint compatibility and appearance still require asset validation.
+The corresponding `*_Share_matanim_joint` names are listed beside the joints. `PlMr.dat` contains fighter data under `ftDataMario`; `PlMrAJ.dat` is the ordinary gameplay motion file. All five Mario costume roots and material-animation roots have now been read successfully, with identical skeleton parent lists and local bind transforms. Full appearance still needs rendering and visibility/material setup. Across the rest of the roster, topology matches between a fighter's costumes, but local bind transforms often differ; preserve those defaults per costume.
 
 Important exceptions:
 
@@ -180,7 +184,7 @@ Forward-smash mappings start around `ftmotionstates.c`, line 772; neutral smash 
 
 The normal chain is fighter `Pl??.dat` -> `ftData.xC[animation ID]` -> packed `Pl??AJ.dat` offset/size -> nested archive -> named `FigaTree`. [ftdata.c](src/melee/ft/ftdata.c), line 1659, resolves the ordinary motion file; subsequent loaders parse its individual archives and retrieve the named public. The packed-file alignment/parser is already implemented in [tools/dat-cli/src/interop/hsd.rs](tools/dat-cli/src/interop/hsd.rs), including consecutive archives padded to 32-byte boundaries.
 
-`Fighter_WaitAnimData`, in [types.h](src/melee/ft/types.h), line 986, holds the public name `x0`, offset `x4`, archive size `x8`, subaction script `xC`, flags `x10_animCurrFlags`, and runtime resolved location `x14`. These values are supplied by the assets. No exact ordinary taunt/smash clip public name was established from the checked-in source alone.
+`Fighter_WaitAnimData`, in [types.h](src/melee/ft/types.h), line 986, holds the public name `x0`, offset `x4`, archive size `x8`, subaction script `xC`, flags `x10_animCurrFlags`, and runtime resolved location `x14`. These values are supplied by the assets. Exact Mario examples are now confirmed: `PlyMario5K_Share_ACTION_Appeal_figatree` (180 source frames), `AttackS4Hi` / `AttackS4S` / `AttackS4Lw` with the same prefix/suffix (42 frames each). Mario's animation entries 61, 63, and 240 are empty; do not create nonexistent intermediate-angle or separate left-taunt clips.
 
 ### Capturing the action faithfully
 
@@ -256,7 +260,7 @@ For the first Blender importer, sampling the source-compatible evaluator and bak
 
 ## 8. What can loop perfectly?
 
-The code supports looping, but **loop flags, exact periods, and visual continuity of the actual clips are currently unverified**.
+The code supports looping, and **actual clip flags and periods are now inspected**. Full rendered continuity is still unverified. All 27 internal clapping clips are marked to loop, but neither a loop flag nor equal exact endpoint values guarantees continuity immediately before the wrap.
 
 Both tree flags and motion flags matter: [lbanim.c](src/melee/lb/lbanim.c), lines 100-102, applies `FigaTree.flags`, initializes rewind to zero, and sets end to `FigaTree.frames`. `fighter.c`, around line 1253, copies flags from the selected motion record; `ftanim.c`, around lines 404-420, can additionally enable `AOBJ_LOOP` from its loop bit. [aobj.c](src/sysdolphin/baselib/aobj.c), lines 91-163, establishes these semantics:
 
@@ -267,7 +271,7 @@ Both tree flags and motion flags matter: [lbanim.c](src/melee/lb/lbanim.c), line
 
 Thus a source loop should normally be stored over **`[rewind, end)`**. Inspect the unwrapped terminal pose or endpoint limit before the loop wraps, then compare it with the start and inspect actual repeated frames. Calling the looping evaluator at `end` returns the start automatically, which would conceal a discontinuity. Do not force the last exported frame to duplicate the first. Last-to-first visual movement should look like an ordinary adjacent-frame transition.
 
-Clapping is the best first loop candidate because the results screen continuously renders it, but its authored range and actual loop bit must be inspected in the assets. Victory callbacks inspected here initialize their selected motion and have empty animation callbacks; this source alone does **not** establish an intro-to-separate-loop transition for each victory. Inspect all related motion records/scripts and observe runtime behavior before defining victory loop sections.
+Clapping remains the first loop target. Mario's `Lose` is an 18-frame source loop; its precise terminal values match the start, but its pre-terminal limit differs in four finger channels (section 11). Actual results data also contains separate `Win1Wait`, `Win2Wait`, and `Win3Wait` assets. These are usable export targets, not proof that the original results scene automatically transitions into them: the inspected victory callbacks are empty, and winner-panel code can freeze the completed victory pose. Verify runtime behavior separately.
 
 If a victory/attack starts and ends in different poses, a repeated file will have a jump. Options are a naturally repeating subsection, one-shot export, or an explicitly edited transition. Reversing/crossfading a clip changes the original motion and should be an intentional mode. Root drift, visibility, material animation, accessories, and procedural bones/effects must be included in seam validation. Dynamic systems may need fixed initial state and warm-up cycles.
 
@@ -285,9 +289,9 @@ The existing **normal motion validator** is immediately useful after extracting 
 cargo run -rqp melee-dat -- symbols check-motions --dol orig/GALE01/sys/main.dol --symbols config/GALE01/symbols.txt --files orig/GALE01/files
 ```
 
-This command is documented existing functionality, but was **not run** during this investigation: its game inputs are absent and Cargo was not detected on PATH. It reads filenames/counts from the original DOL and verifies `ftData.xC` offsets, exact sizes, and public names against `Pl*AJ.dat`. It does not require MWCC, a full game build, DWARF, or a DTK executable for this check.
+This existing Rust command was **not run** because Cargo was not detected on PATH. It reads filenames/counts from the original DOL and verifies `ftData.xC` offsets, exact sizes, and public names against `Pl*AJ.dat`. It does not require MWCC, a full game build, DWARF, or a DTK executable for this check. The new Python inspector independently performs corresponding range/name checks over the supplied data; do not describe that as running the Rust tool.
 
-**It does not currently validate results demo `ftData.x14` or nested `ftDemo*MotionFile*` containers.** Those remain explicit follow-ups in [tools/dat-cli/TODO.md](tools/dat-cli/TODO.md). Add a demo validator before treating ordinary-motion validation as results coverage.
+**The Rust command still does not validate results demo `ftData.x14` or nested `ftDemo*MotionFile*` containers.** Those remain follow-ups in [tools/dat-cli/TODO.md](tools/dat-cli/TODO.md). The focused Python inspector added in this task now provides results-container validation and metadata inspection; it does not update the Rust type walker or general native schema.
 
 ### Native archive interface
 
@@ -301,29 +305,140 @@ The `native` preset in [CMakePresets.json](CMakePresets.json), lines 24-29, is a
 
 There is no ready-made native animation player demonstrated by these builds. Building a desktop runtime would still need rendering, platform initialization, raw-format decoding, unresolved behavior, and pointer/layout issues addressed. It should not be assumed to be a simple compile-and-run step.
 
-The initial environment had Python and CMake on PATH; Blender, FFmpeg, Dolphin, Rust/Cargo, Ninja, and Nix were not detected there. This is an environment observation, not proof those programs are absent from the machine. No dependencies were installed and no game/native build or rendering test was run.
+The initial environment had Python and CMake on PATH; .NET was also found during this follow-up. Blender, FFmpeg, Dolphin, Rust/Cargo, Ninja, and Nix were not detected on PATH. This does not prove they are absent from the machine. The new extraction/inspection tools use Python's standard library. No dependencies were installed; no full game/native build or character render was run.
 
 ## 10. Recommended next experiment and unresolved facts
 
-The smallest decisive experiment is **Mario's default-costume clapping**:
+Extraction and descriptor/curve inspection are complete; the next decisive experiment is **rendered Mario default-costume clapping**:
 
-1. Verify/extract the configured original game data locally.
-2. Resolve `GmRstMMr.dat` -> `ftDemoResultMotionFileMario` -> demo motion 9 -> its named `FigaTree`.
-3. Pair it with `PlMrNr.dat` and Mario's actual fighter/part data.
-4. Decode/evaluate known poses with original semantics, then render a fixed-camera PNG sequence.
-5. Measure the source period/seam and produce MP4/GIF from those same frames.
-6. Repeat the action for Mario's other four actual costume IDs.
+1. Use the verified model and clip references from the inspection reports.
+2. Assemble Mario's default mesh, bind transforms, envelopes, textures, and correct drawable alternatives.
+3. Apply the decoded `Lose` channels to the matching hierarchy, honoring part mapping, defaults, and HSD matrix rules.
+4. Render known poses and compare them against a game/viewer reference.
+5. Render the native 18-frame period, inspect the actual seam, and produce MP4/GIF from the same PNG masters. Any seam repair must be an explicit edited mode.
+6. Repeat for Mario's other four costumes with shared framing and their actual model/material references.
 
 This proves the whole pipeline before expanding to all characters. The recommended Python/Blender/FFmpeg architecture and alternative adapters are compared in [PLAN.md](PLAN.md); [TODO.md](TODO.md) gives the ordered implementation steps.
 
-Facts still requiring assets or runtime observation:
+Facts still requiring additional implementation or runtime observation:
 
-- Exact nested clip names, byte ranges, motion flags, frame lengths, and supported/shared/missing motions.
-- Actual clapping loop periods and whether any victory has an authored cyclic section or transition.
-- Skeleton/track compatibility and complete appearance for each costume.
+- Full pose/mesh/material correctness after combining the now-validated descriptors and curves.
+- Visible seam quality, derivatives, and any procedural-state discontinuities; scalar endpoint reports are preliminary.
+- Actual results runtime use of the authored victory wait clips and transition timing.
+- Complete appearance, visibility/accessory selection, and behavior for every costume.
 - Required runtime props/scripts/dynamics for every results/action variant.
 - Exact source tick-to-time conversion and desired output timing.
 - Acceptable visual differences between a Blender material conversion and the game's GX rendering.
 - A working importer or deterministic capture harness and the tool versions it supports.
 
-The desired animations are discoverable through the decomp's loading and state code. The first implementation depends on recovering the local game assets and validating one small playable case; the investigation does not claim that source analysis alone has extracted or rendered them.
+The supplied assets are now available and structurally validated. A focused Python path can read the models and evaluate scalar motion channels on this machine; the missing next component is model/pose assembly and rendering, not disc extraction or further machine-code disassembly.
+
+## 11. Asset-backed follow-up and reusable tools
+
+### Reproduce extraction and inspection
+
+All commands below are implemented and were run against the supplied image. Run them from the repository root:
+
+```powershell
+python tools/melee_anim/extract_iso.py melee.iso
+python -m tools.melee_anim.inspect_motions --output build/melee_anim/motions.json
+python -m tools.melee_anim.inspect_models --catalog
+python -m tools.melee_anim.inspect_results_scene
+python -m unittest discover -s tools/melee_anim/tests -v
+```
+
+[extract_iso.py](tools/melee_anim/extract_iso.py) reads the raw GameCube filesystem table and system extents without disassembly. It validates the expected DOL before writing, checks filenames/paths/extents, protects differing existing files and symlinks/junctions, and records/verifies file hashes. `--list` is read-only; ordinary reruns verify and reuse matching files; `--overwrite` permits explicit replacement of differing managed outputs. Other DOL revisions require a separate output and `--allow-unverified`; do not use those files with these GALE01 tables.
+
+[hsd.py](tools/melee_anim/hsd.py) is a narrow bounded DAT/DOL reader based on the existing decomp/tool layouts. It preserves relocated offset zero as a real pointer, distinguishes null offsets, and reads DOL globals by their checked-in symbol addresses. It does not implement the Rust type system, resolve arbitrary archive externs, or execute the game.
+
+[inspect_motions.py](tools/melee_anim/inspect_motions.py) checks **8,011 nonempty ordinary motion references across 33 internal fighter tables**, including nonselectable fighters. It also reads **244 nonempty results motion references across 27 internal fighter tables in 26 archives**, including both Ice Climbers members. Shared references are retained. Each nested results archive is checked within its owning public's packed region, with exact size/public-name matching and packet decoding. The reports remain ignored because they contain extensive asset-derived metadata.
+
+[motions.py](tools/melee_anim/motions.py) decodes compressed scalar tracks and provides a source-guided FObj state-machine evaluator with step, linear, Hermite, slope-only, delayed-start, and terminal behavior. It samples unwrapped channels for research; it has not been validated as a complete HSD character runtime or through rendered comparison.
+
+### Actual results clips and periods
+
+The actual assets contain `Win1` / `Win2` / `Win3` at demo animation IDs 0 / 2 / 5, separate `Win1Wait` / `Win2Wait` / `Win3Wait` at IDs 1 / 3 / 6, and clapping `Lose` at ID 9. Other entries include character-selection sequences. All initial victory clips are nonlooping. Most wait entries loop via motion flags; **Falco's 243-frame `Win3Wait` is not marked to loop**. Fox additionally has a 300-frame `Win2Wait2` in slot 4, which is empty for the other fighters. These details must remain data-driven rather than assumed from the name.
+
+All `Lose` entries are loop-enabled. Periods below are **source animation frames**, not a measured video timebase:
+
+| Character | Clapping period | Character | Clapping period |
+| --- | ---: | --- | ---: |
+| Captain Falcon | 80 | Young Link | 60 |
+| Donkey Kong | 30 | Dr. Mario | 120 |
+| Falco | 50 | Fox | 60 |
+| Mr. Game & Watch | 30 | Ganondorf | 80 |
+| Kirby | 160 | Bowser | 40 |
+| Link | 60 | Luigi | 120 |
+| Marth | 56 | Mario | 18 |
+| Mewtwo | 130 | Ness | 15 |
+| Ice Climbers: Popo and Nana | 30 each | Peach | 40 |
+| Pikachu | 72 | Pichu | 144 |
+| Jigglypuff | 320 | Samus | 20 |
+| Sheik | 17 | Yoshi | 40 |
+| Zelda | 40 | Roy | 56 |
+
+Mario's exact nested examples, within the data region named `ftDemoResultMotionFileMario` (base offset zero):
+
+| Demo ID | Public suffix after `PlyMario5K_Share_ACTION_` | Offset | Exact archive size | Source frames | Loop flag |
+| ---: | --- | --- | --- | ---: | --- |
+| 0 | `Win1_figatree` | `0x0000` | `0x25D6` | 120 | No |
+| 1 | `Win1Wait_figatree` | `0xA360` | `0x0E3A` | 50 | Yes |
+| 2 | `Win2_figatree` | `0x25E0` | `0x262A` | 120 | No |
+| 3 | `Win2Wait_figatree` | `0xB1A0` | `0x0E5A` | 50 | Yes |
+| 5 | `Win3_figatree` | `0x4C20` | `0x247E` | 120 | No |
+| 6 | `Win3Wait_figatree` | `0xC000` | `0x0E1E` | 50 | Yes |
+| 9 | `Lose_figatree` | `0x90C0` | `0x128A` | 18 | Yes |
+
+Mario's `Lose` has 61 animation nodes, 47 animated nodes, 142 tracks, and 1,989 packed keyframe bytes. Its tree flags are zero; motion flags `0x40000000` enable the loop. Track channels cover rotation, translation, and scale. Its own subaction script is just the end command, so assembling correct appearance also requires generic initialization/part defaults rather than assuming the clapping script supplies them.
+
+**Seam finding:** the focused evaluator returns matching scalar values at frame 0 and exactly frame 18, but the unwrapped limit just before frame 18 differs in four finger Y-rotation channels by approximately `0.084198` radians (4.82 degrees). The terminal key restores the start value; the looping AObj wraps before evaluating it. This exposes why exact endpoint equality can conceal a discontinuity. It is channel evidence, not a measured rendered defect: part visibility, matrix evaluation, and reference capture must determine its visible impact. Preserve a native mode and make any finger/seam correction an explicit edited mode.
+
+### Actual model assembly and costume coverage
+
+[inspect_models.py](tools/melee_anim/inspect_models.py) reads actual `ftMapping_list`, selectable costume counts, internal counts, and `ftData_803C2360` strings from the verified DOL. Its catalog validates **123 selectable jobs plus four Nana model records: 127 costume records referencing 124 distinct model archives**. Every referenced model file, joint public, and nonnull material-animation public was found and its skeleton traversed. This does not yet certify all their mesh/material behavior under animation.
+
+Every participating internal fighter's parent hierarchy matches across its costumes. **20 of the 27 have differing local bind transforms between costumes**; applying one costume's entire bind pose to every other costume would be incorrect. Mario is a particularly simple first case: all five match in both hierarchy and local bind SRT.
+
+Each Mario costume contains 61 joints, 59 drawable/material descriptors, 68 envelope-skinned polygon descriptors, 53 inverse-bind matrices, and 60 texture references: 58 CMPR and two C8. The decoded display lists contain 6,982 vertex corners across all drawable alternatives; that is not a count of vertices simultaneously visible. Weighted-envelope joint references and display-list matrix palette indices were checked. No archive externs or instance joints were present in these five model roots.
+
+The model inspector also traversed all **124 unique costume model archives**, with no parser errors: 8,412 envelope polygon descriptors and 1,661 rigid/shared descriptors. Their texture references include CMPR, C8, C4, I8, RGB5A3, and I4. This establishes readable geometry/descriptor coverage, not rendered correctness. Run `python -m tools.melee_anim.inspect_models --all-models --output build/melee_anim/all_models.json` to regenerate compact summaries.
+
+Mario's default root is at data offset `0x19400`. Its first polygon descriptor is `0xBE00`; positions are indexed 16-bit signed XYZ values with fraction 11 and stride 6, normals signed-byte XYZ with fraction 6 and stride 3, and UV0 signed 16-bit XY with fraction 13 and stride 4. The first position array starts at **data offset zero, relocated**, which is a valid pointer and must not be mistaken for null. The meshes' 257 total envelope-palette entries include 137 single-joint, 118 two-joint, and two three-joint entries; weight sums were within approximately `3e-8` of one. GX matrix index bytes map to palette entries by division by three.
+
+HSD's skinning rules are not always the standard assumption that all raw vertices occupy one bind space. For unit-weight single-joint entries, source setup can use the joint's global matrix directly; mixed envelopes use weighted joint-global times stored envelope matrices. See `ftPartsSetupEnvelopeMtx` in [ftparts.c](src/melee/ft/ftparts.c) and `SetupEnvelopeModelMtx` in [pobj.c](src/sysdolphin/baselib/pobj.c). Normalize vertex coordinates according to their palette/corner before creating conventional Blender weights, and verify skinned positions against reference matrices.
+
+The assembly path is now concrete:
+
+```text
+verified costume file + joint public
+  -> parent hierarchy, local bind defaults, inverse-bind matrices
+  -> DObj -> MObj/TObj -> textures, palettes, material state
+  -> PObj -> GX attribute arrays + display-list corners
+  -> envelope palette -> referenced joints + weights
+  + fighter parts/visibility/default appearance
+  + chosen FigaTree channels mapped through fighter-part rules
+  -> evaluate joint matrices and skin/deform vertices
+  -> Blender mesh/material/camera scene -> PNG frames -> video encoding
+```
+
+Reading all drawable meshes and showing them simultaneously is wrong: alternative hands/faces/other parts coexist in the model. `ftData.x8` visibility tables, generic state initialization, motion metadata/scripts, and character callbacks choose the appropriate alternatives. Preserve the game's matrix/part mapping, skinning, per-costume defaults, and CMPR/C8 texture decoding before judging the render.
+
+Actual motion scripts reinforce that requirement. Link/Young Link clapping sets visibility group 1 to option 1; Roy sets group 2 to option 0; Popo/Nana set group 1 to -1. Luigi/Popo clapping includes texture-animation changes. Mario's victory scripts call a subroutine that changes texture-animation frames and also include sound/effect commands. The inspector reads bounded linear script prefixes and records call/goto pointers; it does not execute this control flow, spawn effects, or apply model/material changes.
+
+Additional asset-confirmed cases:
+
+- Mr. Game & Watch's four material colors are RGBA `(0,0,0,255)`, `(110,0,0,255)`, `(0,0,110,255)`, and `(0,110,0,255)`, with outline `(255,255,255,128)` and Z width approximately `0.01`. They share the same model file and remain four distinct costume jobs.
+- Captain Falcon's costume 2 basename is `PlCaRe.`. The filename resolver selects `PlCaRe.usd` for US language and `PlCaRe.dat` for Japanese; both were extracted. A trailing-dot source basename is not an actual Windows filename and must be resolved before opening. Language does not add another costume ID.
+- Ice Climbers' shared results archive contains separate nested Popo/Nana packed regions. Both were bounded and inspected independently; their costume pair is one selectable job with two model instances.
+
+### Results scene assets are present too
+
+[inspect_results_scene.py](tools/melee_anim/inspect_results_scene.py) reads `GmRst.dat` (476,574 bytes) and `GmRst.usd` (476,318 bytes), both exposing `pnlsce` and `flmsce`. Each panel scene has one model and two lights; each film scene has four models and two lights. Panel models have joint and material animation; the film models also reference material animation. These are scene assets to import later, not a substitute for fighter demo construction.
+
+The stored panel/film camera descriptors use a 640x480 viewport/scissor, eye `(0,0,112)`, target `(0,0,0)`, near/far 1/5000, approximately 25-degree FOV, and aspect approximately 1.216667. These are UI scene cameras; individual fighter cameras are separately configured by `gmresultplayer.c` / `gm_1798.c`. Preserve the distinction and the source projection parameters rather than automatically forcing every camera to 4:3.
+
+### What is proven now, and what is next?
+
+Extraction, hashes, Git exclusion, actual costume references, skeletal topology, Mario mesh/texture/envelope metadata, results packed ranges/names, ordinary motion references, and compressed scalar-channel decoding have been checked. Synthetic tests exercise malformed inputs and format/loop edge cases without embedding game data.
+
+The next useful implementation is a **small Mario model/pose importer**, using the existing Python inspection/evaluation primitives, followed by a few rendered reference poses. Blender remains the recommended renderer. The native decomp library is still useful as a reference or targeted evaluator adapter, but a full game/GX port is not necessary to access this data. No MP4/GIF or rendered character was produced in this investigation.

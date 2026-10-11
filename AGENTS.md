@@ -15,22 +15,35 @@ The user explicitly clarified that **every color means every actual costume vari
 - [TODO.md](TODO.md): ordered work with completion criteria.
 - [tools/dat-cli/README.md](tools/dat-cli/README.md) and [tools/dat-cli/TODO.md](tools/dat-cli/TODO.md): existing DAT utilities and known gaps.
 
-Initial investigation: 2026-10-10, source commit `79b13a32467f7c4f91d6f831f0b9f891b7fb1146`. Only documentation was added in the initial task. No player, importer, renderer, capture harness, or video export was implemented or tested.
+Initial source investigation: 2026-10-10, source commit `79b13a32467f7c4f91d6f831f0b9f891b7fb1146`. The follow-up implemented and tested ISO extraction, bounded DAT/DOL readers, motion/model/scene inspectors, and a preliminary scalar curve evaluator. No rendered player, complete Blender importer, capture harness, or video export exists yet.
 
-At investigation time, `orig/GALE01/files` and `orig/GALE01/sys` contained only `.gitkeep`; no DAT archives, disc image, or executable were found in the checkout. Recheck this inventory before claiming anything is playable. The expected original DOL hash is in `config/GALE01/config.yml`; the version currently configured is GALE01. Do not mix revision-specific tables/offsets with an unverified game dump.
+The supplied `melee.iso` is now extracted to `orig/GALE01`: 1,209 game files plus five system files, all output hashes verified. GALE01 disc revision 2; original DOL SHA-1 `08e0bf20134dfcb260699671004527b2d6bb1a45` matches `config/GALE01/config.yml`. ISO SHA-256 is `0de05981a34156b9cedcef73c73d4244ac05cf6149ab3c9cfed917698819e464`. The local extraction manifest records provenance and all output hashes; reruns are verified/idempotent. ISO, manifest, every output, reports, and bytecode were individually checked as ignored. Recheck provenance for any replacement assets; do not mix revision-specific tables with another executable.
+
+Working commands, from repository root:
+
+```powershell
+python tools/melee_anim/extract_iso.py melee.iso
+python -m tools.melee_anim.inspect_motions --output build/melee_anim/motions.json
+python -m tools.melee_anim.inspect_models --catalog
+python -m tools.melee_anim.inspect_models --all-models --output build/melee_anim/all_models.json
+python -m tools.melee_anim.inspect_results_scene
+python -m unittest discover -s tools/melee_anim/tests -v
+```
+
+The scripts use Python's standard library. Generated metadata remains under ignored `build/melee_anim`; keep investigation notes and design decisions in the four root Markdown files, as the user explicitly requested. The source/test tools are intended to be tracked; original asset bytes must remain ignored.
 
 ## Design direction to preserve
 
 - Python owns the CLI, catalog, jobs, costume batching, manifests, and FFmpeg export orchestration.
 - Blender is the recommended initial preview/render backend. Its Melee importer is future work; no working Blender DAT import has been established here.
 - Reuse the decomp's tables and HSD animation semantics. Reuse or extend `tools/dat-cli` for archive inspection and validation before building another general type system.
-- Keep the importer/evaluator behind a clear interface. A focused Python reader, existing native DAT helper, or small HSDRaw adapter remains a feasibility choice until one real asset is proven. Record the evidence when selecting it.
+- Build the first importer on the working focused Python reader/evaluator in `tools/melee_anim`. Actual asset inspection succeeded without a native helper. Keep the interface clear; use native/HSDRaw as targeted references or replacements when measured problems justify them. Full matrix/renderer fidelity remains unproven.
 - Keep native helpers as small subprocess adapters initially. Do not require a complete host game port or Python access to raw game-runtime pointers.
 - Use Dolphin as a reference and possible capture backend for runtime-dependent/full-scene fidelity. Do not assume stock Dolphin has a Python scripting API.
 - Prioritize default Mario clapping -> PNG sequence -> verified MP4/GIF -> every Mario costume -> wider results coverage.
 - Preserve the original decomp source and build purpose. Place new product code in a separate tool/package; make source/type improvements only when required and justified.
 
-These are documented implementation recommendations, not claims that the user selected a particular untested parser or approved a dependency installation. New evidence can change a backend choice; update the plan and rationale instead of silently changing direction.
+These are documented implementation decisions/recommendations backed by the current inspection, not claims that a complete renderer or dependency installation was approved or verified. No dependencies were installed during extraction. New evidence can change a backend choice; update the plan and rationale explicitly.
 
 ## Source landmarks and traps
 
@@ -44,14 +57,19 @@ These are documented implementation recommendations, not claims that the user se
 8. DAT descriptors use big-endian structural values and 32-bit offsets. Packed FObj value streams have their own little-endian numeric decoding in `src/sysdolphin/baselib/fobj.c`. Never blanket-byte-swap raw animation blobs.
 9. `src/sysdolphin/baselib/aobj.c` and `fobj.c` define first-play, rewind/end frame, and interpolation behavior. Bake evaluated source poses initially; replacing all curves with linear interpolation changes the animation.
 10. `tools/dat-cli/native` converts descriptors to host-native objects, but keyframes, texels, scripts, and GX display lists remain raw. Archive externs are left null; required cross-archive links need explicit resolution.
-11. Existing `symbols check-motions` validates ordinary motions using the original DOL and extracted files. Embedded demo motion-file archives / demo motion validation remain known gaps. A successful ordinary-motion check is not results-animation validation.
+11. The Rust `symbols check-motions` still covers only ordinary motions and was not run here. The new Python inspector checks 8,011 ordinary references and 244 results references within 27 internal fighter regions / 26 archives, including owning public boundaries and exact sizes/names. Do not conflate this with fixing the Rust type walk or running its native tests.
 12. The root CMake native preset builds a 32-bit static library and excludes rendering-related files such as `pobj.c`. It is not a ready-made player. The DWARF ELF tolerates unresolved symbols and supplies type information, not runnable-game evidence.
+13. The actual results data includes nonlooping `Win1/2/3` and separate `Win1Wait/Win2Wait/Win3Wait` at IDs 1/3/6. Most wait clips loop; Falco's `Win3Wait` does not, and Fox has an extra `Win2Wait2` at ID 4. Authored wait assets do not establish an automatic original-scene transition. All 27 `Lose` clips are motion-loop marked.
+14. All 123 selectable costume references plus four Nana entries were validated (124 distinct model archives). Hierarchy matches within all 27 internal fighter families, but 20 have different bind SRT across costumes. Preserve per-costume defaults. Mario's five costumes match in both hierarchy and bind SRT and are the simplest pilot.
+15. A single unit-weight envelope entry can use a joint-global matrix directly; mixed weights use joint-global times stored envelope matrices. Raw mesh coordinates need conversion per palette/corner before assigning ordinary Blender weights. Preserve matrix palette indices, rigid attachments, normal transforms, classical-scale flags, and source part mapping.
+16. Resolve localized source basenames before opening them: Captain costume 2 is `PlCaRe.`, which becomes `.usd` or `.dat` according to language. Do not create an extra costume job for a language variant. Game & Watch also applies Z width approximately 0.01 and an outline as well as costume material color.
+17. Model files include mutually exclusive drawable alternatives and reflection/second-UV textures. Do not show every DObj or treat every TObj as a single base-color image. Mario `Lose` has only an end command; generic state initialization/part defaults supply additional appearance behavior.
 
 ## Animation and export rules
 
 - Separate skeleton-clip playback from full gameplay behavior. Attacks and damage scenarios can depend on scripts, props/items, particles, root motion, hitlag, knockback, collision, procedural bones, and state transitions.
 - Do not promise every victory/action is naturally seamless. Expose the authored loop, entrance, one-shot, and explicitly edited loop as distinct modes.
-- For a source loop, store samples over `[start, end)`. Inspect the unwrapped terminal pose/limit before wrapping and compare it with `start`, then inspect actual repeats. Evaluating `end` with looping enabled returns the start automatically and can hide discontinuity. Do not add a duplicate endpoint pause.
+- For a source loop, store samples over `[start, end)`. Check both the unwrapped exact terminal key and the limit approaching it, plus derivatives and actual repeats. Looping evaluation wraps at `end`; even a matching unwrapped terminal key can hide a preceding step. Mario `Lose` is 18 source frames with equal exact keys but preliminary four-finger Y-rotation limit differences around 0.084198 radians. Do not claim a perfect seam or silently repair it without rendered verification and an explicit edited mode. Do not add a duplicate endpoint pause.
 - Check root movement, derivative continuity where meaningful, materials, visibility, accessories, and procedural state. Warm up dynamic systems when needed and use deterministic seeds/initial conditions.
 - Keep source game ticks separate from output frame rate. Record exact timing and source intervals in manifests.
 - Preserve PNG sequences as the lossless master; provide explicit background selection for the usual H.264 MP4 preset. GIF has palette, transparency, and timing limits. MP4 playback looping is controlled by the player.
@@ -67,6 +85,6 @@ Run focused checks appropriate to changed code. Useful checks include malformed/
 
 For native/type changes, use the repository's documented build/validation checks when the required tools and original files exist. Record which checks were actually run and what could not be run. Do not label a documentation review or type-only build as a successful animation render.
 
-The initial Windows session's default MSYS Git failed to initialize its signal pipe; `C:\Program Files\Git\cmd\git.exe` worked. Use an available working Git executable if that issue recurs. Python and CMake were on PATH; other relevant tools were not detected on PATH, which does not establish that they are uninstalled.
+The initial Windows session's default MSYS Git failed to initialize its signal pipe; `C:\Program Files\Git\cmd\git.exe` worked. Use a working executable if that recurs. For programmatic batch ignore checks use NUL-delimited `git check-ignore -z --stdin` with binary input/output; Windows text-mode CRLF can alter paths. Python 3.13, CMake, and .NET were found; Blender/FFmpeg and other tools were not on PATH, which does not establish they are uninstalled. Extraction tests use temporary directories under ignored `build/` because this sandbox could not write Python 3.13's restrictive default temporary-directory ACLs.
 
 Leave existing user changes intact, keep the checklist current, and describe backend decisions and remaining fidelity gaps in the plan so future work does not repeat this investigation.

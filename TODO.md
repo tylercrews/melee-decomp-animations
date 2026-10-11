@@ -1,6 +1,6 @@
 # Ordered implementation checklist
 
-Created 2026-10-10. The initial deliverable is planning documentation; the unchecked items below are future implementation work. See [PLAN.md](PLAN.md) for the architecture and [INVESTIGATION.md](INVESTIGATION.md) for source evidence. Update this file as working artifacts are verified.
+Created and updated 2026-10-10. Extraction and asset-backed investigation are now complete; unchecked items remain future implementation work. See [PLAN.md](PLAN.md) for the architecture and [INVESTIGATION.md](INVESTIGATION.md), section 11, for evidence and implemented commands. No rendered animation/video has been produced yet.
 
 ## 0. Preserve the investigation
 
@@ -11,52 +11,58 @@ Created 2026-10-10. The initial deliverable is planning documentation; the unche
 
 ## 1. Make the game data available locally
 
-- [ ] Locate the user's game dump/extraction and determine its revision.
-- [ ] Supply extracted assets at `orig/GALE01/files` and the original executable at `orig/GALE01/sys/main.dol`, or configure equivalent external paths.
-- [ ] Verify the executable against `config/GALE01/config.yml`; record the revision and hashes of source files.
-- [ ] Confirm Mario prerequisites: `PlCo.dat`, `PlMr.dat`, `PlMrAJ.dat`, `GmRstMMr.dat`, and all five costume files listed in `ftmariostrings.c`.
-- [ ] Confirm the additional results camera/light/UI archive references needed for comparison captures. Full scene reconstruction comes later.
-- [ ] Ensure original assets and generated asset caches/exports stay out of Git. The existing `orig` ignore rules cover original inputs; add output ignores when those directories are created.
+- [x] Locate `melee.iso`: GALE01 disc revision 2.
+- [x] Create a reusable stdlib extraction tool and extract 1,209 game + five system files under `orig/GALE01`.
+- [x] Verify the original DOL SHA-1 against configuration; record ISO SHA-256 and verify every output hash in the extraction manifest. Verify idempotent reruns.
+- [x] Confirm Mario prerequisites and all five costume model/material roots.
+- [x] Inspect both `GmRst.dat` / `.usd` panel/film camera, light, and UI model descriptors; confirm `SdRst.dat` is extracted.
+- [x] Verify Git ignores the ISO, extraction manifest, all 1,214 outputs, generated reports, and bytecode. Existing rules already cover them.
 
 Done when: a readiness report lists exact paths, hashes, expected symbols, and missing dependencies without attempting to render.
 
 ## 2. Establish a small repeatable toolchain
 
-- [ ] Verify Python, Blender, FFmpeg/ffprobe, and any needed Cargo/CMake tools; pin versions after the first compatibility check.
+- [x] Establish working dependency-free extraction/inspection under Python 3.13 with focused synthetic `unittest` coverage.
+- [ ] Verify/pin Blender and FFmpeg/ffprobe for rendering/encoding; native toolchains remain optional.
 - [ ] If using the repository's Nix/schema builds, establish the Linux/WSL2 environment and required Aurora/type inputs. Do not assume the current native CMake preset is a runnable viewer.
-- [ ] Create a separate Python package for animation tooling; keep ordinary export commands readable and documented.
+- [x] Create the separate `tools/melee_anim` package and document its implemented extraction/inspection commands.
 - [ ] Define explicit inputs, cache/output paths, and a versioned job/catalog schema.
-- [ ] Add a minimal CLI with asset readiness and dependency diagnostics.
+- [x] Add extraction/list and motion/model/scene inspection CLIs with format/hash validation.
+- [ ] Add renderer/encoder readiness diagnostics when those components are introduced.
 
 Done when: one documented command reports readiness and selected versions on the intended development machine.
 
 ## 3. Build a verified asset catalog
 
-- [ ] Reuse DAT header/public/relocation parsing from `tools/dat-cli` where practical.
-- [ ] Run the existing `symbols check-motions` against the extracted normal fighter animations.
-- [ ] Add bounded traversal and validation of embedded results motion-file archives and demo `ftData.x14` references. These are not covered by the existing normal-motion validator.
-- [ ] Resolve Mario's result motion-file public symbol, nested `FigaTree` publics, lengths, and offsets; determine whether any entrance/loop sections or transitions exist.
-- [ ] Map external roster characters to internal fighter kinds, including Popo/Nana and Zelda/Sheik.
-- [ ] Enumerate costume IDs from authoritative tables, then resolve file, joint, material-animation, visibility, and runtime-color references.
-- [ ] Keep shared-file costumes distinct; include Mr. Game & Watch's runtime color setup in the schema.
-- [ ] Expand the catalog to the 26 roster entries and their real costume counts; validate extracted assets against the source-derived mapping.
+- [x] Add a focused bounded DAT/DOL reader using the existing source layouts; preserve relocated zero pointers.
+- [x] Validate 8,011 ordinary motion references across 33 internal tables with the Python inspector. The existing Rust `symbols check-motions` was not run; leave Rust integration for when useful/available.
+- [x] Validate all 27 packed results regions, 244 nonempty references, owning public bounds, sizes, publics, flags, and keyframe packet structures.
+- [x] Resolve actual Mario result clip names/offsets/durations and separate `Win*Wait` assets; automatic original-scene transitions remain unverified.
+- [x] Read actual DOL external/internal mappings, including Popo/Nana and Zelda/Sheik.
+- [x] Validate 123 selectable costume records plus four Nana member records and every referenced joint/material-animation public.
+- [x] Inspect Mario's costume visibility tables; retain shared-file Game & Watch IDs and extract its runtime RGBA/width data.
+- [x] Validate all 26 roster entries' costume counts and skeleton hierarchies; inspect all 124 unique model archives and supported raw mesh/texture formats.
 
 Done when: catalog output can explain where each requested clip and costume comes from. Start with Mario; keep unsupported cases visible.
 
 ## 4. Prove motion evaluation before batch rendering
 
-- [ ] Decode one Mario clapping `FigaTree`, preserving node traversal and channel assignments.
-- [ ] Implement or adapt packed FObj decoding, defaults, step/linear/Hermite behavior, frame progression, and loop semantics from the decomp.
-- [ ] Verify mixed byte-order handling and source-to-output timing with small known samples.
+- [x] Decode Mario clapping: 61 nodes, 47 animated nodes, 142 tracks, 18 source frames, motion-loop flag enabled.
+- [x] Implement a preliminary packed scalar decoder/evaluator covering step/linear/Hermite/slope/key packets, signed starts, and unwrapped endpoints.
+- [x] Verify mixed byte-order and interpolation/terminal edge cases with synthetic samples; report exact endpoint, left-limit, and finite-slope differences.
+- [ ] Compare scalar and matrix results against native HSD/game reference samples; the current evaluator uses Python double precision and is not a complete runtime.
+- [ ] Establish source tick-to-output timing against reference capture.
 - [ ] Load the costume skeleton/bind transforms and evaluate a pose at several known frames.
 - [ ] Display a diagnostic skeleton or pose contact sheet and compare against game/viewer reference frames.
-- [ ] Compare a focused Python importer against a small native or HSDRaw adapter; document the selected data-reader/evaluator approach.
+- [x] Select the working focused Python reader/evaluator as the first importer foundation based on actual asset access; native/HSDRaw remain targeted references/replacements if discrepancies justify them.
 
 Done when: known clapping poses match the reference and the game-authored loop interval is identified. Do not approximate every curve as linear.
 
 ## 5. Render the first complete character
 
-- [ ] Decode Mario's default costume GX geometry, attachments/envelopes, textures, UVs, and basic materials.
+- [x] Inspect all five Mario costume GX layouts/display-list indices, envelopes/weights, UV metadata, texture/palette descriptors, and basic material references.
+- [ ] Convert GX corners into a mesh with consistent bind-space coordinates; account for single-joint versus mixed-envelope matrix semantics before assigning Blender weights.
+- [ ] Decode CMPR and C8/RGB565-palette texture pixels and build basic materials, including reflection/second-UV cases.
 - [ ] Import the model and sampled transforms into Blender; handle scale compensation and hierarchy differences explicitly.
 - [ ] Add a fixed camera, whole-interval bounds fitting, lighting, and background/alpha settings.
 - [ ] Apply required part visibility and appearance animation.
@@ -95,7 +101,8 @@ Done when: requesting one supported action with `all` produces exactly one verif
 - [ ] Add victory variants 1, 2, and 3 with explicit mappings to game variants 0, 1, and 2.
 - [ ] Determine whether each victory has an entrance and subsequent cyclic section; expose separate sections only where verified.
 - [ ] Confirm the unusual variant/state mappings from the demo table; do not interpret reused `Dead*` state labels as death clips.
-- [ ] Validate loop continuity separately for each character/variant; label one-shot or edited output honestly.
+- [x] Inspect authored result durations and loop flags, including Fox slot 4 and unflagged Falco `Win3Wait`.
+- [ ] Validate rendered loop continuity separately for every character/variant; inspect pre-terminal limits and derivatives, and label one-shot or edited output honestly.
 - [ ] Add per-character demo callbacks, accessories, dynamics, and visibility behavior needed for accurate results animations.
 - [ ] Batch clapping and all three victory variants across every supported roster costume.
 - [ ] Review edge cases: paired Ice Climbers, Zelda/Sheik form selection, Mr. Game & Watch orientation/materials, and multiple/team winners.
@@ -144,3 +151,5 @@ Done when: both isolated character assets and a composed results scene can be ex
 - [ ] Refresh `INVESTIGATION.md`, `PLAN.md`, and `AGENTS.md` when evidence or architecture changes.
 
 Avoid expanding GUI, packaging, full game porting, or complete results UI work ahead of the first verified clapping MP4/GIF.
+
+Current next step: assemble and skin Mario's default costume from the validated descriptors, apply the decoded `Lose` channels with correct HSD transforms/part defaults, decode its textures, and render reference poses. The 18-frame native loop has preliminary finger-channel seam differences; do not mark the first export perfectly seamless without repeated rendered inspection.

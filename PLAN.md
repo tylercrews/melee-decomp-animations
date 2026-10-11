@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status: proposed architecture, based on the repository investigation on 2026-10-10. No animation player or exporter has been implemented yet. Read [INVESTIGATION.md](INVESTIGATION.md) for the source evidence and [TODO.md](TODO.md) for the execution sequence.
+Status as of 2026-10-10: ISO extraction, bounded DAT/DOL inspection, costume catalog validation, and a preliminary scalar motion evaluator are implemented. The supplied executable matches the configured revision. No rendered character player or video exporter exists yet. Read [INVESTIGATION.md](INVESTIGATION.md), especially section 11, for actual asset evidence and runnable commands, and [TODO.md](TODO.md) for the remaining sequence.
 
 ## Recommendation
 
@@ -8,7 +8,7 @@ Build a **Python application that imports Melee assets, plays selected animation
 
 Python is the easiest language for the user to maintain and is well suited to catalogs, batch jobs, animation sampling, and export settings. Blender supplies meshes, cameras, skinning, materials, a viewport, and scripted rendering. Its command line supports background execution and Python scripts. We still need to build the Melee importer; Blender does not automatically understand these DAT files. See the [Blender command-line documentation](https://docs.blender.org/manual/en/3.6/advanced/command_line/arguments.html).
 
-The largest engineering task is faithfully importing the skeleton, mesh, curves, and costume behavior. Video encoding is a much smaller part of the project. Start by proving one character's clapping loop all the way through to an exported file.
+The largest remaining engineering task is faithfully combining the now-readable skeleton, mesh, curves, textures, and costume behavior into a render. Video encoding is a much smaller part. Mario's actual `Lose` is an 18-source-frame loop and all five costumes have matching bind topology, making it the first rendering target; preliminary finger-channel discontinuities mean smoothness still needs explicit verification.
 
 ## Scope and priorities
 
@@ -31,13 +31,14 @@ The initial exporter should produce useful character assets before the complete 
 | Image inspection | Pillow | Contact sheets, alpha handling, bounds checks, and visual QA. See [Pillow image-format support](https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html). |
 | Rendering and preview | Blender Python API (`bpy`) inside a pinned Blender release | Scripted scene creation and offscreen PNG rendering; avoids writing an entire graphics engine. Launch Blender as a subprocess for the first version. |
 | MP4/GIF encoding | FFmpeg executable, invoked with an argument list | Explicit frame timing and encoding settings. Use `ffprobe` for output verification. See [FFmpeg CLI](https://ffmpeg.org/ffmpeg.html) and [palette filters](https://ffmpeg.org/ffmpeg-filters.html#palettegen). |
-| Archive inspection | Existing Rust `melee-dat` tool | Packed archive parsing, normal-motion validation, source-derived types, and evidence for the importer. Extend rather than duplicate useful existing functionality. |
+| Extraction/initial inspection | Implemented stdlib tools in `tools/melee_anim` | Portable ISO extraction, focused DAT/DOL reads, nested motion/costume/model catalogs, and preliminary scalar evaluation. These are already working on the supplied files. |
+| General archive typing | Existing Rust `melee-dat` tool | Source-derived types, type walks, samples, and native schemas remain useful as needed. Its Rust commands were not run in this task. |
 | Optional native adapter | Existing `tools/dat-cli/native` C library behind a small exporter process | Converts archive descriptors into the decomp's host-native types. It does not decode keyframes, textures, or GX meshes, and requires schema/toolchain setup. |
-| Focused verification | pytest when implementation begins | Meaningful format, curve, costume, timing, and encoding checks; no tests are needed for these planning documents. |
+| Focused verification | Python `unittest`, already used | Synthetic extraction/format/curve/model checks run without original asset fixtures. Extend for matrix, skinning, and output validation as those features are built. |
 
 Do not require the user to learn Rust or C for ordinary exports. Keep any native helper behind a process interface producing versioned metadata and arrays. This also avoids binding the first Python app directly to the game's 32-bit runtime layouts.
 
-Choose and pin actual tool versions after testing the first asset import. Do not assume an arbitrary latest Blender release is compatible with an untested importer. On this Windows machine, the repository's Nix development environments target Linux; WSL2 is a reasonable candidate for those build tools. Verify that setup before making it a requirement. Windows Python, Blender, and FFmpeg can remain the user-facing tools.
+The current extraction/inspection path works with Python 3.13 and requires no third-party packages, .NET, native compiler, Cargo, or WSL. Choose and pin Blender/FFmpeg versions after testing the first render. The repository's optional Nix/schema environments target Linux, so WSL2 remains an option for those builds, not a prerequisite for the current tools.
 
 ## Compare the implementation routes
 
@@ -73,7 +74,7 @@ Local GALE01 files + original main.dol + decomp source tables
 
 ### 1. Input and catalog
 
-Accept an extracted files directory and executable path. The defaults should match `orig/GALE01/files` and `orig/GALE01/sys/main.dol`, with path overrides. Check the executable against the version configuration, hash source assets, and report missing files before rendering.
+The supplied ISO was extracted to `orig/GALE01/files` and `orig/GALE01/sys/main.dol`; defaults and overrides are implemented in the inspection tools. `extract_iso.py` verifies revision compatibility, writes a hash manifest, and supports verified reruns. Inspectors that use DOL addresses require the matching executable. Preserve this validation boundary when adding rendering.
 
 Generate a catalog linking:
 
@@ -83,13 +84,15 @@ Generate a catalog linking:
 - Gameplay action state, animation/submotion ID, packed archive offset and size, public `FigaTree` name, script, and playback flags.
 - Frame count, joint/track mapping, evaluator version, source hashes, and supported/unsupported features.
 
-Retain distinct costume IDs even when they share an archive. Record explicit missing/unsupported variants rather than silently substituting the default costume. Generate costume counts from the source tables and check them against extracted assets.
+Retain distinct costume IDs even when they share an archive. The implemented model catalog checks the actual DOL mappings for all 123 selectable jobs plus four Nana member records. It resolves language-specific filenames such as `PlCaRe.` before opening and preserves per-costume bind defaults. Add action/render support states to this catalog rather than silently substituting costume 0.
 
 ### 2. Import and evaluate
 
-Reuse the existing DAT parser/validator first. For the initial importer, implement only the descriptor and raw formats needed for Mario's default model and one results motion. Compare a focused Python decoder with a small native or HSDRaw adapter on that same input; select the smallest reliable implementation and record the decision.
+**Decision after the asset inspection:** use the working focused Python DAT reader and scalar evaluator as the first importer foundation. They expose Mario's skeleton, all meshes/weights, texture formats, and selected results clip with no native toolchain setup. This selects the initial inspection/import path; complete HSD matrix/evaluator fidelity and Blender rendering remain to be proven. Use native/HSDRaw code as a reference or targeted replacement if measured discrepancies justify it, rather than requiring another runtime upfront.
 
-Preserve joint traversal order, parent relationships, bind transforms, weighted and rigid attachments, scale compensation, channel defaults, frame timing, and original interpolation. DAT descriptors are big-endian, while packed FObj numeric streams use their own decoding rules. Include material/visibility animation and costume setup in the pose result where required.
+Preserve joint traversal order, parent relationships, per-costume bind transforms, weighted and rigid attachments, scale compensation, channel defaults, frame timing, and original interpolation. The inspected 27 fighter families have matching hierarchy across costumes, but 20 have differing local bind SRT; topology alone is not permission to reuse defaults. DAT descriptors are big-endian, while FObj numeric streams use little-endian formats. Include material/visibility animation and costume setup where required.
+
+Mesh conversion needs a specific HSD skinning boundary: palette entries with a single unit-weight joint can use that joint's global matrix directly, while mixed envelopes combine joint-global times stored envelope matrices. Raw positions can therefore use different coordinate spaces within an envelope mesh. Convert per-corner palette references into a consistent bind-space mesh before assigning conventional Blender weights. Add reference-matrix/vertex checks rather than assuming every raw position is already in a common bind space.
 
 Sample the source evaluator at each output time and bake the resulting transforms for Blender initially. This avoids approximating HSD curves with Blender's default interpolation. If pose hierarchy flags cannot be expressed faithfully as ordinary Blender bones, evaluate global matrices or deform the vertices directly for the proof of concept. Validate normals and skinning too.
 
@@ -99,7 +102,7 @@ Use a fixed game-tick timeline; keep source ticks and output frames distinct. Es
 
 Start with one fixed camera, simple lighting, and a solid or transparent background. Fit the camera to the bounds of the entire selected interval so limbs do not leave the frame and the crop does not wobble. Preserve the same framing across costumes for a given action.
 
-Convert textures and basic materials first, with documented limitations for GameCube TEV behavior, outlines, blend modes, shadows, and particles. Compare frames against the game. Treat accurate animation motion and exact original shading as separate acceptance criteria.
+Convert Mario's CMPR and C8/RGB565-palette textures and basic materials first. His model includes alternate drawables, reflection texture coordinates, and some second-UV meshes, so loading every drawable and treating every texture as a single base-color image will be wrong. Preserve visibility choices and document remaining TEV, outline, blend, shadow, and particle differences. Compare reference poses separately for motion, skinning, and shading. Later extend decoding to the additional C4, I4, I8, and RGB5A3 formats found elsewhere in the roster.
 
 Later add results camera/light data, per-character scales, Ice Climbers pairing, team winner layout, loser render targets, and interface animations. The source results screen renders characters into image buffers for the little squares; a standalone high-resolution character export can bypass those low-resolution buffers.
 
@@ -120,7 +123,7 @@ python -m melee_anim export --character fox --action taunt --costume all --loop-
 
 ## Looping policy
 
-A repeating video is not automatically a seamless animation. A victory may need a one-time introduction distinguished from any cyclic subsection, but this checkout's source does not establish such a transition for every victory. Clapping is the best first candidate because the results screen continuously renders it; its authored loop flags and period still require asset inspection.
+A repeating video is not automatically seamless. Actual assets confirm separate nonlooping victory clips and `Win*Wait` candidates, but automatic original-scene transitions into those waits are unverified. Most waits are loop-marked; Falco's `Win3Wait` is an exception, and Fox has an extra `Win2Wait2`. Keep clip selection and transition policy data-driven. All 27 internal `Lose` clips are loop-marked and their periods are now known.
 
 Offer these explicit policies:
 
@@ -132,7 +135,7 @@ Offer these explicit policies:
 | `blend` | Apply an explicitly requested pose/appearance transition at the seam. Record that the motion was edited. |
 | `pingpong` | Play forward then backward as an explicit creative effect; this changes the original motion. |
 
-Compare the unwrapped terminal pose or endpoint limit with the start, including root transform, derivatives where meaningful, material state, accessories, and particles. Inspect this boundary before loop wrapping: sampling `end` through the looping evaluator automatically returns the start and would hide a discontinuity. Also inspect several actual repeats visually. The last stored frame need not equal the first: store samples over `[start, end)` without appending an identical endpoint, which can introduce a pause.
+Compare **both** the unwrapped exact terminal pose and the limit approaching the end with the start, including root transform, derivatives, materials, accessories, and particles. Sampling `end` through a looping evaluator wraps immediately; even an unwrapped terminal key can restore a start value that differs from the preceding limit. Mario's clapping tracks show this in four finger rotations. The current Python report includes these preliminary channel/finite-slope checks; full matrix and rendered checks remain required. Inspect several actual repeats and store samples over `[start, end)` without appending a duplicate endpoint.
 
 Physics-driven bones or particles may need deterministic initialization and several warm-up cycles before a stable loop is captured. A moving root requires an explicit world-space or in-place policy. Do not silently reverse, reset, or crossfade every victory animation to claim perfect looping.
 
@@ -149,8 +152,8 @@ Allow both formats in a single job. Inspect decoded output for frame count, dura
 
 | Milestone | Reviewable result | Gate |
 | --- | --- | --- |
-| A: asset readiness | Catalog for Mario: five costumes, results archive, nested motions, source provenance | Correct files/version present; no guessed clip locations. |
-| B: motion proof | Mario clapping skeleton/poses and one rendered character frame | Curve semantics, skeleton mapping, and costume model match reference. |
+| A: asset readiness — complete | Verified extraction/hash manifest, results/ordinary motion metadata, and all selectable costume references | Original DOL matches; actual packed boundaries/publics and model roots checked. |
+| B: motion/assembly proof — next | Mario clapping matrices/skinned poses and one rendered character frame | Preliminary scalar evaluator and readable mesh data already exist; matrix/visibility/texture correctness must match reference. |
 | C: first working exporter | Default Mario clapping PNG sequence, MP4, and GIF with seam report | Repeatable export and acceptable animation/render fidelity. |
 | D: costume batch | Same action exported for all five Mario costumes | Correct costume ID and appearance in each artifact; shared framing. |
 | E: results coverage | Clapping + all three victory variants for every roster costume | Coverage matrix includes exceptions; intros/loops distinguished. |
@@ -158,3 +161,5 @@ Allow both formats in a single job. Inspect decoded output for frame count, dura
 | G: results scene | Composed winner(s), loser squares, and results presentation | Scene timing/cameras/compositing match reference sufficiently. |
 
 If the first Blender import cannot achieve acceptable motion or appearance without excessive custom rendering, keep the Python catalog/batch/export design and switch that renderer to a focused native player or Dolphin harness. Document the evidence before changing the backend. Do not make a full native game port a prerequisite for the first working asset export.
+
+The runnable commands at the current stage are `extract_iso.py`, `inspect_motions`, `inspect_models --catalog` / `--all-models`, and `inspect_results_scene` as documented in `INVESTIGATION.md`. The proposed `melee_anim export` interface above is still future work.
