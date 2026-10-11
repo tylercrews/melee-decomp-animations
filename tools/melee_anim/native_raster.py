@@ -101,9 +101,12 @@ class NativeRaster:
                 continue
             mat=model["materials"][mesh["material_index"]]
             candidates=[t for t in mat["textures"] if t.get("coordinate_type",0)==0 and t.get("image_file") in textures]
-            if mat.get('copy_diffuse_only'):
+            diffuse_only=mat.get('copy_diffuse_only') or mat.get('diffuse_texture_only')
+            if diffuse_only:
                 diffuse=[t for t in candidates if t.get('flags',0)&0x10]
                 if diffuse:candidates=diffuse
+            if not candidates and mat.get('reflection_texture_preview'):
+                candidates=[t for t in mat['textures'] if t.get('coordinate_type',t.get('flags',0)&15)==1 and t.get('image_file') in textures]
             base=next((t for t in candidates if ((t.get("flags",0)>>16)&15) in (4,5)),candidates[0] if candidates else None)
             verts=np.ascontiguousarray((positions-center)@view,dtype=np.float32)
             verts[:,:2]*=pixels_per_unit*2/width
@@ -113,13 +116,16 @@ class NativeRaster:
             colors[:,3]*=mat.get("alpha",1)
             if base:
                 uvset=str(max(0,base.get("source",4)-4)); uv=np.asarray(mesh.get("uv_sets",{}).get(uvset,mesh["uvs"]))
+                if base.get('coordinate_type',base.get('flags',0)&15)==1:
+                    from .preview import reflection_uv
+                    uv=reflection_uv(normals,view)
                 coords=np.column_stack((uv,np.ones((len(uv),2))))
                 uv=(coords@np.asarray(base["texture_matrix"]).T)[:,:2]
                 for i,mode in enumerate((base.get("wrap_s",1),base.get("wrap_t",1))):
                     if mode==2:uv[:,i]/=2
                 uv=np.ascontiguousarray(uv,dtype=np.float32)
                 mode=(base.get("flags",0)>>16)&15
-                if mode==5 or mat.get('copy_diffuse_only') and mode==3 and base.get('blend',0)==1:
+                if mode==5 or diffuse_only and mode==3 and base.get('blend',0)==1:
                     colors[:,:3]=shade[:,None]
                 self.gl.glEnable(0x0DE1);self.gl.glEnableClientState(0x8078)
                 self.gl.glBindTexture(0x0DE1,self.texture(base["image_file"],textures[base["image_file"]],base))

@@ -175,6 +175,17 @@ def texture_uv(uv, descriptor):
     return uv
 
 
+def reflection_uv(normals, view):
+    """HSD TEX_COORD_REFLECTION: camera normals map into the texture square.
+
+    TObjSetupMtx uses +0.5 X, -0.5 Y and a 0.5 bias before the original
+    texture SRT. Approximate the game's normal-matrix path for this preview.
+    """
+    n=np.asarray(normals,dtype=float)@view
+    n/=np.maximum(np.linalg.norm(n,axis=-1,keepdims=True),1e-12)
+    return np.stack((.5+.5*n[...,0],.5-.5*n[...,1]),axis=-1)
+
+
 def render_frame(model, posed, textures, view, width, height, center, pixels_per_unit, background):
     color = np.empty((height, width, 4), dtype=np.uint8)
     color[:] = background
@@ -191,13 +202,18 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
         material = model["materials"][mesh["material_index"]]
         rgba = np.array(material.get("diffuse_rgba") or [255, 255, 255, 255], dtype=float)
         candidates = [t for t in material["textures"] if t.get("coordinate_type", t.get("flags", 0) & 15) == 0]
-        if material.get('copy_diffuse_only'):
+        diffuse_only=material.get('copy_diffuse_only') or material.get('diffuse_texture_only')
+        if diffuse_only:
             diffuse=[t for t in candidates if t.get('flags',0)&0x10]
             if diffuse:candidates=diffuse
+        if not candidates and material.get('reflection_texture_preview'):
+            candidates=[t for t in material['textures'] if t.get('coordinate_type',t.get('flags',0)&15)==1]
         base = next((t for t in candidates if ((t.get("flags", 0) >> 16) & 15) in (4, 5)),
                     candidates[0] if candidates else None)
         uv_set = str(max(0, base.get("source", 4)-4)) if base else "0"
         uvs = np.asarray(mesh.get("uv_sets", {}).get(uv_set, mesh["uvs"]), dtype=float)
+        if base and base.get('coordinate_type',base.get('flags',0)&15)==1:
+            uvs=reflection_uv(normals,view)
         texture = textures.get(base["image_file"]) if base else None
         alpha = float(material.get("alpha", 1.0))
         for triangle in mesh["triangles"]:
@@ -234,7 +250,7 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
                 ty = np.minimum((uv[..., 1]*texture.shape[0]).astype(int), texture.shape[0]-1)
                 sampled = texture[ty, tx].astype(float)
                 mode = (base.get("flags", 0) >> 16) & 15
-                replace_color=mode==5 or material.get('copy_diffuse_only') and mode==3 and base.get('blend',0)==1
+                replace_color=mode==5 or diffuse_only and mode==3 and base.get('blend',0)==1
                 rgb = sampled if replace_color else rgb*sampled/255
             interpolated = (w0[..., None]*normals[ids[0]] + w1[..., None]*normals[ids[1]]
                             + w2[..., None]*normals[ids[2]])

@@ -3,12 +3,30 @@ import unittest
 
 import numpy as np
 
-from tools.melee_anim.preview import camera_basis, deform, joint_visibility, pose_matrices, render_frame, runtime_root_rotation, srt_matrix, texture_uv
+from tools.melee_anim.preview import camera_basis, deform, joint_visibility, pose_matrices, reflection_uv, render_frame, runtime_root_rotation, srt_matrix, texture_uv
 from tools.melee_anim.motions import Track
 import struct
 
 
 class PreviewTests(unittest.TestCase):
+    def test_reflection_coordinates_follow_camera_normals_and_hsd_bias(self):
+        normals=np.eye(3)
+        np.testing.assert_allclose(reflection_uv(normals,np.eye(3)),[[1,.5],[.5,0],[.5,.5]])
+        np.testing.assert_allclose(reflection_uv([[2.,0,0]],camera_basis(90)),[[.5,.5]],atol=1e-12)
+
+    def test_opted_reflection_texture_replaces_gray_material_in_python_raster(self):
+        tex={'coordinate_type':1,'flags':0x50081,'image_file':'visor','texture_matrix':np.eye(4).tolist()}
+        material={'textures':[tex],'diffuse_rgba':[164,164,164,255],'unlit':True,'reflection_texture_preview':True}
+        mesh={'material_index':0,'uvs':[[0,0]]*3,'triangles':[[0,1,2]]}
+        positions=np.array([[-1.,-1,0],[1.,-1,0],[0.,1,0]])
+        pixels=np.tile(np.array([0,255,0,255],dtype='uint8'),(2,2,1))
+        model={'meshes':[mesh],'materials':[material]}
+        image=render_frame(model,[(positions,np.tile([0.,0,1],(3,1)))],{'visor':pixels},np.eye(3),32,32,np.zeros(3),12,(0,0,0,0))
+        self.assertEqual(image.getpixel((16,16)),(0,255,0,255))
+        material['reflection_texture_preview']=False
+        unchanged=render_frame(model,[(positions,np.tile([0.,0,1],(3,1)))],{'visor':pixels},np.eye(3),32,32,np.zeros(3),12,(0,0,0,0))
+        self.assertEqual(unchanged.getpixel((16,16)),(164,164,164,255))
+
     def test_fighter_root_width_and_facing_precede_child_pose_and_skinning(self):
         bones = [{"index": 0, "parent": None, "flags": 8, "rotation": [0, 0, 0],
                   "position": [0, 0, 0], "scale": [1, 1, 1], "inverse_bind_matrix": None},

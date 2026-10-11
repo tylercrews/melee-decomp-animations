@@ -266,7 +266,7 @@ def primary_drawables(count, classes, item_groups=()):
     return set(range(count)) - (hidden - normal)
 
 
-def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt"), *, archive_path=None, root_symbol=None, root_offset=None, copy_classes=None):
+def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt"), *, archive_path=None, root_symbol=None, root_offset=None, copy_classes=None, reflection_preview=False):
     catalog = roster(files_root)
     fighter=next(f for f in catalog["fighters"] if f["fighter_kind"]==kind)
     costume=fighter["costumes"][costume_id]
@@ -316,6 +316,12 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
         exported = dict(material)
         if copy_classes is not None:
             exported['copy_diffuse_only']=True
+        if kind==13 or reflection_preview:
+            exported['diffuse_texture_only']=True
+            if any(t.get('flags',0)&15==1 for t in material['textures']):
+                exported['reflection_texture_preview']=True
+                if material['render_mode']&1:
+                    exported['unlit']=True
         exported["textures"] = []
         for texture in material["textures"]:
             tex = texture["offset"]

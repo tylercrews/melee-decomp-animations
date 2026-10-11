@@ -4,6 +4,8 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Restore green visor reflection textures for Samus and Kirby-Samus in native/Python previews, rotations and exports. Rebuild five-costume results/taunt masters, exact syncs, color/still/aggregate bundles and player HTML; cover all six Kirby costume claps and additional action families. Preserve timing and alpha; 124 Python tests / Node controls passed.
+
 - [x] Verify Kirby Power: 121 Python / Node tests; all 150 powered costume models/claps and 20,100 GIF-PNG alpha/timing checks; 43,680 four-pose-mapped combinations; 63 full victory/copy/type probes; live exact-frame, rotations, all modes and six-color/all-size exports. Review all 25 hats and correct diffuse/specular texture selection for colored helmets/crowns.
 
 - [x] Add Kirby Power (None / Kirby plus all 25 copied forms), appearing only for Kirby. Assemble original attached hats and replacement bodies for all six actual costume IDs; carry appearance through ordinary/results/taunt/Knockdown poses, clapping modes, cameras, all-color GIF/PNG exports, sizes and URL handoffs. Retarget reserved bone slots, enabling the 33 formerly unsupported alternate-rig copy clips.
