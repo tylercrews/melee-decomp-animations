@@ -65,6 +65,9 @@ def script_summary(archive: Archive, at: int | None, sizes: bytes) -> dict:
             command["target"] = archive.pointer(at + 4)
         if opcode in (1, 2):
             command["timer_ticks"] = word & 0x3FFFFFF
+        if opcode == 19:
+            command["command_variable"] = {"index": (word >> 24) & 3,
+                                           "value": word & 0xFFFFFF}
         if opcode == 31:
             index, value = (word >> 19) & 127, word & 0x7FFFF
             command["visibility_group"] = index - 128 if index >= 64 else index
@@ -94,6 +97,188 @@ def read_exact_motion(blob: bytes | memoryview, motion: dict, label: str) -> Arc
     return result
 
 
+def state_entries(raw: bytes, first_state: int, table_name: str,
+                  callback_names: dict[int, str]) -> list[dict]:
+    """Read MotionState[ ] using its verified 32-byte source layout."""
+    if len(raw) % 32:
+        raise MotionError(f"{table_name}: incomplete MotionState array")
+    states = []
+    for index in range(len(raw) // 32):
+        words = struct.unpack_from(">8I", raw, index * 32)
+        states.append({"motion_state_id": first_state + index,
+                       "animation_id": words[0] if words[0] < 0x80000000 else words[0] - 0x100000000,
+                       "state_flags": f"0x{words[1]:08X}",
+                       "table": table_name,
+                       "animation_callback": callback_names.get(words[3]),
+                       "animation_callback_address": f"0x{words[3]:08X}"})
+    return states
+
+
+def script_graph_summary(archive: Archive, start: int | None, sizes: bytes) -> dict:
+    """Trace bounded static call/goto targets without executing game behavior."""
+    root = script_summary(archive, start, sizes)
+    if start is None:
+        return root
+    visited = {start}
+    pending = [c["target"] for c in root["commands"] if "target" in c and c["target"] is not None]
+    children = []
+    while pending:
+        at = pending.pop()
+        if at in visited:
+            continue
+        if len(visited) >= 64:
+            raise MotionError("script control-flow graph exceeded bounded targets")
+        visited.add(at)
+        child = script_summary(archive, at, sizes)
+        children.append({"offset": at, **child})
+        pending.extend(c["target"] for c in child["commands"]
+                       if "target" in c and c["target"] is not None)
+    root["reachable_blocks"] = children
+    root["reachable_opcodes"] = sorted(set(root["opcodes"]).union(
+        *(set(child["opcodes"]) for child in children)))
+    root["scope"] = "static bounded control-flow graph; waits/loops and gameplay commands not executed"
+    return root
+
+
+def taunt_catalog(dol: Dol, symbols: dict, normal_sources: dict,
+                  allowed_kinds: set[int], script_sizes: bytes) -> list[dict]:
+    """Find taunt states by original DOL animation callback pointers.
+
+    Common/character counts and animation IDs come from sized DOL tables.
+    The only semantic selectors are the source's named Appeal callbacks,
+    the special-taunt order table, and Nana's documented Popo fallback.
+    """
+    callbacks = {address: name for name, (address, _) in symbols.items()
+                 if name.endswith("_AppealS_Anim")}
+    common_raw = read_global(dol, symbols, "ftData_MotionStateList")
+    common = state_entries(common_raw, 0, "ftData_MotionStateList", callbacks)
+    standard = [s for s in common if s["animation_callback"] == "ftCo_AppealS_Anim"]
+    if len(standard) != 2:
+        raise MotionError("common taunt facing pair was not found in the DOL state table")
+    table_pointers = read_global(dol, symbols, "ftData_CharacterStateTables")
+    character_tables = {address: (name, size) for name, (address, size) in symbols.items()
+                        if name.endswith("_Init_MotionStateTable")}
+    special_order = struct.unpack(">6I", read_global(dol, symbols, "ASID_AppealS"))
+    result = []
+    by_root = {source["root"]: source for source in normal_sources.values()}
+    for kind in sorted(allowed_kinds):
+        source = normal_sources[kind]
+        pointer = struct.unpack_from(">I", table_pointers, kind * 4)[0]
+        custom = []
+        if pointer:
+            if pointer not in character_tables:
+                raise MotionError(f"fighter {kind}: unknown sized character state table")
+            name, size = character_tables[pointer]
+            custom = [s for s in state_entries(dol.read(pointer, size), len(common), name, callbacks)
+                      if s["animation_callback"] is not None]
+        override = [s for s in custom if s["animation_callback"] != "ftFx_AppealS_Anim"]
+        selected = override if override else standard
+        if len(selected) != 2:
+            raise MotionError(f"fighter {kind}: taunt override has no facing pair")
+
+        def resolve(state: dict) -> tuple[dict, dict]:
+            animation_id = state["animation_id"]
+            if not 0 <= animation_id < len(source["motions"]):
+                raise MotionError(f"fighter {kind}: taunt animation outside ordinary table")
+            selected_source = source
+            motion = source["motions"][animation_id]
+            if not motion["size"] and source["root"] == "ftDataNana":
+                selected_source = by_root["ftDataPopo"]
+                motion = selected_source["motions"][animation_id]
+            return selected_source, motion
+
+        clips = {}
+
+        def clip_for(state: dict) -> dict | None:
+            clip_source, motion = resolve(state)
+            if not motion["size"]:
+                return None
+            key = (clip_source["kind"], motion["animation_id"])
+            if key not in clips:
+                metadata, tracks = read_figatree(clip_source["archives"][motion["offset"]], motion["symbol"])
+                clips[key] = {**motion, **metadata,
+                              "source_fighter_kind": clip_source["kind"],
+                              "source_fighter_archive": clip_source["filename"],
+                              "animation_file": clip_source["animation_file"],
+                              "effective_loop": metadata["tree_loop"] or motion["motion_loop"],
+                              "state_references": [],
+                              "script": script_graph_summary(clip_source["archive"],
+                                                             motion["script_offset"], script_sizes),
+                              "endpoint_check": endpoint_report(tracks, metadata["frames"])}
+                opcodes = set(clips[key]["script"].get("reachable_opcodes", []))
+                clips[key]["skeletal_only_omits"] = [label for relevant, label in (
+                    ({10}, "spawned visual effects"), ({11, 16}, "hitboxes and attack interaction"),
+                    ({17, 18, 38, 39}, "sound and voice commands"),
+                    ({19}, "command variables used by fighter/item callbacks"),
+                    ({31, 32, 33}, "model-part visibility changes"),
+                    ({40}, "texture/material animation frame changes"),
+                    ({41}, "additional part animation"),
+                    ({46, 47}, "color-overlay animation"),
+                ) if opcodes & relevant]
+            if state not in clips[key]["state_references"]:
+                clips[key]["state_references"].append(state)
+            return clips[key]
+
+        right = clip_for(selected[0])
+        if right is None:
+            raise MotionError(f"fighter {kind}: default taunt has no clip")
+        left = clip_for(selected[1])
+        left_state = selected[1] if left is not None else selected[0]
+        left = left if left is not None else right
+        facing = {}
+        for direction, state, clip in (("right", selected[0], right), ("left", left_state, left)):
+            facing[direction] = {"facing_direction": 1.0 if direction == "right" else -1.0,
+                                 "motion_state_id": state["motion_state_id"],
+                                 "animation_id": clip["animation_id"],
+                                 "source_fighter_kind": clip["source_fighter_kind"],
+                                 "left_archive_missing_fallback": direction == "left" and state is selected[0]}
+        special = [s for s in custom if s["animation_callback"] == "ftFx_AppealS_Anim"]
+        special_sequences = []
+        if special:
+            by_state = {s["motion_state_id"]: s for s in special}
+            if set(by_state) != set(special_order):
+                raise MotionError(f"fighter {kind}: special-taunt state order does not match ASID_AppealS")
+            for index, direction in enumerate(("right", "left")):
+                sequence = []
+                for state_id in special_order[index * 3:index * 3 + 3]:
+                    state = by_state[state_id]
+                    clip = clip_for(state)
+                    if clip is None:
+                        raise MotionError(f"fighter {kind}: special taunt part has no clip")
+                    sequence.append({"motion_state_id": state_id, "animation_id": clip["animation_id"],
+                                     "source_fighter_kind": clip["source_fighter_kind"], "frames": clip["frames"]})
+                special_sequences.append({"facing": direction, "parts": sequence,
+                                          "transition": "ftFx_AppealS_Anim advances on !ftAnim_IsFramesRemaining",
+                                          "scene_requirement": "Corneria or Venom stage eligibility, radio event and once-per-match logic"})
+        runtime_notes = []
+        if override:
+            if any(s["animation_callback"] == "ftCl_AppealS_Anim" for s in override):
+                runtime_notes.append({"requirement": "milk item spawned on left-thumb bone, animated and removed via command variables",
+                                      "source": "src/melee/ft/kinds/ftCLink/ftclinkappeals.c:ftCl_AppealS_Anim"})
+            if any(s["animation_callback"] == "ftDr_AppealS_Anim" for s in override):
+                runtime_notes.append({"requirement": "random vitamin/pill item spawned, moved and removed via command variables; deterministic export must set its choice",
+                                      "source": "src/melee/ft/kinds/ftDrMario/ftdrmarioappeals.c:ftDr_AppealS_Anim"})
+        if source["root"] == "ftDataKirby":
+            runtime_notes.append({"requirement": "standard taunt entry invokes copy-ability cleanup before selecting animation",
+                                  "source": "src/melee/ft/kinds/ftCommon/ftCo_AppealS.c:ftCo_800DEBD0"})
+        if source["root"] == "ftDataGanon":
+            runtime_notes.append({"requirement": "standard taunt entry creates an additional effect via lb_800119DC",
+                                  "source": "src/melee/ft/kinds/ftCommon/ftCo_AppealS.c:ftCo_800DEA28"})
+        if source["root"] == "ftDataNana":
+            runtime_notes.append({"requirement": "outside demo mode, missing Nana ordinary motion references resolve to Popo's same animation ID; pair with Popo/Nana costume mapping",
+                                  "source": "src/melee/ft/ftdata.c:ftData_80085FD4"})
+        result.append({"fighter_kind": kind, "fighter_root": source["root"],
+                       "fighter_archive": source["filename"], "animation_file": source["animation_file"],
+                       "role": "companion" if source["root"] == "ftDataNana" else "selectable_fighter_form",
+                       "standard_entry_source": "src/melee/ft/kinds/ftCommon/ftCo_AppealS.c:ftCo_800DEA28 / ftCo_800DEAE8",
+                       "standard_facing": facing,
+                       "standard_states": selected,
+                       "runtime_notes": runtime_notes,
+                       "special_sequences": special_sequences,
+                       "clips": list(clips.values())})
+    return result
+
+
 def inspect(files: Path, dol_path: Path, symbols_path: Path,
             config_path: Path = Path("config/GALE01/config.yml")) -> dict:
     dol_bytes = dol_path.read_bytes()
@@ -113,6 +298,7 @@ def inspect(files: Path, dol_path: Path, symbols_path: Path,
             or len(demo_counts) != len(names) or len(packed_names) != len(names) // 2):
         raise MotionError("inconsistent DOL fighter table sizes")
     fighter_roots = {}
+    normal_sources = {}
     normal_tables = []
     mario = []
     selection = re.compile(r"_(?:Appeal|AttackS4|Damage|Down|Passive)")
@@ -132,6 +318,9 @@ def inspect(files: Path, dol_path: Path, symbols_path: Path,
         instances = Archive.parse_packed(aj_bytes, aj_name)
         by_offset = dict(instances)
         motions = motion_entries(archive, root, 0xC, count)
+        normal_sources[kind] = {"kind": kind, "root": root, "filename": filename,
+                                "archive": archive, "animation_file": aj_name,
+                                "motions": motions, "archives": by_offset}
         references = set()
         nonempty = 0
         for motion in motions:
@@ -200,7 +389,9 @@ def inspect(files: Path, dol_path: Path, symbols_path: Path,
                             "motions": entries})
     if not results:
         raise MotionError("no results animation archives were found")
-    return {"format_version": 1,
+    taunts = taunt_catalog(dol, symbols, normal_sources,
+                           {r["fighter_kind"] for r in results}, script_sizes)
+    return {"format_version": 2,
             "dol_sha1": actual_hash, "revision_config": str(config_path),
             "evidence": "extracted asset structures plus original DOL tables; no rendered runtime validation",
             "results_variant_to_animation_id": RESULT_VARIANTS,
@@ -210,6 +401,9 @@ def inspect(files: Path, dol_path: Path, symbols_path: Path,
             "normal_fighter_tables": len(normal_tables),
             "normal_nonempty_motions_checked": sum(t['nonempty_motions_checked'] for t in normal_tables),
             "normal_tables": normal_tables, "results": results,
+            "taunt_fighter_tables": len(taunts),
+            "taunt_selectable_forms": sum(t["role"] == "selectable_fighter_form" for t in taunts),
+            "taunt_clip_entries": sum(len(t["clips"]) for t in taunts), "taunts": taunts,
             "mario_gameplay_examples": mario}
 
 
@@ -233,7 +427,9 @@ def main() -> None:
               f"{report['normal_fighter_tables']} fighter tables; "
               f"{report['results_nonempty_motions']} results clips across "
               f"{report['results_fighter_tables']} fighter tables in "
-              f"{report['results_archive_count']} results archives. Report: {args.output}")
+              f"{report['results_archive_count']} results archives; "
+              f"{report['taunt_clip_entries']} taunt clip entries across "
+              f"{report['taunt_selectable_forms']} selectable forms plus Nana. Report: {args.output}")
     else:
         print(output, end="")
 

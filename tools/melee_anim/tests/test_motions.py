@@ -3,7 +3,9 @@ import struct
 import unittest
 
 from tools.melee_anim.hsd import Archive, FormatError
-from tools.melee_anim.inspect_motions import motion_entries, read_exact_motion, script_summary
+from tools.melee_anim.inspect_motions import (
+    motion_entries, read_exact_motion, script_graph_summary, script_summary, state_entries,
+)
 from tools.melee_anim.motions import Cursor, MotionError, Track, endpoint_report, read_figatree
 
 
@@ -98,6 +100,32 @@ class PackedTrackTests(unittest.TestCase):
 
 
 class MotionLayoutTests(unittest.TestCase):
+    def test_state_ids_are_independent_of_animation_ids_and_callbacks(self):
+        raw = (struct.pack(">8I", 239, 3, 0, 0x80010000, 0, 0, 0, 0)
+               + struct.pack(">8I", 0xFFFFFFFF, 4, 0, 0, 0, 0, 0, 0))
+        states = state_entries(raw, 341, "special_table", {0x80010000: "ftDr_AppealS_Anim"})
+        self.assertEqual(states[0]["motion_state_id"], 341)
+        self.assertEqual(states[0]["animation_id"], 239)
+        self.assertEqual(states[0]["animation_callback"], "ftDr_AppealS_Anim")
+        self.assertEqual(states[1]["animation_id"], -1)
+        self.assertIsNone(states[1]["animation_callback"])
+        with self.assertRaises(MotionError):
+            state_entries(raw[:-1], 0, "truncated", {})
+
+    def test_bounded_static_calls_and_gotos_include_subroutine_behavior(self):
+        data = bytearray(52)
+        struct.pack_into(">5I", data, 0, 0x14000000, 24, 0x0800000A, 0x1C000000, 36)
+        struct.pack_into(">2I", data, 24, 0xA2000803, 0x18000000)
+        # Self-goto records static reachability without executing forever.
+        struct.pack_into(">3I", data, 36, 0x7C0FFFFF, 0x1C000000, 36)
+        graph = script_graph_summary(Archive(dat(data, (4, 16, 44))), 0, bytes([1] * 49))
+        self.assertEqual(graph["reachable_opcodes"], [2, 5, 6, 7, 31, 40])
+        self.assertEqual(len(graph["reachable_blocks"]), 2)
+
+    def test_command_variable_bit_fields(self):
+        summary = script_summary(Archive(dat(struct.pack(">2I", 0x4D000002, 0))), 0, bytes([1] * 49))
+        self.assertEqual(summary["commands"][0]["command_variable"], {"index": 1, "value": 2})
+
     def test_visibility_and_texture_command_parameters(self):
         raw = struct.pack(">4I", 0x7C0FFFFF, 0xA2000803, 0, 0)
         summary = script_summary(Archive(dat(raw)), 0, bytes([1] * 49))
