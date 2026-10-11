@@ -135,6 +135,26 @@ class DownloadSizeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.catalog.export(**{**options, 'cycle': 'invalid'})
 
+    def test_dirty_loop_uses_its_own_interval_names_and_clean_aggregate_fallback(self):
+        for clip in self.clips:
+            clip.update(action_key='results-clap_source', fps=50,
+                        minimum_cycle={'start': 0, 'length': 1, 'full_length': 2})
+        self.clips[0]['dirty_cycle'] = {'start': 1, 'length': 1, 'full_length': 2, 'dirty': True}
+        options = dict(character='synthetic', action='results-clap_source', size=128, cycle='dirty')
+        path, name, _ = self.catalog.export(**options, kind='png')
+        self.assertIn('-dirty-loop-frame-0001-128px.png', name)
+        with Image.open(path) as im:
+            self.assertEqual(im.getpixel((0, 0)), (255, 0, 0, 255))
+        path, name, _ = self.catalog.export(**options, scope='all')
+        self.assertIn('-dirty-loop-128px.zip', name)
+        with ZipFile(path) as archive:
+            self.assertTrue(any('dirty-loop' in n for n in archive.namelist()))
+            self.assertTrue(any('minimum-cycle' in n for n in archive.namelist()))
+            for n in archive.namelist():
+                with Image.open(BytesIO(archive.read(n))) as im:
+                    self.assertEqual(im.info['loop'], 0)
+                    self.assertEqual(im.info['duration'], 20)
+
 
 if __name__ == '__main__':
     unittest.main()

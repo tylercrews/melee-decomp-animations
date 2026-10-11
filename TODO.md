@@ -4,6 +4,12 @@ Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 2
 
 ## Current workflow and remaining work
 
+- [x] Preserve approved minimums while exposing rejected near-repeat candidates through a separate Minimum loop (dirty/jittery) toggle.
+- [x] Add a clickable review list for all 11 experimental families / 54 actual costumes, with failed-check explanations.
+- [x] Apply dirty intervals to GIF/PNG/color/aggregate exports and inline GIF viewing, keeping timing and source-frame mapping intact.
+- [x] Verify all 54 dirty costume GIF durations/loops and exact all-color still bytes, plus sized inline previews; 75 Python tests and Node controls pass.
+- [ ] Review the experimental loops with the user and record which dirty candidates they consider usable; do not promote them automatically.
+
 - [x] Investigate repeated claps across all 26 character families and every actual costume.
 - [x] Add opt-in Minimum cycle playback/download mode, keeping authored loops default.
 - [x] Approve shared edited intervals: Luigi 20 frames / 0.40s, Kirby 34 / 0.68s, Link 12 / 0.24s, at 50fps.

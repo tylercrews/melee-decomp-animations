@@ -51,9 +51,9 @@ def resize_gif(data, size):
     return out.getvalue()
 
 
-def cycle_gif(root, clip, size):
+def cycle_gif(root, clip, size, cycle=None):
     """Encode the chosen PNG interval at the original FPS, without endpoint duplication."""
-    cycle = clip['minimum_cycle']
+    cycle = clip['minimum_cycle'] if cycle is None else cycle
     with Image.open(root/clip['gif']) as source:
         palette = source.copy()
     frames = []
@@ -77,7 +77,7 @@ class DownloadCatalog:
         self.cache.mkdir(parents=True, exist_ok=True)
 
     def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full'):
-        if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum'):
+        if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum', 'dirty'):
             raise ValueError('Unsupported download option')
         if scope == 'all' and kind != 'gif':
             raise ValueError('All-character export is only available for GIFs')
@@ -86,14 +86,17 @@ class DownloadCatalog:
                  (scope == 'colors' or c['costume_id'] == costume)]
         if not clips:
             raise ValueError('Unknown character, animation, or costume')
-        def minimum(clip):
-            return clip.get('minimum_cycle') if cycle == 'minimum' and clip['action_key'] == 'results-clap_source' else None
-        if kind == 'png' and any(not 0 <= frame < (minimum(c)['length'] if minimum(c) else len(c['frames'])) for c in clips):
+        def selected_cycle(clip):
+            if clip['action_key'] != 'results-clap_source' or cycle == 'full':
+                return None
+            return (clip.get('dirty_cycle') if cycle == 'dirty' else None) or clip.get('minimum_cycle')
+        if kind == 'png' and any(not 0 <= frame < (selected_cycle(c)['length'] if selected_cycle(c) else len(c['frames'])) for c in clips):
             raise ValueError('Frame index is outside this animation')
         entries = []
         for clip in clips:
-            short = minimum(clip)
-            marked_name = clip['download_name'].replace('.gif', '-minimum-cycle.gif') if short else clip['download_name']
+            short = selected_cycle(clip)
+            suffix = '-dirty-loop' if short and short.get('dirty') else '-minimum-cycle'
+            marked_name = clip['download_name'].replace('.gif', suffix+'.gif') if short else clip['download_name']
             if kind == 'gif':
                 source = self.root/clip['gif']
                 name = sized_name(marked_name, size)
@@ -113,7 +116,7 @@ class DownloadCatalog:
             if not target.is_file():
                 with Image.open(BytesIO(data)) as original:
                     same_size = original.size == (size, size)
-                resized = cycle_gif(self.root, clip, size) if short and kind == 'gif' else (
+                resized = cycle_gif(self.root, clip, size, short) if short and kind == 'gif' else (
                     data if same_size else (resize_gif if kind == 'gif' else resize_png)(data, size))
                 temporary = target.with_suffix(target.suffix+'.tmp')
                 temporary.write_bytes(resized)
@@ -135,6 +138,6 @@ class DownloadCatalog:
             name += f'-frame-{frame+1:04d}'
         if scope == 'colors':
             name += '-all-colors'
-        if any(minimum(c) for c in clips):
-            name += '-minimum-cycle'
+        if any(selected_cycle(c) for c in clips):
+            name += '-dirty-loop' if cycle == 'dirty' else '-minimum-cycle'
         return bundle, f'{name}-{size}px.zip', 'application/zip'

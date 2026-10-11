@@ -578,3 +578,27 @@ The player uses the interval for playback/scrubbing and displays timeline count,
 Verification: 72 Python tests and Node controls tests passed, including rejection of held/drifting/one-shot or incompatible-costume false repeats, shortened bounds and wrapping, GIF/PNG interval identity, and full-loop fallback. All four Luigi, six Kirby, and five Link costumes were decoded at all four GIF sizes with exact 400/680/240ms looping durations. First-frame all-color 256px PNG downloads match original master bytes. Last-two/first-two closing contact sheets were visually inspected for default costumes. No native browser click test, game-reference comparison, or perfect-loop claim is made.
 
 After changing masters run `python -m tools.melee_anim.cycles`, regenerate `preview_gallery`, and restart `player_server`.
+
+## 17. Dirty/jittery minimum-loop review
+
+The user asked to inspect rejected candidates rather than exclude them. The player now has a separate **Minimum loop (dirty/jittery)** toggle and a clickable **Dirty loop candidates to review** list. It displays the candidate's frame count/duration and specific failed strict checks. Approved minimums remain unchanged, and both edited modes are opt-in.
+
+| Character | Dirty frames at 50fps | Original PNG interval, zero-based | Why it failed strict checks |
+| --- | ---: | --- | --- |
+| Captain Falcon | 17 | `[24,41)` | Pose/repeat variation; wrap mismatch |
+| Dr. Mario | 20 | `[63,83)` | Pose/repeat variation |
+| Falco | 21 | `[4,25)` | Pose/repeat variation; wrap mismatch / large closing step |
+| Fox | 25 | `[6,31)` | Pose/repeat variation; wrap mismatch / large closing step |
+| Ganondorf | 13 | `[27,40)` | Pose/repeat variation; wrap mismatch |
+| Jigglypuff | 33 | `[184,217)` | Weak repetition / pose variation |
+| Marth | 12 | `[30,42)` | Pose/repeat variation |
+| Peach | 17 | `[8,25)` | Pose/repeat variation; wrap mismatch / large closing step |
+| Roy | 12 | `[20,32)` | Pose/repeat variation; wrap mismatch |
+| Young Link | 12 | `[19,31)` | Pose/repeat variation; wrap mismatch / large closing step |
+| Zelda | 17 | `[8,25)` | Pose/repeat variation; wrap mismatch / large closing step |
+
+These 11 families cover 54 actual costumes. The descriptions are analysis failures, not claims that every candidate has an obvious visible twitch. [find_dirty_cycle](tools/melee_anim/cycles.py) uses the earliest relaxed local recurrence minimum across costumes (mean normalized error <=1.3, worst <=1.6, mean recurrence improvement >=10%) and chooses its least-disruptive common seam phase. Strict failures are retained with metrics in ignored `minimum-cycles.json` under `dirty_characters`. Constant/gradual samples and duplicates of approved cycles remain excluded. Master/manifest fingerprints protect these intervals as for approved modes.
+
+Preview, scrubbing, exact paused PNGs, every GIF download size/color bundle, and inline GIF viewing respect dirty mode. Filenames carry `dirty-loop`. Aggregate dirty GIF export prefers the experimental interval, otherwise an approved minimum, otherwise the full clip; individual entries keep their own mode labels. No blending, speed change, endpoint duplication, or automatic promotion to approved status is introduced.
+
+Verification passed: 75 Python tests and Node controls tests, including rejected-repeat labeling, dirty/full/approved interval separation, list navigation, loop wrapping, filenames, and exact source indices. All 54 dirty costume GIFs were decoded at 256px with exact lengths*20ms looping durations, and first-frame all-color PNGs match original master bytes. Captain Falcon inline dirty GIFs were also checked at 128/512/1024px. Last/first/next/middle default-costume contact sheets were inspected for every candidate. The user can now judge these repeats in the local player; no game-reference or seamless-loop claim is made.

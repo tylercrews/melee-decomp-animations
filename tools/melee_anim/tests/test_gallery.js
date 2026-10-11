@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['dirtycycle','dirtylist','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -123,6 +123,25 @@ elements.character.value='mario';elements.character.onchange();
 elements.action.value='taunt_source';elements.action.onchange();
 assert.equal(elements.minimumcycle.disabled,true);
 assert.equal(elements.minimumcycle.checked,false);
+assert.equal(elements.dirtylist.options.length,11);
+for (const button of elements.dirtylist.options) {
+  button.onclick();
+  assert.equal(elements.action.value,'results-clap_source');
+  assert.equal(elements.dirtycycle.checked,true);
+  assert.equal(elements.minimumcycle.checked,false);
+  const short=data('clips[current].dirty_cycle');
+  assert.equal(data('frameCount()'),short.length);
+  assert.equal(elements.frame.src,data(`clips[current].frames[${short.start}]`));
+  assert.equal(new URL(elements.gif.href).searchParams.get('cycle'),'dirty');
+  assert.match(elements.gif.download,/-dirty-loop-256px.gif$/);
+  assert(elements.cyclehint.textContent.includes(short.failed_checks[0]));
+  elements.scrub.value=String(short.length-1);elements.scrub.oninput();
+  assert.equal(new URL(elements.still.href).searchParams.get('frame'),String(short.length-1));
+  elements.play.onclick();context.nextFrame(20);
+  assert.equal(data('index'),0);
+  elements.dirtycycle.checked=false;elements.dirtycycle.onchange();
+  assert.equal(elements.gif.href,data('clips[current].gif'));
+}
 // Served pages use their own origin, including a user-selected server port.
 const servedElements=Object.fromEntries(Object.keys(elements).map(id=>[id,
   {value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));

@@ -45,7 +45,9 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <button id="play">Pause</button><button id="restart">Restart</button>
 <label><input id="loop" type="checkbox"> Repeat preview</label>
 <label><input id="minimumcycle" type="checkbox" disabled> Minimum cycle</label>
+<label><input id="dirtycycle" type="checkbox" disabled> Minimum loop (dirty/jittery)</label>
 <small id="cyclehint"></small></div>
+<details><summary>Dirty loop candidates to review</summary><div class="controls" id="dirtylist"></div></details>
 <div class="stage"><img id="frame" alt="Animated character costume preview"></div>
 <div class="timeline"><input id="scrub" type="range" min="0" value="0" step="1" aria-label="Animation frame"><span id="time"></span></div>
 <div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
@@ -71,7 +73,8 @@ play=document.getElementById('play'), restart=document.getElementById('restart')
 scrub=document.getElementById('scrub'), clock=document.getElementById('time'), gif=document.getElementById('gif'),
 archive=document.getElementById('animationzip'), open=document.getElementById('open'),
 downloadsize=document.getElementById('downloadsize'), allzip=document.getElementById('allzip'),
-minimumcycle=document.getElementById('minimumcycle'), cyclehint=document.getElementById('cyclehint');
+minimumcycle=document.getElementById('minimumcycle'), dirtycycle=document.getElementById('dirtycycle'),
+cyclehint=document.getElementById('cyclehint');
 downloadsize.value='256';
 const exportBase=location.protocol==='http:'?'':'http://127.0.0.1:8765';
 document.getElementById('servicehint').hidden=location.protocol==='http:';
@@ -86,19 +89,22 @@ list.forEach(a=>{let o=document.createElement('option');o.value=a.key;o.textCont
 action.value=list.some(a=>a.key===old)?old:list[0].key}
 colors();actions();
 allzip.textContent=`Download all ${clips.length} GIFs`;
-function useMinimum(){return current>=0&&minimumcycle.checked&&Boolean(clips[current].minimum_cycle)}
-function frameCount(){let c=clips[current];return useMinimum()?c.minimum_cycle.length:c.frames.length}
-function sourceIndex(){return index+(useMinimum()?clips[current].minimum_cycle.start:0)}
-function markedName(name){return useMinimum()?name.replace(/(\.[^.]+)$/,'-minimum-cycle$1'):name}
+function cycleMode(){let c=clips[current];return dirtycycle.checked&&c.dirty_cycle?'dirty':minimumcycle.checked&&c.minimum_cycle?'minimum':'full'}
+function activeCycle(){let c=clips[current];return cycleMode()==='dirty'?c.dirty_cycle:cycleMode()==='minimum'?c.minimum_cycle:null}
+function useMinimum(){return current>=0&&Boolean(activeCycle())}
+function frameCount(){let c=clips[current];let short=activeCycle();return short?short.length:c.frames.length}
+function sourceIndex(){let short=activeCycle();return index+(short?short.start:0)}
+function markedName(name){return useMinimum()?name.replace(/(\.[^.]+)$/,`${cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle'}$1`):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
-function updateCycleInfo(){if(current<0)return;let c=clips[current];let short=c.minimum_cycle;minimumcycle.disabled=!short;
-if(!short)minimumcycle.checked=false;
-cyclehint.textContent=short?`${short.length} frames / ${(short.length/c.fps).toFixed(2)}s instead of ${c.frames.length} frames. Edited repeat; subtle motion may differ.`:
+function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
+if(!c.minimum_cycle)minimumcycle.checked=false;if(!c.dirty_cycle)dirtycycle.checked=false;
+let short=activeCycle()||c.minimum_cycle||c.dirty_cycle;
+cyclehint.textContent=short?`${short.length} frames / ${(short.length/c.fps).toFixed(2)}s instead of ${c.frames.length} frames. ${short.dirty?'Dirty review: '+short.failed_checks.join('; '):'Edited repeat; subtle motion may differ.'}`:
 (c.action_key==='results-clap_source'?'No shorter repeat passed the checks.':'Minimum cycle is available for repeating claps.');
 scrub.max=frameCount()-1;
-document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frames at ${c.fps} fps / ${(frameCount()/c.fps).toFixed(2)}s / ${useMinimum()?'minimum cycle (edited loop)':c.authored_loop?'full authored loop':'one-shot action'}`}
+document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frames at ${c.fps} fps / ${(frameCount()/c.fps).toFixed(2)}s / ${cycleMode()==='dirty'?'minimum loop (dirty/jittery)':useMinimum()?'minimum cycle (edited loop)':c.authored_loop?'full authored loop':'one-shot action'}`}
 function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
-costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:useMinimum()?'minimum':'full'});return `${exportBase}/export?${query}`}
+costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:cycleMode()});return `${exportBase}/export?${query}`}
 function updateDownloads(){if(current<0)return;let c=clips[current];let a=animations.find(a=>a.key===c.action_key&&a.character===c.character);
 let original=downloadsize.value==='256'&&!useMinimum();
 gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(markedName(c.download_name));
@@ -128,13 +134,19 @@ updateCycleInfo();
 c.frames.forEach(src=>{let image=new Image();image.src=src});show()}
 character.onchange=()=>{colors();actions();select()};action.onchange=select;costume.onchange=select;
 downloadsize.onchange=updateDownloads;
-minimumcycle.onchange=()=>{if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();show()};
+function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();show()}
+minimumcycle.onchange=()=>{if(minimumcycle.checked)dirtycycle.checked=false;changeCycle()};
+dirtycycle.onchange=()=>{if(dirtycycle.checked)minimumcycle.checked=false;changeCycle()};
 play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
 restart.onclick=()=>{if(current<0)return;index=0;last=performance.now();carry=0;playing=true;play.textContent='Pause';show()};
 scrub.oninput=()=>{if(current<0)return;index=Number(scrub.value);playing=false;play.textContent='Play';show()};
 function tick(now){if(current>=0&&playing){let c=clips[current];carry+=Math.min(now-last,250);let step=1000/c.fps;
 while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.checked)index=0;else{playing=false;play.textContent='Play';break}}show()}
 last=now;requestAnimationFrame(tick)}
+characters.forEach(ch=>{let c=clips.find(c=>c.character===ch.slug&&c.dirty_cycle);if(!c)return;
+let b=document.createElement('button');b.textContent=`${ch.label} (${c.dirty_cycle.length} frames)`;
+b.onclick=()=>{character.value=ch.slug;colors();actions();action.value='results-clap_source';minimumcycle.checked=false;dirtycycle.checked=true;select()};
+document.getElementById('dirtylist').append(b)});
 select();requestAnimationFrame(tick);
 </script></html>'''
 
