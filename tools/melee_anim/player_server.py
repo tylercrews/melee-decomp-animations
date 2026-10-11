@@ -33,7 +33,7 @@ def make_server(root, port=8765, catalog=None):
             url = urlsplit(self.path)
             if url.path == '/_health':
                 data = json.dumps({'service': 'melee-animation-downloads', 'sizes': SIZES,
-                                   'clips': len(catalog.clips)}).encode()
+                                   'clips': len(catalog.clips), 'root': str(root)}).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(data)))

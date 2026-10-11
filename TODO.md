@@ -4,6 +4,10 @@ Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 2
 
 ## Current workflow and remaining work
 
+- [x] Add root README with Windows/Python/package requirements, root ISO placement and revision, extraction/preparation steps, UI launch, manual commands and troubleshooting.
+- [x] Add `Import Melee Iso.cmd` and `Open Melee Decomp Animation UI.cmd`, backed by a Python launcher and pinned requirements; keep assets/cache/environment/logs ignored.
+- [x] Check import orchestration order, fail-fast incompatible/missing ISO, local-only package setup, extraction-only behavior, server identity/root checks and reuse/startup failures with synthetic tests; exercise both `.cmd` files and real hidden server startup/reuse without opening a browser or reinstalling dependencies.
+
 - [x] Fix disabled local-file rotation sliders: keep controls enabled, hand off Apply to the local player with angle/character/action/costume/mode/frame/playback/repeat/size preserved, and keep Reset usable locally.
 - [x] Remove "Dirty loop candidates to review" section and its button-generation code; preserve the dirty-loop radio, candidate intervals and exports.
 
@@ -268,7 +272,7 @@ Done when: both isolated character assets and a composed results scene can be ex
 - [x] Add offline character/action/costume preview, scrubbing, GIF saving, and selected/all-costume paused PNG downloads.
 - [ ] Add saved export presets and production settings.
 - [ ] Consider a small GUI with character/action/costume selection and batch progress.
-- [ ] Package setup instructions and reference examples for Windows; document any optional WSL/native helper requirements.
+- [x] Package current Windows setup instructions and command shortcuts in README; no WSL/native compiler is needed for the prototype. Optional Blender/FFmpeg setup remains documented separately for future backends/MP4.
 - [ ] Maintain source and dependency attribution for reused code, and keep fixture tests independent of checked-in original game assets.
 - [ ] Refresh `INVESTIGATION.md`, `PLAN.md`, and `AGENTS.md` when evidence or architecture changes.
 

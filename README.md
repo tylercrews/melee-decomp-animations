@@ -1,0 +1,104 @@
+# Melee Decomp Animation UI
+
+Preview Super Smash Bros. Melee character animations and download GIFs or paused-frame PNGs in every actual costume color. The player includes clapping, taunts, three victory animations and their wait animations, X/Y/Z viewing angles, and 128/256/512/1024px downloads. Zelda and Sheik have separate entries; Ice Climbers include both characters.
+
+This is a Windows prototype built on the Melee decompilation. Rendering, lighting and game effects are approximate. MP4 export is future work.
+
+## 1. Download what you need
+
+- Download and extract this entire repository, or clone it with Git. Keep its folders together and run it from the extracted folder, not inside a ZIP.
+- Install **64-bit Python 3.13** from [Python's Windows downloads](https://www.python.org/downloads/windows/). Choose a **Python 3.13 Windows installer (64-bit)** and enable **Add Python to PATH**. The current pinned packages support Python 3.10–3.13; avoid choosing a newer Python for this setup. [NumPy compatibility](https://numpy.org/doc/stable/release/2.2.4-notes.html).
+- Have your own compatible Melee game dump. Game files are not included in the repository.
+- Use a normal browser such as Edge, Chrome or Firefox.
+
+The import launcher installs **NumPy 2.2.4** and **Pillow 11.1.0** into this folder's `.venv` if the chosen Python does not already have those exact versions. Internet access is needed for that first package installation. Package versions are pinned in [requirements.txt](tools/melee_anim/requirements.txt); see [NumPy](https://pypi.org/project/numpy/2.2.4/) and [Pillow](https://pypi.org/project/pillow/11.1.0/).
+
+Blender, Dolphin, FFmpeg, Node and a game compiler are **not required for the current UI or GIF/PNG exports**. Windows supplies the OpenGL rasterizer used by the current renderer. Node is only needed for developer UI tests. Leave enough free disk space for the ISO, extracted files, tens of thousands of PNG frames and download bundles; these are generated locally.
+
+## 2. Put the ISO beside this README
+
+Name the file **`melee.iso`** and put it in the root folder:
+
+```text
+melee-decomp-animations/
+    README.md
+    Import Melee Iso.cmd
+    Open Melee Decomp Animation UI.cmd
+    melee.iso                         <-- your game dump goes here
+    tools/
+    src/
+    config/
+```
+
+Turn on **File Explorer → View → Show → File name extensions** so you can check the actual name is `melee.iso`, not `melee.iso.iso`.
+
+The current tables require the **GALE01 NTSC-U revision 2 / Melee 1.02** executable, whose SHA-1 is `08e0bf20134dfcb260699671004527b2d6bb1a45`. The importer checks the executable before extraction and rejects incompatible images. Use a raw ISO/GCM image; compressed RVZ/GCZ/NKit images are not supported. Renaming a compressed image to `.iso` does not convert it.
+
+The ISO and extracted/rendered assets are ignored by Git. They remain on your computer.
+
+## 3. Double-click “Import Melee Iso”
+
+Open **[Import Melee Iso.cmd](Import%20Melee%20Iso.cmd)** from File Explorer. A command window shows progress and any errors. There is no separate extraction app to open.
+
+The launcher:
+
+1. Checks `melee.iso` and extracts it into `orig/GALE01/files` and `orig/GALE01/sys`.
+2. Prepares the Python packages when needed.
+3. Builds the character, costume and animation catalogs.
+4. Renders the 984 original animation/costume previews and the 123 synchronized clapping previews.
+5. Builds the HTML player, GIF/PNG download bundles and verification report.
+
+The first preparation takes time. Keep the progress window open until **“Import complete”** appears. If a step fails, read the error above it. Run the same launcher again after fixing the issue; extraction verifies existing files and rendering resumes completed jobs. Different existing game files are refused rather than overwritten automatically.
+
+To extract files only, open PowerShell in this folder and run:
+
+```powershell
+& '.\Import Melee Iso.cmd' --extract-only
+```
+
+Extraction alone does not create the UI; run the full import afterward.
+
+## 4. Double-click “Open Melee Decomp Animation UI”
+
+Open **[Open Melee Decomp Animation UI.cmd](Open%20Melee%20Decomp%20Animation%20UI.cmd)**. It starts the local player quietly, or reuses the running player for this repository, and opens your default browser at:
+
+**[http://127.0.0.1:8765/player.html](http://127.0.0.1:8765/player.html)**
+
+Use this launcher whenever you want the UI. It does not reimport or rerender the whole collection. Its command window can close after the browser opens; the background server keeps running until stopped or Windows shuts down. A later launch after a restart starts it again.
+
+Select a character, animation and costume. Pause or scrub to download a still. Choose a download size and save one costume or all colors. Clapping has exclusive full, minimum, dirty/jittery and 0.84-second sync modes. Adjust the viewing-angle sliders and click **Apply**; a new angle needs rendering and is then cached. **Reset** returns to the original view.
+
+The generated HTML is `build/melee_anim/preview/player.html`. Opening that file directly supports the original previews; applying a rotation opens the local player with your selection preserved. The HTTP player provides all on-demand rotated/resized exports.
+
+## Troubleshooting and manual commands
+
+- **Python was not found:** install 64-bit Python 3.13 with PATH enabled, then retry the launcher. It searches `.venv`, then `py -3.13`, then `python`.
+- **Unsupported Python:** use Python 3.13. If an old `.venv` was made with another version, rename that folder before running the import launcher again.
+- **Packages fail to install:** check the internet connection and the error in the progress window. You can install them manually with the commands below.
+- **ISO not found / wrong revision:** check the name and location in step 2. The importer prints why a game image was rejected.
+- **Animations not prepared:** run the full import, not just `--extract-only`.
+- **UI fails to start:** check `build/melee_anim/player-server.log`. If port 8765 belongs to another program or another checkout, use `& '.\Open Melee Decomp Animation UI.cmd' --port 8766` in PowerShell.
+- **Controls look outdated:** refresh the browser with Ctrl+Shift+R.
+
+To use the terminal instead of double-clicking, open the repository folder in File Explorer, type `powershell` in its address bar and press Enter. These commands create a local environment and install the packages:
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --only-binary=:all: -r tools/melee_anim/requirements.txt
+.\.venv\Scripts\python.exe -m tools.melee_anim.launcher import
+.\.venv\Scripts\python.exe -m tools.melee_anim.launcher open
+```
+
+No environment activation or PowerShell execution-policy changes are required. You can pass another ISO path to import: `& '.\Import Melee Iso.cmd' 'D:\Game Dumps\Melee.iso'`.
+
+For a foreground server that you can stop with **Ctrl+C**, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m tools.melee_anim.player_server --port 8766
+```
+
+Then open `http://127.0.0.1:8766/player.html`. To stop a background server started by the shortcut, use its printed PID (also visible as the repository's `tools.melee_anim.player_server` command in Task Manager). Closing a browser tab alone does not stop it.
+
+If import reused matching packages already installed in your regular Python and did not create `.venv`, use `py -3.13` in place of `.\.venv\Scripts\python.exe` in the foreground command.
+
+Local assets, masters, caches, bundles and server logs remain under ignored `orig/`, `build/` and `.venv/`. Development notes and limitations are in [INVESTIGATION.md](INVESTIGATION.md), [PLAN.md](PLAN.md), [TODO.md](TODO.md) and [AGENTS.md](AGENTS.md).

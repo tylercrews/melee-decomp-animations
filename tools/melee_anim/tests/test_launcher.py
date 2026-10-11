@@ -1,0 +1,117 @@
+from io import BytesIO
+import json
+from pathlib import Path
+import shutil
+import unittest
+from unittest.mock import Mock, patch
+from urllib.error import URLError
+import uuid
+
+from tools.melee_anim import launcher
+
+
+class LauncherTests(unittest.TestCase):
+    def setUp(self):
+        self.build = Path('build/melee_anim_tests').resolve()
+        self.repo = self.build/f'launcher space {uuid.uuid4().hex}'
+        self.repo.mkdir(parents=True)
+        self.iso = self.repo/'my game.iso'
+        self.iso.write_bytes(b'synthetic placeholder, not game assets')
+
+    def tearDown(self):
+        target = self.repo.resolve()
+        if not target.is_relative_to(self.build) or not target.name.startswith('launcher space '):
+            raise RuntimeError('Unexpected cleanup path')
+        shutil.rmtree(target)
+
+    def prepare_ui(self):
+        root = self.repo/'build/melee_anim/preview'
+        root.mkdir(parents=True)
+        (root/'player.html').write_text('synthetic')
+        (root.parent/'motions.json').write_text('{}')
+        return root
+
+    def test_import_checks_iso_before_packages_and_stops_on_failure(self):
+        with patch.object(launcher, 'run_step', side_effect=RuntimeError('incompatible image')) as run, patch.object(launcher, 'environment_python') as environment:
+            with self.assertRaisesRegex(RuntimeError, 'incompatible'):
+                launcher.import_iso(self.repo, self.iso)
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.args[0][-1], str(self.iso))
+            environment.assert_not_called()
+        with patch.object(launcher, 'run_step') as run, patch.object(launcher, 'environment_python') as environment:
+            with self.assertRaisesRegex(ValueError, 'ISO not found'):
+                launcher.import_iso(self.repo, self.repo/'missing.iso')
+            run.assert_not_called(); environment.assert_not_called()
+
+    def test_import_runs_existing_pipeline_in_order_and_extract_only_never_installs(self):
+        with patch.object(launcher, 'run_step') as run, patch.object(launcher, 'environment_python', return_value='venv python'):
+            launcher.import_iso(self.repo, self.iso, jobs=3)
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual([c[2].rsplit('.', 1)[-1] for c in commands],
+                             ['extract_iso', 'inspect_motions', 'inspect_models', 'catalog', 'roster_batch',
+                              'cycles', 'sync_claps', 'preview_gallery', 'verify_previews'])
+            self.assertTrue(all(call.args[1] == self.repo for call in run.call_args_list))
+            self.assertEqual(commands[0][-1], str(self.iso)); self.assertEqual(commands[1][0], 'venv python')
+            self.assertIn('--resume', commands[4]); self.assertEqual(commands[4][-1], '3')
+            self.assertIn('--resume', commands[6]); self.assertIn('--require-all', commands[7])
+        with patch.object(launcher, 'run_step') as run, patch.object(launcher, 'environment_python') as environment:
+            launcher.import_iso(self.repo, self.iso, extract_only=True)
+            self.assertEqual(run.call_count, 1); environment.assert_not_called()
+
+    def test_environment_reuses_ready_packages_and_installs_only_locally(self):
+        with patch.object(launcher, 'packages_ready', return_value=True), patch.object(launcher, 'run_step') as run:
+            self.assertEqual(launcher.environment_python(self.repo), launcher.sys.executable)
+            run.assert_not_called()
+        with patch.object(launcher, 'packages_ready', return_value=False), patch.object(launcher, 'run_step') as run:
+            executable = launcher.environment_python(self.repo)
+            self.assertEqual(executable, str(self.repo/'.venv/Scripts/python.exe'))
+            create, install = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(create[-1], str(self.repo/'.venv'))
+            self.assertEqual(install[:4], [executable, '-m', 'pip', 'install'])
+            self.assertIn('--only-binary=:all:', install)
+            self.assertEqual(install[-1], str(self.repo/'tools/melee_anim/requirements.txt'))
+
+    def test_server_identity_and_repository_check(self):
+        root = self.repo/'build/melee_anim/preview'
+        def response(service='melee-animation-downloads', path=None):
+            return BytesIO(json.dumps({'service': service, 'root': str(root) if path is None else path}).encode())
+        with patch.object(launcher, 'urlopen', return_value=response()):
+            self.assertTrue(launcher.server_status(8765, root))
+        with patch.object(launcher, 'urlopen', side_effect=URLError('not running')):
+            self.assertFalse(launcher.server_status(8765, root))
+        for data in (response(service='other'), response(path=str(self.repo/'other')), BytesIO(b'not json'), BytesIO(b'[]')):
+            with patch.object(launcher, 'urlopen', return_value=data):
+                with self.assertRaises(ValueError):
+                    launcher.server_status(8765, root)
+
+    def test_open_reuses_server_without_installing_or_spawning(self):
+        self.prepare_ui()
+        with patch.object(launcher, 'server_status', return_value=True), patch.object(launcher.subprocess, 'Popen') as spawn, patch.object(launcher.webbrowser, 'open') as browser:
+            self.assertEqual(launcher.open_ui(self.repo, 'python', port=8766), 'http://127.0.0.1:8766/player.html')
+            browser.assert_called_once(); spawn.assert_not_called()
+            launcher.open_ui(self.repo, 'python', port=8766, browser=False)
+            self.assertEqual(browser.call_count, 1)
+
+    def test_open_starts_hidden_child_with_spaced_paths_and_reports_failed_start(self):
+        root = self.prepare_ui()
+        child = Mock(pid=123)
+        child.poll.return_value = None
+        with patch.object(launcher, 'server_status', side_effect=[False, False, True]), patch.object(launcher.subprocess, 'Popen', return_value=child) as spawn, patch.object(launcher.time, 'sleep'), patch.object(launcher.webbrowser, 'open'):
+            launcher.open_ui(self.repo, 'python with spaces', browser=False)
+            args, kwargs = spawn.call_args
+            self.assertEqual(args[0][0], 'python with spaces'); self.assertIn(str(root), args[0])
+            self.assertEqual(kwargs['cwd'], self.repo); self.assertEqual(kwargs['stdin'], launcher.subprocess.DEVNULL)
+            if launcher.os.name == 'nt':
+                self.assertEqual(kwargs['creationflags'], launcher.subprocess.CREATE_NO_WINDOW)
+            child.terminate.assert_not_called()
+        child.poll.return_value = 1
+        with patch.object(launcher, 'server_status', return_value=False), patch.object(launcher.subprocess, 'Popen', return_value=child), patch.object(launcher.webbrowser, 'open') as browser:
+            with self.assertRaisesRegex(RuntimeError, 'Player did not start'):
+                launcher.open_ui(self.repo, 'python')
+            browser.assert_not_called()
+
+    def test_unprepared_ui_fails_without_spawning(self):
+        with patch.object(launcher.subprocess, 'Popen') as spawn:
+            with self.assertRaisesRegex(ValueError, 'not prepared'):
+                launcher.open_ui(self.repo, 'python')
+            spawn.assert_not_called()
