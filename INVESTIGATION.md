@@ -581,6 +581,8 @@ After changing masters run `python -m tools.melee_anim.cycles`, regenerate `prev
 
 ## 17. Dirty/jittery minimum-loop review
 
+Subsequent synchronization feasibility is recorded in section 18; it is a proposal, not an implemented export mode.
+
 The user asked to inspect rejected candidates rather than exclude them. The player now has a separate **Minimum loop (dirty/jittery)** toggle and a clickable **Dirty loop candidates to review** list. It displays the candidate's frame count/duration and specific failed strict checks. Approved minimums remain unchanged, and both edited modes are opt-in.
 
 | Character | Dirty frames at 50fps | Original PNG interval, zero-based | Why it failed strict checks |
@@ -602,3 +604,49 @@ These 11 families cover 54 actual costumes. The descriptions are analysis failur
 Preview, scrubbing, exact paused PNGs, every GIF download size/color bundle, and inline GIF viewing respect dirty mode. Filenames carry `dirty-loop`. Aggregate dirty GIF export prefers the experimental interval, otherwise an approved minimum, otherwise the full clip; individual entries keep their own mode labels. No blending, speed change, endpoint duplication, or automatic promotion to approved status is introduced.
 
 Verification passed: 75 Python tests and Node controls tests, including rejected-repeat labeling, dirty/full/approved interval separation, list navigation, loop wrapping, filenames, and exact source indices. All 54 dirty costume GIFs were decoded at 256px with exact lengths*20ms looping durations, and first-frame all-color PNGs match original master bytes. Captain Falcon inline dirty GIFs were also checked at 128/512/1024px. Last/first/next/middle default-costume contact sheets were inspected for every candidate. The user can now judge these repeats in the local player; no game-reference or seamless-loop claim is made.
+
+## 18. Shared clap timeline feasibility
+
+The user asked how to synchronize these clips in a compact repeating GIF, including buffers and a manually cut Mewtwo segment. Exact LCM using every character's current dirty-preferred/approved/full frame count is 1,112,911,800 frames at 50fps (about 258 days), which is impractical. This is a calculation from current manifests/interval reports, not a proposed output.
+
+A master-timeline search assigns each clip an integer repeat count and rate `segment_frames * repeats / master_frames`. All 26 character entries can meet these bounds:
+
+| Selected intervals | Rate tolerance | First fitting master frames | Duration at 50fps |
+| --- | --- | ---: | ---: |
+| Approved minimum, otherwise full | +/-10% | 496 | 9.92s |
+| Dirty, otherwise approved, otherwise full | +/-10% | 110 | 2.20s |
+| Dirty, otherwise approved, otherwise full | +/-15% | 105 | 2.10s |
+
+For the 110-frame case, rates range from 0.90 to 1.0909. Mewtwo's 109-frame clip repeats once at rate 109/110 (about 0.9% slower), and Pichu's 120-frame clip repeats once at 120/110 (about 9.1% faster). Luigi's 20-frame minimum can repeat six times at 120/110, or five at 100/110 (about 9.1% slower); ties can follow a user preference. These rates are relative to the current preview timing preset. The search evaluated master counts on the 20ms output grid. No shared-timeline renderer or controls were implemented.
+
+This solves return-to-start timing, while clap contact synchronization additionally needs one-clap segments and marked contact phases. Brief 1-3-frame holds at a relaxed/hands-apart pose are a possible buffer for small gaps; long holds visibly freeze the character. Larger duration differences are better addressed through explicit speed changes. Source-pose resampling can preserve smooth interpolation; image crossfading may ghost fingers/limbs and should not be the default.
+
+Mewtwo's current authored clip is 130 source ticks / 109 output frames (2.18s). Twelve evenly spaced PNG poses were reviewed: hand movement is subtle, with body and tail variation over the interval. Previous rendered whole-image recurrence checks did not approve a shorter cut. A manual Start/End editor and repeated seam preview could identify a usable one-clap interval, with optional explicit pose blending or secondary-motion treatment. No new Mewtwo segment, seam repair, or exact hand-contact timing is certified here. Dirty-loop discontinuities remain a separate issue from retiming.
+
+## 19. More compact synchronization with limited changes
+
+The user accepts the dirty loops and asked for the shortest shared GIF with few alterations. Further source-pose inspection found shorter hand cycles within the longer Pikachu/Pichu clips. The common archive `PlCo.dat` public `ftLoadCommonData` provides `parts_table` at +0x10 ([fighter.h](src/melee/ft/fighter.h)); each `FighterPartsTable` provides `part_to_joint` at +4 ([types.h](src/melee/ft/types.h)). Semantic LHandN/RHandN indices 21/39 come from [forward.h](src/melee/ft/forward.h). Source pose evaluation and a five-sample smoothed wrist-separation signal in the default costume found Pikachu contacts at output indices 7/22/37/52, exactly 15-frame spacing, and Pichu at 14/29/45/59/74/89/105/119, about 14-16 frames. These are wrist-gap proxies, not certified fingertip collision/contact frames or completed segment edits.
+
+Mewtwo's hands map to joints 32/55, with essentially static folded-arm articulation. Wrist and sampled finger-joint separation is constant to numerical precision; meaningful varying tracks involve body/root, feet, head, and tail. A short idle segment is appropriate rather than imposing a nonexistent ordinary hand-clap period. The source clip remains 109 output frames and no shortened Mewtwo segment has been approved.
+
+A conditional timing search replaces only the three long clips with illustrative lengths: Mewtwo 25 frames, Pikachu 15, Pichu 15. Other dirty-preferred/approved/full lengths remain unchanged. It permits integer repeat counts, 0-3 fixed held output frames per cycle, and moving speed `repeats * segment_frames / (master_frames - repeats * hold_frames)` between 0.9 and 1.1. The first fitting master is **69 frames / 1.38s at 50fps**, suggesting a practical target around 1.4s. The interval assumptions still need manual selection and all-costume seam review; this is not a measured or certified shortest usable animation.
+
+Example least-change schedule choices include Luigi: three 20-frame moving cycles plus three held ticks per cycle (no moving-speed change); Bowser/Kirby: two 34-frame cycles at rate 68/69 (about 1.45% slower); Fox: three 25-frame cycles at 75/69 (about 8.7% faster). Other choices trade a few held ticks for small rate changes. At roughly 1s, the 33/34-frame motions would require more substantial changes under these bounds. The earlier verified 110-frame / 2.2s feasibility remains available without these additional manual cuts. All times refer to the current output preset, not measured emulator timing. No synchronization UI/exporter or new segment was implemented during this estimate.
+
+## 20. Why 1.4 seconds is not the absolute minimum
+
+The current output preset is 50fps: 1.4s equals70 frames, and at60fps it would equal84 rather than90. The prior1.38s calculation imposed a ?10% moving-rate bound and at most3 held output ticks per cycle. Keeping the same illustrative, unapproved manual cuts (Mewtwo25/Pikachu15/Pichu15), a fresh integer-repeat/hold search finds:
+
+| Maximum moving-rate change | Maximum hold ticks per cycle | First fitting master frames at50fps | Duration |
+| --- | ---: | ---: | ---: |
+| +/-10% | 3 | 69 | 1.38s |
+| +/-10% | 4 | 62 | 1.24s |
+| +/-15% | 3 | 60 | 1.20s |
+| +/-20% | 3 | 42 | 0.84s |
+| +/-25% | 3 | 28 | 0.56s |
+
+The longest retained moving intervals are Bowser/Kirby/Yoshi34 and Jigglypuff33. An additional mismatch with the25-frame group (Donkey Kong, Fox, Game & Watch, Ice Climbers, and provisional Mewtwo idle) prevents a short conservative common wrap. Under ?10%/3-hold bounds, omitting the34-frame group yields60 frames/1.2s; omitting the25-frame group yields39/0.78s; omitting33/34 yields47/0.94s. These omission tests explain constraints, not a recommendation to drop characters.
+
+At69 frames, the34 group repeats twice while the25 group repeats three times. Relaxing to42 frames makes the25 group repeat twice while the34 group repeats once, requiring more visible rate adjustment. The0.84s fit's selected rates deviate by up to about19%; the0.56s fit's selected rates by about21.4% (with short holds). All results are arithmetic feasibility under stated assumptions, not completed renders or visual/seam approval. The shared boundary can retain differing character clap counts.
+
+If the aim is fewer GIF data frames, an optional25fps export would yield30 frames at1.2s or21 at0.84s without shortening duration. This is a proposed temporal-quality tradeoff; the current player/download pipeline still uses50fps and no new synchronized/FPS controls were implemented in this advice turn.

@@ -4,6 +4,20 @@ Updated 2026-10-10 after full-roster rendering and paused-frame downloads. All 2
 
 ## Current workflow and remaining work
 
+- [ ] Preview the proposed rate/hold tradeoffs rather than assuming 1.4s is the shortest: 1.24s (±10%, 4 holds), 1.2s (±15%, 3 holds), 0.84s (±20%, 3 holds), or 0.56s (±25%, 3 holds), conditional on the three manual cuts.
+- [ ] Prioritize the timing mismatch between the 34/33-frame families and the 25-frame families; include Yoshi in the 34-frame group.
+- [ ] Add optional 25fps synchronized export for smaller GIFs at the same duration, with source resampling and explicit tick/frame counts; current downloads stay at50fps.
+
+- [ ] Trial a ~1.4s shared timeline: the illustrative 69-frame schedule needs manual Pikachu/Pichu one-clap segments (~15 frames) and a short Mewtwo idle (~25 frames), then seam review across costumes.
+- [ ] Use hand-contact analysis from `PlCo.dat` semantic mappings to guide those cuts; do not assign Mewtwo a conventional clap-contact marker while its arms remain folded.
+- [ ] Keep holds to 0–3 output ticks per repetition and moving-rate adjustments within ±10% for the least-change preset; disclose more aggressive edits separately.
+
+- [ ] Add shared-timeline export: master duration, allowed rate change, and integer repeat fitting on the 50fps grid. Feasibility suggests 110 frames / 2.20s with current dirty-preferred selections and ±10% speed changes.
+- [ ] Add manual segment Start/End and repeated seam preview, especially for Mewtwo's 109-frame body/tail loop; no new segment is approved yet.
+- [ ] Add clap-contact markers and phase offsets if the user wants hands meeting on the same beats, rather than only a common GIF wrap.
+- [ ] Add optional short relaxed-pose buffer holds and source-pose seam blending as explicit edited modes; avoid long freezes or default ghosting image fades.
+- [ ] Resample original motion curves onto the shared timeline, keep source/output timing in manifests, and verify wrap timing, contacts, and repeated seams separately.
+
 - [x] Preserve approved minimums while exposing rejected near-repeat candidates through a separate Minimum loop (dirty/jittery) toggle.
 - [x] Add a clickable review list for all 11 experimental families / 54 actual costumes, with failed-check explanations.
 - [x] Apply dirty intervals to GIF/PNG/color/aggregate exports and inline GIF viewing, keeping timing and source-frame mapping intact.

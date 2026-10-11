@@ -216,6 +216,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path, default=Path("build/melee_anim/exported/mario/costume_00/model.json"))
     parser.add_argument("--companion", type=Path)
+    parser.add_argument("--timeline", type=Path, help="edited 42-frame clapping-sync plan")
     parser.add_argument("--motions", type=Path, default=Path("build/melee_anim/motions.json"))
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
     parser.add_argument("--action", choices=("results-clap", "victory1", "victory2", "victory3", "taunt"), default="results-clap")
@@ -246,6 +247,17 @@ def main():
     source_times = [period*i/count for i in range(count)]
     if not looping:
         source_times.append(period)
+    sync_plan = None
+    fit_times = None
+    if args.timeline:
+        sync_plan = json.loads(args.timeline.read_text())
+        if args.action != 'results-clap' or args.section != 'source' or args.max_frames:
+            parser.error('sync timelines require complete clapping exports')
+        source_times = sync_plan['source_times']
+        fit_times = sync_plan['fit_source_times']
+        if (sync_plan['fps'] != args.fps or sync_plan['length'] != 42 or len(source_times) != 42 or
+                any(not math.isfinite(t) or not 0 <= t < period for t in source_times+fit_times)):
+            parser.error('invalid clapping-sync timing')
     if args.max_frames:
         source_times = source_times[:args.max_frames]
     args.output.mkdir(parents=True, exist_ok=True)
@@ -282,9 +294,11 @@ def main():
         model["materials"].extend(companion["materials"])
     view = camera_basis(args.yaw)
     # Precompute poses once; fit over the whole selected source interval.
-    poses = []
-    visibility = []
-    for frame in source_times:
+    cache = {}
+    def evaluate_pose(frame):
+        key = round(frame, 10)
+        if key in cache:
+            return cache[key]
         matrices = pose_matrices(model["bones"], tracks, frame, metadata["type"])
         posed=[deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]]
         shown = joint_visibility(model["bones"], tracks, frame)
@@ -299,10 +313,14 @@ def main():
             posed.extend(extra)
             shown = joint_visibility(companion["bones"], ctracks, frame % ct["frames"])
             mask.extend(shown[mesh["owner_joint_index"]] for mesh in companion["meshes"])
-        poses.append(posed)
-        visibility.append(mask)
+        cache[key] = (posed, mask)
+        return posed, mask
+    sampled = [evaluate_pose(frame) for frame in source_times]
+    poses = [p for p, _ in sampled]
+    visibility = [v for _, v in sampled]
+    fitted = [evaluate_pose(frame)[0] for frame in fit_times] if fit_times else poses
     if companion:model["meshes"].extend(companion["meshes"])
-    cloud = np.concatenate([p for frame in poses for p, _ in frame])
+    cloud = np.concatenate([p for frame in fitted+poses for p, _ in frame])
     projected = cloud @ view
     low, high = projected.min(axis=0), projected.max(axis=0)
     center = ((low+high)/2) @ view.T
@@ -353,6 +371,10 @@ def main():
                 "limitations": ["Approximate paired placement" if companion else "Isolated fighter", "no gameplay scripts/props/effects/dynamics/audio",
                                 "approximate materials/lighting/reflection", "source finger seam preserved",
                                 "no rendered game-reference validation yet"]}
+    if sync_plan:
+        manifest['sync_plan'] = sync_plan
+        manifest['output_mode'] = 'clapping-sync alteration'
+        manifest['companion_sha256'] = hashlib.sha256(args.companion.read_bytes()).hexdigest() if args.companion else None
     (args.output/"preview-manifest.json").write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")
     print(f"Preview: {args.output/'preview.gif'}", flush=True)
 

@@ -77,17 +77,26 @@ class DownloadCatalog:
         self.cache.mkdir(parents=True, exist_ok=True)
 
     def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full'):
-        if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum', 'dirty'):
+        if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum', 'dirty', 'sync'):
             raise ValueError('Unsupported download option')
         if scope == 'all' and kind != 'gif':
             raise ValueError('All-character export is only available for GIFs')
+        if cycle == 'sync' and action != 'results-clap_source':
+            raise ValueError('Clapping-sync alteration is only available for clapping')
         clips = [c for c in self.clips if scope == 'all' or
                  c['character'] == character and c['action_key'] == action and
                  (scope == 'colors' or c['costume_id'] == costume)]
+        if cycle == 'sync':
+            clips = [c for c in clips if c['action_key'] == 'results-clap_source']
+            if any(not c.get('sync_cycle') for c in clips):
+                raise ValueError('Sync render is not ready for every requested costume')
+            clips = [{**c, 'gif': c['sync_cycle']['gif'], 'frames': c['sync_cycle']['frames'],
+                      'fps': c['sync_cycle']['fps'],
+                      'download_name': c['download_name'].replace('.gif', '-clapping-sync.gif')} for c in clips]
         if not clips:
             raise ValueError('Unknown character, animation, or costume')
         def selected_cycle(clip):
-            if clip['action_key'] != 'results-clap_source' or cycle == 'full':
+            if clip['action_key'] != 'results-clap_source' or cycle in ('full', 'sync'):
                 return None
             return (clip.get('dirty_cycle') if cycle == 'dirty' else None) or clip.get('minimum_cycle')
         if kind == 'png' and any(not 0 <= frame < (selected_cycle(c)['length'] if selected_cycle(c) else len(c['frames'])) for c in clips):
@@ -134,10 +143,14 @@ class DownloadCatalog:
                     archive.write(target, name)
             temporary.replace(bundle)
         name = 'melee-all-characters-all-animations' if scope == 'all' else f'{character}-{action.replace("_", "-")}'
+        if scope == 'all' and cycle == 'sync':
+            name = 'melee-all-characters'
         if kind == 'png':
             name += f'-frame-{frame+1:04d}'
         if scope == 'colors':
             name += '-all-colors'
         if any(selected_cycle(c) for c in clips):
             name += '-dirty-loop' if cycle == 'dirty' else '-minimum-cycle'
+        if cycle == 'sync':
+            name += '-clapping-sync'
         return bundle, f'{name}-{size}px.zip', 'application/zip'
