@@ -48,7 +48,7 @@ def make_server(root, port=8765, catalog=None):
                 return super().do_GET()
             try:
                 values = parse_qs(url.query, strict_parsing=True)
-                allowed = {'character', 'action', 'costume', 'cycle', 'pitch', 'yaw', 'roll', 'effects'}
+                allowed = {'character', 'action', 'costume', 'cycle', 'pitch', 'yaw', 'roll', 'effects', 'power'}
                 if url.path == '/export':
                     allowed |= {'size', 'kind', 'scope', 'frame', 'view'}
                 if set(values)-allowed or any(len(v) != 1 for v in values.values()):

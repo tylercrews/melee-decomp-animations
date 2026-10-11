@@ -77,7 +77,7 @@ def runtime_root_rotation(model, action):
     +1. Fighter initialization / ftDemo_SetFacingDirection use pi/2*facing.
     Other fighters retain the existing isolated source-clip presentation.
     """
-    if model.get("fighter_kind") == 24:
+    if model.get("fighter_kind") == 24 or model.get('kirby_power')=='game-and-watch':
         return [0.0, math.pi/2 * (1 if action == "taunt" or action.startswith(('attack-','tech-')) else -1), 0.0]
     return None
 
@@ -191,6 +191,9 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
         material = model["materials"][mesh["material_index"]]
         rgba = np.array(material.get("diffuse_rgba") or [255, 255, 255, 255], dtype=float)
         candidates = [t for t in material["textures"] if t.get("coordinate_type", t.get("flags", 0) & 15) == 0]
+        if material.get('copy_diffuse_only'):
+            diffuse=[t for t in candidates if t.get('flags',0)&0x10]
+            if diffuse:candidates=diffuse
         base = next((t for t in candidates if ((t.get("flags", 0) >> 16) & 15) in (4, 5)),
                     candidates[0] if candidates else None)
         uv_set = str(max(0, base.get("source", 4)-4)) if base else "0"
@@ -231,7 +234,8 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
                 ty = np.minimum((uv[..., 1]*texture.shape[0]).astype(int), texture.shape[0]-1)
                 sampled = texture[ty, tx].astype(float)
                 mode = (base.get("flags", 0) >> 16) & 15
-                rgb = sampled if mode == 5 else rgb*sampled/255
+                replace_color=mode==5 or material.get('copy_diffuse_only') and mode==3 and base.get('blend',0)==1
+                rgb = sampled if replace_color else rgb*sampled/255
             interpolated = (w0[..., None]*normals[ids[0]] + w1[..., None]*normals[ids[1]]
                             + w2[..., None]*normals[ids[2]])
             interpolated /= np.maximum(np.linalg.norm(interpolated, axis=2)[..., None], 1e-12)
@@ -280,6 +284,7 @@ def main():
     parser.add_argument("--motions", type=Path, default=Path("build/melee_anim/motions.json"))
     parser.add_argument("--attack-catalog", type=Path, default=Path("build/melee_anim/preview/attack-catalog.json"))
     parser.add_argument('--ground-effects', choices=('on','off'), default='off', help='original tech flash/missed-tech ground burst')
+    parser.add_argument('--kirby-power', default='none', help='copied character slug; none for ordinary Kirby')
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
     parser.add_argument("--action", default="results-clap", help="results-clap, victory1/2/3, taunt, or cataloged attack-/tech-<animation ID>")
     parser.add_argument("--section", choices=("source", "wait"), default="source")
@@ -306,9 +311,24 @@ def main():
     if args.ground_effects=='on' and not args.action.startswith('tech-'):
         parser.error('ground effects are only available for Tech animations')
     model = json.loads(args.model.read_text())
+    from .kirby_powers import validate_power
+    validate_power('kirby' if model['fighter_kind']==4 else '',args.kirby_power)
 
     report = json.loads(args.motions.read_text())
     motion, metadata, tracks = load_clip(report, args.action, args.section, args.files,model["fighter_kind"], args.attack_catalog)
+    hat=None;hat_path=None;power_info=None;model_folder=args.model.parent;render_model_path=args.model
+    if model['fighter_kind']==4:
+        from .kirby_powers import model_for_power, remap_tracks, reserved_parts
+        repo=Path(__file__).resolve().parents[2]
+        if args.kirby_power!='none':
+            hat_path,power_info=model_for_power(repo,args.kirby_power,model['costume_id'])
+            appearance=json.loads(hat_path.read_text())
+            if power_info['body']:
+                model=appearance;model_folder=hat_path.parent;render_model_path=hat_path
+            else:
+                hat=appearance
+        tracks=remap_tracks(tracks,metadata['node_count'],len(model['bones']),reserved_parts(repo),model.get('kirby_part_mask',0))
+        metadata={**metadata,'node_count':len(model['bones'])}
     if metadata["node_count"] != len(model["bones"]) or metadata["type"] not in (0, 1):
         parser.error("preview requires matching node hierarchy and supported scaling type")
     period = metadata["frames"]
@@ -342,7 +362,7 @@ def main():
     stale = {p.name for p in args.output.glob("frame_*.png")} - expected_frames
     if stale:
         parser.error(f"Output has extra frame files; choose a fresh output directory: {sorted(stale)[:5]}")
-    textures = {t["image_file"]: np.asarray(Image.open(args.model.parent/t["image_file"]).convert("RGBA"))
+    textures = {t["image_file"]: np.asarray(Image.open(model_folder/t["image_file"]).convert("RGBA"))
                 for m in model["materials"] for t in m["textures"] if t.get("image_file")}
     from .roster import visible_drawables
     states=model.get("visibility",{}).get("defaults")
@@ -355,6 +375,20 @@ def main():
                 if 0<=i<len(states):states[i]=command["visibility_value"]
         visible=visible_drawables(model,states)
         model["meshes"]=[m for m in model["meshes"] if m["drawable_index"] in visible]
+    if hat:
+        from .kirby_powers import attach_geometry
+        visible=visible_drawables(hat)
+        hat['meshes']=[m for m in hat['meshes'] if m['drawable_index'] in visible]
+        offset=len(model['materials'])
+        for material in hat['materials']:
+            for texture in material['textures']:
+                if texture.get('image_file'):
+                    old=texture['image_file'];new='hat/'+old
+                    textures[new]=np.asarray(Image.open(hat_path.parent/old).convert('RGBA'));texture['image_file']=new
+        for mesh in hat['meshes']:mesh['material_index']+=offset
+        model['materials'].extend(hat['materials'])
+        hat_world=world_matrices(hat['bones'])
+        hat_bind=[deform(mesh,hat_world,hat['bones']) for mesh in hat['meshes']]
     companion=None
     if args.companion:
         companion=json.loads(args.companion.read_text())
@@ -382,6 +416,11 @@ def main():
         posed=[deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]]
         shown = joint_visibility(model["bones"], tracks, frame)
         mask = [shown[mesh["owner_joint_index"]] for mesh in model["meshes"]]
+        if hat:
+            extra=attach_geometry(hat_bind,matrices[6],hat_world[0])
+            posed.extend(extra)
+            hat_shown=joint_visibility(hat['bones'],[],frame)
+            mask.extend(shown[6] and hat_shown[mesh['owner_joint_index']] for mesh in hat['meshes'])
         if companion:
             cp=pose_matrices(companion["bones"],ctracks,frame%ct["frames"],ct["type"])
             extra=[deform(mesh,cp,companion["bones"]) for mesh in companion["meshes"]]
@@ -396,6 +435,7 @@ def main():
     poses = [p for p, _ in sampled]
     visibility = [v for _, v in sampled]
     fitted = [evaluate_pose(frame)[0] for frame in fit_times] if fit_times else poses
+    if hat:model['meshes'].extend(hat['meshes'])
     if companion:model["meshes"].extend(companion["meshes"])
     framing = fitted+poses if fit_times else poses
     knockdown = args.action.startswith('tech-')
@@ -472,7 +512,7 @@ def main():
                 "runtime_root_scale": model.get("runtime_root_scale"),
                 "runtime_root_rotation": runtime_root_rotation(model, args.action),
                 "camera_center": center.tolist(), "camera_pixels_per_unit": scale,
-                "model_sha256": hashlib.sha256(args.model.read_bytes()).hexdigest(),
+                "model_sha256": hashlib.sha256(render_model_path.read_bytes()).hexdigest(),
                 "render_backend": args.backend,
                 "limitations": ["Approximate paired placement" if companion else "Isolated fighter", "no complete gameplay scripts/props/particles/dynamics/audio",
                                 "approximate materials/lighting/reflection", "source finger seam preserved",
@@ -484,6 +524,15 @@ def main():
         manifest['ground_effect_display_scale'] = 1.0 if effect else None
         manifest['framing_policy'] = 'fighter-centered whole-motion fit with complete visible impact alpha; shared source scale'
         manifest['fighter_flash'] = flash.provenance() if flash else None
+    if model['fighter_kind']==4:
+        manifest['kirby_power']=args.kirby_power
+        manifest['kirby_appearance']=None if power_info is None else {
+            'archive':power_info['archive'].name,'body_archive':power_info['body'].name if power_info['body'] else None,
+            'archive_sha256':hashlib.sha256(power_info['archive'].read_bytes()).hexdigest(),
+            'appearance_model_sha256':hashlib.sha256(hat_path.read_bytes()).hexdigest(),
+            'body_archive_sha256':hashlib.sha256(power_info['body'].read_bytes()).hexdigest() if power_info['body'] else None,
+            'attachment_part':6 if hat else None,'reserved_part_mask':power_info['mask'],
+            'limitations':['Hat dynamics remain at bind pose; copied projectiles, items and complete runtime scripts are not executed']}
     if sync_plan:
         manifest['sync_plan'] = sync_plan
         manifest['output_mode'] = 'clapping-sync alteration'

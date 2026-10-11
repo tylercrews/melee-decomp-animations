@@ -8,6 +8,21 @@ from tools.melee_anim.native_raster import NativeRaster
 
 @unittest.skipUnless(os.name == "nt", "Windows memory-bitmap OpenGL backend")
 class NativeRasterTests(unittest.TestCase):
+    def test_copy_hat_diffuse_blend_keeps_color_instead_of_specular_mask(self):
+        textures={'color':np.tile(np.array([0,255,0,255],dtype='uint8'),(2,2,1)),
+                  'mask':np.full((2,2,4),255,dtype='uint8')}
+        common={'coordinate_type':0,'source':4,'texture_matrix':np.eye(4).tolist(),'blend':1}
+        diffuse={**common,'flags':0x30010,'image_file':'color'}
+        specular={**common,'flags':0x40020,'image_file':'mask'}
+        mat={'textures':[diffuse,specular],'diffuse_rgba':[179,179,179,255],'unlit':True,'copy_diffuse_only':True}
+        mesh={'material_index':0,'uvs':[[0,0]]*3,'triangles':[[0,1,2]]}
+        p=np.array([[-1.,-1,0],[1.,-1,0],[0.,1,0]])
+        raster=NativeRaster(32)
+        try:
+            im=raster.render({'meshes':[mesh],'materials':[mat]},[(p,np.tile([0.,0,1],(3,1)))],textures,np.eye(3),32,32,np.zeros(3),12,(0,0,0,0))
+            self.assertEqual(im.getpixel((16,16)),(0,255,0,255))
+        finally:raster.close()
+
     def test_unlit_costume_color_does_not_depend_on_normals(self):
         mesh = {"material_index": 0, "uvs": [[0, 0]]*3, "triangles": [[0, 1, 2]]}
         rgba = [210, 50, 90, 255]

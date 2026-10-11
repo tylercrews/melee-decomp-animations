@@ -101,6 +101,9 @@ class NativeRaster:
                 continue
             mat=model["materials"][mesh["material_index"]]
             candidates=[t for t in mat["textures"] if t.get("coordinate_type",0)==0 and t.get("image_file") in textures]
+            if mat.get('copy_diffuse_only'):
+                diffuse=[t for t in candidates if t.get('flags',0)&0x10]
+                if diffuse:candidates=diffuse
             base=next((t for t in candidates if ((t.get("flags",0)>>16)&15) in (4,5)),candidates[0] if candidates else None)
             verts=np.ascontiguousarray((positions-center)@view,dtype=np.float32)
             verts[:,:2]*=pixels_per_unit*2/width
@@ -115,7 +118,9 @@ class NativeRaster:
                 for i,mode in enumerate((base.get("wrap_s",1),base.get("wrap_t",1))):
                     if mode==2:uv[:,i]/=2
                 uv=np.ascontiguousarray(uv,dtype=np.float32)
-                if ((base.get("flags",0)>>16)&15)==5:colors[:,:3]=shade[:,None]
+                mode=(base.get("flags",0)>>16)&15
+                if mode==5 or mat.get('copy_diffuse_only') and mode==3 and base.get('blend',0)==1:
+                    colors[:,:3]=shade[:,None]
                 self.gl.glEnable(0x0DE1);self.gl.glEnableClientState(0x8078)
                 self.gl.glBindTexture(0x0DE1,self.texture(base["image_file"],textures[base["image_file"]],base))
                 self.gl.glTexCoordPointer(2,0x1406,0,uv.ctypes.data)

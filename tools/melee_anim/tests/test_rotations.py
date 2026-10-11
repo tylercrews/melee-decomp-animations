@@ -118,6 +118,29 @@ class RotationCacheTests(unittest.TestCase):
             self.assertEqual(len(self.calls), 3)
             self.assertNotEqual(self.cache.get(self.clip, (20, 90, 10))['gif'], changed['gif'])
 
+    def test_kirby_power_renders_at_zero_angle_and_separates_cache_and_names(self):
+        model=self.repo/'build/melee_anim/exported/kirby/costume_00/model.json'
+        model.parent.mkdir(parents=True)
+        model.write_text(json.dumps({'fighter_kind':4,'materials':[]}))
+        (self.repo/'build/melee_anim/motions.json').write_text(json.dumps({'results':[{'fighter_kind':4,'results_archive':'fake.dat'}]}))
+        files=self.repo/'orig/GALE01/files'
+        (files/'PlCo.dat').write_bytes(b'synthetic common data fingerprint')
+        (files/'hat.dat').write_bytes(b'synthetic hat fingerprint')
+        appearance=self.repo/'appearance/model.json';appearance.parent.mkdir()
+        appearance.write_text(json.dumps({'materials':[]}))
+        clip={**self.clip,'character':'kirby'}
+        with patch('tools.melee_anim.kirby_powers.model_for_power',return_value=(appearance,{'archive':files/'hat.dat','body':None})), patch('tools.melee_anim.rotations.subprocess.run',side_effect=self.render):
+            first=self.cache.get(clip,(0,0,0),power='mario')
+            self.assertEqual(self.cache.get(clip,(0,0,0),power='mario'),first)
+            self.assertEqual(len(self.calls),1)
+            self.assertEqual(self.calls[0][self.calls[0].index('--kirby-power')+1],'mario')
+            self.assertIn('-power-mario.gif',first['download_name'])
+            other=self.cache.get(clip,(0,0,0),power='luigi')
+            self.assertNotEqual(first['gif'],other['gif'])
+            self.assertIs(self.cache.get(clip,(0,0,0)),clip)
+            self.assertNotIn('kirby_power',clip)
+            with self.assertRaises(ValueError):self.cache.get(self.clip,(0,0,0),power='mario')
+
     def test_selected_intervals_stills_bundles_and_invalid_input_before_render(self):
         catalog = DownloadCatalog(self.root, clips=[self.clip])
         catalog.rotations = self.cache

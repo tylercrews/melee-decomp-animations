@@ -12,7 +12,7 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -28,6 +28,9 @@ elements.animationtype.value="clapping";elements.animationtype.onchange();
 assert.equal(elements.costume.options.length, 5);
 assert(elements.character.options.length>=1);
 assert.equal(elements.character.options.length, 26);
+assert.equal(elements.powerlabel.hidden,true);
+assert.equal(elements.kirbypower.options.length,26);
+assert.equal(elements.kirbypower.options[0].value,'none');
 const characterLabels = elements.character.options.map(option => option.textContent);
 assert.deepEqual(characterLabels, [...characterLabels].sort((a,b) => a.localeCompare(b,'en')));
 assert.equal(elements.character.value, 'mario', 'alphabetical ordering preserves the default character');
@@ -385,6 +388,62 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   await settle();assert.equal(vm.runInContext('index',techRestoredContext),3);
   assert.equal(new URL(techRestoredElements.still.href,'http://localhost').searchParams.get('effects'),'off');
   console.log('All-character/costume Tech choices, impact toggle, paused frame, export URLs and stale effects: PASS');
+  // Kirby power is appearance state, independent of action, color and camera.
+  servedElements.resetangle.onclick();
+  servedElements.animationtype.value='clapping';servedElements.animationtype.onchange();
+  servedElements.character.value='kirby';servedElements.character.onchange();
+  assert.equal(servedElements.powerlabel.hidden,false);
+  servedElements.scrub.value='4';servedElements.scrub.oninput();
+  servedElements.kirbypower.value='mario';servedElements.kirbypower.onchange();
+  const hatRequest=requests.at(-1);
+  assert.equal(new URL(hatRequest.url,'http://localhost').searchParams.get('power'),'mario');
+  assert.equal(servedElements.downloadpanel.hidden,true);
+  hatRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:vm.runInContext('frameCount()',servedContext)},(_,i)=>`powers/mario/frame_${i}.png`)})});
+  await settle();
+  assert.equal(vm.runInContext('index',servedContext),4);
+  assert.equal(vm.runInContext('playing',servedContext),false);
+  assert.equal(servedElements.frame.src,'powers/mario/frame_4.png');
+  assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('power'),'mario');
+  assert.equal(new URL(servedElements.framezip.href,'http://localhost').searchParams.get('power'),'mario');
+  assert.match(servedElements.gif.download,/-power-mario/);
+  assert.equal(servedElements.allzip.hidden,true);
+  servedElements.kirbypower.value='luigi';servedElements.kirbypower.onchange();const staleHat=requests.at(-1);
+  servedElements.kirbypower.value='none';servedElements.kirbypower.onchange();
+  const noneFrame=servedElements.frame.src;
+  staleHat.resolve({ok:true,json:async()=>({frames:['stale-hat.png']})});await settle();
+  assert.equal(servedElements.frame.src,noneFrame,'None selection rejects a late hat render');
+  assert.equal(vm.runInContext('powerSetting()',servedContext),'none');
+  servedElements.kirbypower.value='falco';servedElements.kirbypower.onchange();
+  servedElements.synccycle.checked=true;servedElements.synccycle.onchange();
+  const syncHat=requests.at(-1);
+  assert.equal(new URL(syncHat.url,'http://localhost').searchParams.get('cycle'),'sync');
+  assert.equal(new URL(syncHat.url,'http://localhost').searchParams.get('power'),'falco');
+  syncHat.resolve({ok:true,json:async()=>({frames:Array.from({length:42},(_,i)=>`powers/falco/sync-${i}.png`)})});await settle();
+  assert.equal(vm.runInContext('frameCount()',servedContext),42);
+  servedElements.character.value='fox';servedElements.character.onchange();
+  assert.equal(servedElements.powerlabel.hidden,true);
+  assert.equal(vm.runInContext('powerSetting()',servedContext),'none');
+  assert(!servedElements.gif.href.includes('power='));
+  // Local-file handoff carries the hat and consumes it only on that visit.
+  elements.resetangle.onclick();elements.character.value='kirby';elements.character.onchange();
+  elements.animationtype.value='victory';elements.animationtype.onchange();
+  elements.action.value='victory3_source';elements.action.onchange();
+  elements.costume.value='3';elements.costume.onchange();elements.scrub.value='8';elements.scrub.oninput();
+  elements.kirbypower.value='mewtwo';elements.kirbypower.onchange();
+  const powerHandoff=new URL(context.location.href);
+  assert.equal(new URLSearchParams(powerHandoff.hash.slice(1)).get('power'),'mewtwo');
+  const powerElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  let powerRequest;
+  const powerContext=vm.createContext({document:{getElementById:id=>powerElements[id],createElement:()=>({})},URLSearchParams,
+    location:{protocol:'http:',hash:powerHandoff.hash},performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},
+    fetch:url=>new Promise(resolve=>powerRequest={url,resolve})});
+  vm.runInContext(script,powerContext);
+  assert.equal(powerElements.kirbypower.value,'mewtwo');
+  assert.equal(powerElements.powerlabel.hidden,false);
+  assert.equal(powerElements.costume.value,'3');assert.equal(vm.runInContext('index',powerContext),8);
+  assert.equal(vm.runInContext('playing',powerContext),false);
+  assert.equal(new URL(powerRequest.url,'http://localhost').searchParams.get('power'),'mewtwo');
+  console.log('Kirby Power visibility, zero-angle preparation, paused-frame retention, sync, native exports, stale requests and file handoff: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

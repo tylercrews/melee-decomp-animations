@@ -73,7 +73,9 @@ class DownloadCatalog:
         from .attacks import AttackCache
         self.attacks = AttackCache(self.root)
 
-    def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off'):
+    def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none'):
+        from .kirby_powers import validate_power
+        validate_power(character,power)
         angles = camera_angles(pitch, yaw, roll)
         if cycle not in ('full', 'minimum', 'dirty', 'sync'):
             raise ValueError('Unsupported clapping mode')
@@ -85,7 +87,7 @@ class DownloadCatalog:
         if cycle == 'sync' and (action != 'results-clap_source' or not clip.get('sync_cycle')):
             raise ValueError('Clapping-sync render is not available for this animation')
         clip = self.attacks.get(clip,effects=effects=='on')
-        clip = self.rotations.get(clip, angles, sync=cycle == 'sync')
+        clip = self.rotations.get(clip, angles, sync=cycle == 'sync', **({'power':power} if power!='none' else {}))
         if cycle == 'sync':
             frames = clip['sync_cycle']['frames']
         else:
@@ -98,7 +100,10 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
-    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off'):
+    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none'):
+        from .kirby_powers import validate_power
+        validate_power(character,power)
+        if power!='none' and scope=='all':raise ValueError('Select one Kirby animation for power exports')
         angles = camera_angles(pitch, yaw, roll)
         if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum', 'dirty', 'sync'):
             raise ValueError('Unsupported download option')
@@ -125,8 +130,8 @@ class DownloadCatalog:
             if kind == 'png' and not 0 <= frame < length:
                 raise ValueError('Frame index is outside this animation')
         clips = [self.attacks.get(c,effects=effects=='on') for c in clips]
-        if any(angles):
-            clips = [self.rotations.get(c, angles, sync=cycle == 'sync') for c in clips]
+        if any(angles) or power!='none':
+            clips = [self.rotations.get(c, angles, sync=cycle == 'sync', **({'power':power} if power!='none' else {})) for c in clips]
         if cycle == 'sync':
             clips = [{**c, 'gif': c['sync_cycle']['gif'], 'frames': c['sync_cycle']['frames'],
                       'fps': c['sync_cycle']['fps'],
@@ -194,6 +199,7 @@ class DownloadCatalog:
             name += f'-frame-{frame+1:04d}'
         if scope == 'colors':
             name += '-all-colors'
+        if power!='none':name+=f'-power-{power}'
         if any(selected_cycle(c) for c in clips):
             name += '-dirty-loop' if cycle == 'dirty' else '-minimum-cycle'
         if cycle == 'sync':

@@ -38,7 +38,7 @@ class RotationCache:
         self.repo = Path(repo).resolve() if repo else Path(__file__).resolve().parents[2]
         self.lock = threading.RLock()
 
-    def _inputs(self, clip, angles, sync):
+    def _inputs(self, clip, angles, sync, power='none'):
         slug, cid = clip['character'], clip['costume_id']
         model = self.repo/'build/melee_anim/exported'/slug/f'costume_{cid:02d}'/'model.json'
         companion = model.parent/'companion/model.json'
@@ -49,6 +49,13 @@ class RotationCache:
             selected = json.loads((self.root/Path(clip['sync_cycle']['gif']).parent/'preview-manifest.json').read_text())
         action, section = clip['action_key'].rsplit('_', 1)
         paths = [original, model, self.repo/'build/melee_anim/motions.json']
+        if power!='none':
+            from .kirby_powers import model_for_power
+            appearance,desc=model_for_power(self.repo,power,cid)
+            paths += [appearance,desc['archive'],self.repo/'orig/GALE01/files/PlCo.dat']
+            if desc['body']:paths.append(desc['body'])
+            data=json.loads(appearance.read_text())
+            paths.extend(appearance.parent/t['image_file'] for m in data['materials'] for t in m['textures'] if t.get('image_file'))
         if sync:
             paths.append(self.root/Path(clip['sync_cycle']['gif']).parent/'preview-manifest.json')
         report = json.loads(paths[2].read_text())
@@ -77,6 +84,7 @@ class RotationCache:
         # Include evaluators, texture codecs and the renderer, not merely models.
         paths.extend(Path(__file__).parent.glob('*.py'))
         settings = {'version': 'camera-v1', 'angles': angles, 'action': action, 'section': section,
+                    'kirby_power':power,
                     'ground_effects':manifest.get('ground_effects_enabled',False),
                     'source_times': selected['sample_source_times'], 'fps': selected['fps'],
                     'sync_plan': selected.get('sync_plan') if sync else None,
@@ -90,12 +98,14 @@ class RotationCache:
             digest.update(hashlib.sha256(path.read_bytes()).digest())
         return digest.hexdigest(), settings, model, companion if companion.is_file() else None
 
-    def get(self, clip, angles, sync=False):
+    def get(self, clip, angles, sync=False, power='none'):
         angles = camera_angles(*angles)
-        if not any(angles):
+        from .kirby_powers import validate_power
+        validate_power(clip['character'],power)
+        if not any(angles) and power=='none':
             return clip
         with self.lock:
-            key, settings, model, companion = self._inputs(clip, angles, sync)
+            key, settings, model, companion = self._inputs(clip, angles, sync, power)
             folder = self.root/'rotations'/key
             done = folder/'rotation.json'
             ready = False
@@ -117,6 +127,7 @@ class RotationCache:
                            '--output', str(folder), '--size', '256', '--fps', str(settings['fps']),
                            '--backend', settings['backend'], '--pitch', str(angles[0]),
                            '--yaw', str(angles[1]), '--roll', str(angles[2])]
+                if power!='none':command += ['--kirby-power',power]
                 if companion:
                     command += ['--companion', str(companion)]
                 if settings['action'].startswith(('attack-','tech-')):
@@ -145,6 +156,8 @@ class RotationCache:
                 temporary.write_text(json.dumps(completed, indent=2)+'\n')
                 temporary.replace(done)
             relative = folder.relative_to(self.root).as_posix()
+            if power!='none':
+                clip={**clip,'kirby_power':power,'download_name':clip['download_name'].replace('.gif',f'-power-{power}.gif')}
             frames = [f'{relative}/frame_{i:04d}.png' for i in range(len(settings['source_times']))]
             if sync:
                 return {**clip, 'sync_cycle': {**clip['sync_cycle'], 'frames': frames, 'gif': f'{relative}/preview.gif'}}

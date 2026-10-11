@@ -149,7 +149,7 @@ def build_attack_catalog(repo, report):
                 packed = read_exact_motion(regions[source_kind], selected, table['animation_file'])
                 metadata, tracks = read_figatree(packed, selected['symbol'])
                 nodes = len(expected_nodes) if not member['paired_member'] else len(json.loads((repo/'build/melee_anim/exported'/slug/'costume_00/companion/model.json').read_text())['bones'])
-                if metadata['node_count'] != nodes:
+                if metadata['node_count'] != nodes and not (kind==4 and metadata['node_count'] in (46,48,50,53)):
                     reason = 'This clip requires a different character model'; break
                 if metadata['type'] not in (0,1) or set(metadata['channels'])-{1,2,3,5,6,7,8,9,10,11,12}:
                     reason = 'This clip needs additional animation channel support'; break

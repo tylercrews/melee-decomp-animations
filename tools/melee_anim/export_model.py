@@ -206,6 +206,8 @@ def decode_mesh(ar, polygon):
 def texture_animations(ar, root):
     """Match material-animation tree nodes to JObj/DObj descriptors."""
     result = {}
+    if root is None:
+        return result
     def walk(joint, node):
         while joint is not None and node is not None:
             dobj = ar.pointer(joint + 16)
@@ -264,22 +266,23 @@ def primary_drawables(count, classes, item_groups=()):
     return set(range(count)) - (hidden - normal)
 
 
-def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt")):
+def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt"), *, archive_path=None, root_symbol=None, root_offset=None, copy_classes=None):
     catalog = roster(files_root)
     fighter=next(f for f in catalog["fighters"] if f["fighter_kind"]==kind)
     costume=fighter["costumes"][costume_id]
     motions=json.loads(Path("build/melee_anim/motions.json").read_text())
     data_root=next(f for f in motions["results"] if f["fighter_kind"]==kind)
-    path = files_root / costume["file"]
-    model = inspect_model(path, costume["joint_symbol"])
+    path = Path(archive_path) if archive_path else files_root / costume["file"]
+    model = inspect_model(path, root_symbol or (costume["joint_symbol"] if root_offset is None else None), root_offset=root_offset)
     ar = Archive(path.read_bytes(), str(path))
     bones = model["joints"]
     worlds = world_matrices(bones)
     for bone, matrix in zip(bones, worlds):
         bone["world_bind_matrix"] = matrix.tolist()
-    visibility = visibility_tables(files_root/data_root["fighter_archive"],data_root["fighter_root"],fighter["costume_count"])
+    visibility = visibility_tables(files_root/data_root["fighter_archive"],data_root["fighter_root"],fighter["costume_count"]) if copy_classes is None else {
+        'costumes':[{'classes':copy_classes,'script_texture_indices_to_global_tobj_indices':[]} for _ in fighter['costumes']]}
     groups=visibility["costumes"][costume_id]["classes"][0]["groups"]
-    states=visibility_defaults(kind,costume_id,len(groups))
+    states=visibility_defaults(kind,costume_id,len(groups)) if copy_classes is None else [0 if group else -1 for group in groups]
     item_groups = []
     if kind == 24:
         # ftGw_Init_OnLoad assigns class 4 from items[10].visibility. Without
@@ -311,6 +314,8 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
     global_tobj = 0
     for material in model["materials"]:
         exported = dict(material)
+        if copy_classes is not None:
+            exported['copy_diffuse_only']=True
         exported["textures"] = []
         for texture in material["textures"]:
             tex = texture["offset"]

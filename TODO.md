@@ -4,6 +4,11 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Verify Kirby Power: 121 Python / Node tests; all 150 powered costume models/claps and 20,100 GIF-PNG alpha/timing checks; 43,680 four-pose-mapped combinations; 63 full victory/copy/type probes; live exact-frame, rotations, all modes and six-color/all-size exports. Review all 25 hats and correct diffuse/specular texture selection for colored helmets/crowns.
+
+- [x] Add Kirby Power (None / Kirby plus all 25 copied forms), appearing only for Kirby. Assemble original attached hats and replacement bodies for all six actual costume IDs; carry appearance through ordinary/results/taunt/Knockdown poses, clapping modes, cameras, all-color GIF/PNG exports, sizes and URL handoffs. Retarget reserved bone slots, enabling the 33 formerly unsupported alternate-rig copy clips.
+- [ ] Implement Kirby hat dynamic-bone simulation, action-specific accessory/material/visibility behavior, copied props/projectiles and the complete copy-state controller; compare all hats and replacement bodies against game references.
+
 - [x] Verify final full-impact policy: 116 Python tests / Node controls; all 182 default-costume Knockdown renders and 6,865 alpha-matched GIF/PNG frames without edge cropping; 16 live on/off previews, 32 exact PNG/GIF exports, 10 all-color/all-size still ZIPs and two all-five-color GIF ZIPs. Review final Mario and rotated reference sheets.
 
 - [x] Correct missed-tech green texture color using source TEV active flags. Enlarge and center Knockdown fighters independently of effects; fit complete visible impacts at the same camera scale as the fighter, preserving on/off framing. The user explicitly selected full impact visibility with reduced fighter size; exclude transparent padding from the fit. Independent effect shrinking and overflow cropping are not the selected policy. Add original PlCo white color-script flashes to in-place/away rolls, keeping towards unchanged and stopping at source hit-status reset; retain transparency and shared export/costume/rotation behavior.

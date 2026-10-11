@@ -42,6 +42,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <p>Choose a character, animation type, and costume color, then save its GIF or download a bundle of colors.</p>
 <div class="controls">
 <label>Character <select id="character" aria-label="Character"></select></label>
+<label id="powerlabel" hidden>Kirby Power <select id="kirbypower" aria-label="Kirby Power" autocomplete="off"></select></label>
 <label>Animation Type <select id="animationtype" aria-label="Animation Type">
 <option value="victory">Victory Pose</option><option value="taunt">Taunt</option>
 <option value="clapping">Clapping</option><option value="attack">Attack</option><option value="tech">Knockdown</option></select></label>
@@ -85,7 +86,13 @@ If it is closed, start it from the repository with <code>python -m tools.melee_a
 <div class="meta" id="meta"></div>
 <p>This prototype uses original models and motion curves with approximate shading. Ground-impact effects are optional; other game effects, timed scripts, props, dynamics, and audio are not played. Native seams are preserved.</p>
 <script>
-const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__;
+const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__, powers=__POWERS__;
+const kirbypower=document.getElementById('kirbypower'),powerlabel=document.getElementById('powerlabel');
+let kirbyPower='none';
+powers.forEach(p=>{let o=document.createElement('option');o.value=p.slug;o.textContent=p.label;kirbypower.append(o)});kirbypower.value='none';
+function powerSetting(){return character.value==='kirby'?kirbyPower:'none'}
+function hasPower(){return powerSetting()!=='none'}
+function powerName(name){return hasPower()?name.replace(/(\.[^.]+)$/,`-power-${powerSetting()}$1`):name}
 const character=document.getElementById("character"), still=document.getElementById("still"), framezip=document.getElementById("framezip");
 const saveimage=document.getElementById('saveimage');
 const groundeffects=document.getElementById('groundeffects'),techcontrols=document.getElementById('techcontrols'),techhint=document.getElementById('techhint');
@@ -120,12 +127,13 @@ function previewUnavailable(){return rotationBusy||rotationFailed}
 function updateRotationState(){frame.hidden=previewUnavailable();saveimage.hidden=previewUnavailable();play.disabled=previewUnavailable();scrub.disabled=previewUnavailable();
 document.getElementById('downloadpanel').hidden=previewUnavailable()}
 async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
-if(!hasAngle()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();return}
-if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting()});
+if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();return}
+if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting()});
 location.href=`${exportBase}/player.html#${query}`;return}
 rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
 updateRotationState();
 try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
+if(hasPower())query.set('power',powerSetting());
 if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
 let response=await fetch(`/rotation?${query}`);if(!response.ok)throw Error(response.status===503?'Renderer is busy; try Apply again shortly.':'Render failed. Check the player service log, then try Apply again or Reset.');
 let result=await response.json();if(generation!==rotationGeneration)return;
@@ -136,7 +144,7 @@ result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotation
 }catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
 rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
 applyangle.onclick=()=>{angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
-function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled}
+function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled;kirbypower.value=kirbyPower}
 resetangle.onclick=()=>{angles=[0,0,0];syncAngleInputs();loadRotation()};
 // Form restoration can run after this script; also reset a cached page when
 // returning through browser history. Explicit file-to-server handoffs still
@@ -148,6 +156,7 @@ checkMode('full');
 characters.forEach(c=>{let o=document.createElement('option');o.value=c.slug;o.textContent=c.label;character.append(o)});
 character.value=characters.some(c=>c.slug==='mario')?'mario':characters[0].slug;
 function colors(){let list=characters.find(c=>c.slug===character.value).costumes;let old=costume.value;costume.options.length=0;
+powerlabel.hidden=character.value!=='kirby';kirbypower.value=kirbyPower;
 list.forEach(c=>{let o=document.createElement('option');o.value=String(c.id);o.textContent=c.label;costume.append(o)});
 costume.value=list.some(c=>String(c.id)===old)?old:String(list[0].id)}
 function typeForAction(key){return key.startsWith('tech-')?'tech':key.startsWith('attack-')?'attack':key.startsWith('victory')?'victory':key==='taunt_source'?'taunt':'clapping'}
@@ -164,7 +173,7 @@ function frameCount(){let c=clips[current];let short=activeCycle();return short?
 function sourceIndex(){let short=activeCycle();return index+(short&&!short.frames?short.start:0)}
 function framePath(){if(rotated)return rotated.frames[index];let short=activeCycle();return short&&short.frames?short.frames[index]:clips[current].frames[sourceIndex()]}
 function sourceTime(){let c=clips[current];let short=activeCycle();return short&&short.frames?short.source_times[index]:c.lazy?(rotated&&rotated.source_times?rotated.source_times[index]:c.period*index/Math.max(1,Math.ceil(c.period/60*c.fps))):c.source_times[sourceIndex()]}
-function markedName(name){let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
+function markedName(name){name=powerName(name);let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
 techcontrols.hidden=!c.action_key.startsWith('tech-');groundeffects.disabled=!c.ground_effect;
@@ -179,15 +188,16 @@ scrub.max=frameCount()-1;
 document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frames at ${c.fps} fps / ${(frameCount()/c.fps).toFixed(2)}s / ${cycleMode()==='sync'?'clapping-sync alteration':cycleMode()==='dirty'?'minimum loop (dirty/jittery)':useMinimum()?'minimum cycle (edited loop)':c.authored_loop?'full authored loop':'one-shot action'}`}
 function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
 costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:cycleMode()});
+if(hasPower())query.set('power',powerSetting());
 if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
 if(hasAngle()){['pitch','yaw','roll'].forEach((key,i)=>query.set(key,String(angles[i])))}return `${exportBase}/export?${query}`}
 function updateDownloads(){if(current<0)return;let c=clips[current];let a=animations.find(a=>a.key===c.action_key&&a.character===c.character);
-let original=downloadsize.value==='256'&&!useMinimum()&&!hasAngle()&&!c.lazy;
+let original=downloadsize.value==='256'&&!useMinimum()&&!hasAngle()&&!hasPower()&&!c.lazy;
 gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(angleName(effectName(markedName(c.download_name))));
 open.href=original?c.gif:exportURL('gif','costume')+'&view=1';
 archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(angleName(effectName(markedName(a.download_name))));
 allzip.href=original?'downloads/melee-all-characters-all-animations.zip':exportURL('gif','all');
-allzip.hidden=Boolean(c.lazy);
+allzip.hidden=Boolean(c.lazy)||hasPower();
 allzip.textContent=cycleMode()==='sync'?`Download all ${clips.filter(c=>c.sync_cycle).length} synced claps`:`Download all ${preparedCount} results/taunt GIFs`;
 allzip.download=cycleMode()==='sync'?sizedName(angleName('melee-all-characters-clapping-sync.zip')):sizedName(angleName(markedName('melee-all-characters-all-animations.zip')));
 still.href=original?c.frames[index]:exportURL('png','costume');
@@ -218,11 +228,12 @@ gif.href=c.gif;gif.download=c.download_name;gif.textContent=`Download GIF / ${c.
 updateCycleInfo();
 c.frames.forEach(src=>{let image=new Image();image.src=src});if(render)loadRotation()}
 character.onchange=()=>{colors();actions();select()};animationtype.onchange=()=>{actions();select()};
+kirbypower.onchange=()=>{kirbyPower=kirbypower.value;loadRotation()};
 action.onchange=()=>{animationtype.value=typeForAction(action.value);actions();select()};costume.onchange=select;
 function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048'}
 downloadsize.onchange=()=>{updateSizeWarning();show()};
 groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[current].ground_effect)loadRotation()};
-function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle())loadRotation();else show()}
+function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle()||hasPower())loadRotation();else show()}
 [fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.onchange=()=>{if(r.checked){checkMode(['full','minimum','dirty','sync'][i]);changeCycle()}});
 play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
 restart.onclick=()=>{if(current<0)return;index=0;last=performance.now();carry=0;playing=true;play.textContent='Pause';show()};
@@ -234,6 +245,7 @@ function restoreSelection(){let incoming=new URLSearchParams((location.hash||'')
 // Consume this one-time handoff so refresh/reopen cannot replay old angles.
 if(location.hash&&typeof history!=='undefined')history.replaceState(null,'',location.pathname+location.search);
 if(characters.some(c=>c.slug===incoming.get('character'))){character.value=incoming.get('character');colors();actions()}
+if(character.value==='kirby'&&powers.some(p=>p.slug===incoming.get('power'))){kirbyPower=incoming.get('power');kirbypower.value=kirbyPower}
 if(animations.some(a=>a.character===character.value&&a.key===incoming.get('action')&&!a.unavailable)){animationtype.value=typeForAction(incoming.get('action'));action.value=incoming.get('action');actions()}
 if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===incoming.get('costume')))costume.value=incoming.get('costume');
 if(['full','minimum','dirty','sync'].includes(incoming.get('cycle')))checkMode(incoming.get('cycle'));
@@ -399,7 +411,8 @@ def main():
     clips.extend(attack_clips)
     characters.sort(key=lambda character: character['label'].casefold())
     safe_json = lambda value: json.dumps(value).replace("<", "\\u003c")
-    content = TEMPLATE.replace("__CLIPS__",safe_json(clips)).replace("__ANIMATIONS__",safe_json(animations)).replace("__CHARACTERS__",safe_json(characters))
+    from .kirby_powers import powers
+    content = TEMPLATE.replace("__CLIPS__",safe_json(clips)).replace("__ANIMATIONS__",safe_json(animations)).replace("__CHARACTERS__",safe_json(characters)).replace('__POWERS__',safe_json(powers()))
     output.write_text(content,encoding="utf-8")
     print(f"Offline player: {output} ({len(clips)} clips, {len(animations)} animations, {len(characters)} characters)")
     print(f"GIF download bundles: {downloads}")
