@@ -13,7 +13,7 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -346,13 +346,13 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(attackHandoff.get('yaw'),'0');
   for(const c of data("characters.filter(c=>!['master-hand','crazy-hand','male-wireframe','female-wireframe','giga-bowser','sandbag'].includes(c.slug))")){
     const techs=data('clips').filter(clip=>clip.character===c.slug&&clip.animation_type==='tech');
-    assert.equal(techs.length,c.costumes.length*7,'seven tech/ground choices per actual costume');
-    assert.equal(new Set(techs.map(clip=>clip.action_key)).size,7);
+    assert.equal(techs.length,c.costumes.length*9,'seven clips plus two missed-tech sequences per actual costume');
+    assert.equal(new Set(techs.map(clip=>clip.action_key)).size,9);
   }
-  assert.equal(data('clips.filter(c=>c.animation_type===\'tech\').length'),886);
+  assert.equal(data('clips.filter(c=>c.animation_type===\'tech\').length'),1134);
   assert.equal(servedElements.techcontrols.hidden,true);
   servedElements.animationtype.value='tech';servedElements.animationtype.onchange();
-  assert.equal(servedElements.action.options.length,7);assert.equal(servedElements.techcontrols.hidden,false);
+  assert.equal(servedElements.action.options.length,9);assert.equal(servedElements.techcontrols.hidden,false);
   assert.equal(servedElements.groundeffects.disabled,false);
   let techRequest=requests.shift();assert.equal(new URL(techRequest.url,'http://localhost').searchParams.get('effects'),'on');
   complete(techRequest,'tech-on');await settle();
@@ -549,6 +549,23 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   }
   assert.match(servedElements.itemhint.textContent,/Final Cutter/);
   console.log('Held-item labels and action-specific preview/export hint: PASS');
+  for(const [slug,key,type] of [['fox','attack-295-combined_source','attack'],['kirby','attack-324-combined_source','attack'],['mario','tech-183-combined_source','tech']]){
+    servedElements.character.value=slug;servedElements.character.onchange();
+    servedElements.animationtype.value=type;servedElements.animationtype.onchange();
+    servedElements.action.value=key;servedElements.action.onchange();
+    assert.equal(servedElements.sequencehint.hidden,false);
+    assert.match(servedElements.sequencehint.textContent,/individual phases remain/);
+    assert.equal(vm.runInContext('clips[current].authored_loop',servedContext),false);
+    complete(requests.at(-1),'combined-'+slug);await settle();
+    servedElements.scrub.value='20';servedElements.scrub.oninput();
+    for(const id of ['gif','animationzip','still','framezip']){
+      assert.equal(new URL(servedElements[id].href,'http://localhost').searchParams.get('action'),key);
+    }
+    assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('frame'),'20');
+  }
+  servedElements.action.value='tech-184_source';servedElements.action.onchange();
+  assert.equal(servedElements.sequencehint.hidden,true);
+  console.log('Combined phase presets, hints, paused frame and selected/all-color export URLs: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

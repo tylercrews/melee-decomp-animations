@@ -59,6 +59,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <div id="jumpcontrols" class="controls" hidden><label><input id="centerjump" type="checkbox" autocomplete="off"> Keep character centered</label>
 <small>The camera follows the character at a fixed zoom. Applies to previews and GIF/PNG downloads.</small></div>
 <p id="movementhint" hidden>Standing includes the normal idle loop; alternate idles vary by character. Walking, running and dashing preview the original motion in place. Full/short hops use neutral jump squat, flight and landing with source movement attributes and shared framing; stage physics and movement effects are not simulated.</p>
+<p id="sequencehint" hidden></p>
 <p id="itemhint" hidden></p>
 <div id="techcontrols" class="controls" hidden>
 <label><input id="groundeffects" type="checkbox" checked> Ground-impact effects</label>
@@ -191,6 +192,8 @@ function markedName(name){name=centeredName(powerName(name));let suffix=cycleMod
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
 document.getElementById('movementhint').hidden=!c.action_key.startsWith('movement-');
+document.getElementById('sequencehint').hidden=!c.sequence;
+document.getElementById('sequencehint').textContent=c.sequence?`Combined sequence: ${c.sequence.policy} The individual phases remain available. Repeat Preview repeats the entire sequence.`:'';
 document.getElementById('itemhint').hidden=!c.held_item;
 document.getElementById('itemhint').textContent=c.held_item?`${c.held_item.name} is included in the preview and GIF/PNG downloads. ${c.held_item.charged_preset?'Needles use a six-needle charged preset. ':''}${c.held_item.behavior==='needle-release'?'Needles follow a deterministic free-flight path and leave the image; collisions are not simulated.':'Projectile and collision effects are not simulated.'}`:'';
 jumpcontrols.hidden=!isHop();centerjump.checked=centerJumpEnabled;

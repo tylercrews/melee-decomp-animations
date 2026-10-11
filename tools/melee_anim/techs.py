@@ -18,4 +18,4 @@ def tech_label(name):
 def ground_effect(action):
     """Common ordinary animation IDs verified against ftCommon/forward.h."""
     return {183: 'missed', 191: 'missed', 199: 'tech', 200: 'tech', 201: 'tech'}.get(
-        int(action.removeprefix('tech-').removesuffix('_source'))) if action.startswith('tech-') else None
+        int(action.removeprefix('tech-').removesuffix('_source').removesuffix('-combined'))) if action.startswith('tech-') else None

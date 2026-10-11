@@ -281,6 +281,11 @@ class HeldItem:
         start,animation,speed=next(event for event in reversed(self.timeline) if event[0]<=frame)
         tracks,timing=self.animations.get(animation,([],{}))
         elapsed=(frame-start)*speed+self.specification.get('phase_offset',0)
+        cutter_expire=self.specification.get('cutter_expire_tick')
+        if self.specification.get('behavior')=='cutter' and cutter_expire is not None:
+            # efLib_Cb_SetRotYAndTransition: keep frames 60..65 alive until
+            # the landing callback sets expire_flags, then request frame 65.
+            elapsed=65+elapsed-cutter_expire if elapsed>=cutter_expire else 60+(elapsed-64)%5 if elapsed>=64 else elapsed
         for track in tracks:
             end,loop=timing[track.joint_index]
             time=elapsed%end if loop and end>0 else min(elapsed,end) if end>0 else elapsed

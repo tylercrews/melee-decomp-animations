@@ -32,6 +32,14 @@ Sheik uses an explicit six-needle preset. Release uses original shots at ticks 2
 
 ## Read these first
 
+### Latest handoff: combined animation phases (2026-10-11)
+
+`sequences.py` adds 108 finite combined actions / 488 actual-costume choices, without replacing individual keys. Combine unique attack Start + Loop/Hold/unsuffixed middle + End families; skip duplicate DAT names and branching variants rather than guessing. Include rapid jabs, Fox/Falco blasters/reflectors/side specials, Link/Young Link bows, Sheik needles, Zelda side special, Bowser breath, Ness hold families and unambiguous Kirby copied specials. Explicit Kirby Cutter recipes use ground/air startup → SpecialAirHi2 → SpecialAirHi3 → SpecialHi4 (97 source ticks). Preserve its authored TransN arc; one descent cycle and ground landing are an explicit flat-plane preset. DownBoundU/D → matching DownWaitU/D adds missed-tech-to-lying options for the 26 selectable forms and Sandbag.
+
+Actor sequence descriptors retain each phase's original file, script, prop, duration and skeleton type. Use half-open phase intervals and one terminal sample, with a single whole-sequence camera fit. Per-phase props use local clocks/visibility; Cutter shares its effect clock and source landing expiration requests frame 65. Released needles snapshot poses within the release phase; fit the emitter, not full flight. Ground impacts occur only at sequence time zero; keep the existing on/off framing policy. Paired actors and Kirby replacement bodies use existing mappings. Hash all phase animation/prop archives in both caches. Combined choices are one-shot GIFs; Repeat Preview repeats the whole sequence. Preserve costumes, angles, powers and all five export sizes. No new dependency/import required.
+
+153 Python tests and Node controls passed; all 108 default-costume sequences rendered (7,476 frames). Verification and live export evidence are in investigation section 46 and ignored `build/melee_anim/sequence_qa`. Remaining work: duplicate-name/branch-specific recipes, configurable middle repeats/holds, source runtime transition interpolation/root-motion accumulation/collision decisions, full projectile/controllers and original-game comparison. These are prescribed phase sequences, not certification of a complete attack simulation. Restart the service after evaluator/catalog changes and regenerate player HTML. Do not implement deferred extra actors/appearance presets from section 43.
+
 - [INVESTIGATION.md](INVESTIGATION.md): verified source paths, identifiers, asset availability, and limitations.
 - [PLAN.md](PLAN.md): proposed architecture, playback/export policies, and milestones.
 - [TODO.md](TODO.md): ordered work with completion criteria.

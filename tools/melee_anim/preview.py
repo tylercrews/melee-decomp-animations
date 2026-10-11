@@ -312,6 +312,9 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
     if action.startswith('movement-') and actor.get('movement'):
         motion={**motion,'jump_actor':actor}
         metadata={**metadata,'frames':actor['render_duration']}
+    if action.startswith(('attack-','tech-')) and actor.get('sequence'):
+        motion={**motion,'sequence_actor':actor}
+        metadata={**metadata,'frames':actor['render_duration']}
     return motion,metadata,tracks
 
 
@@ -383,6 +386,11 @@ def main():
         mapper=(lambda ts,n:remap_tracks(ts,n,len(model['bones']),reserved_parts(repo),model.get('kirby_part_mask',0))) if model['fighter_kind']==4 else None
         jump_scenes={mode:JumpScene(motion['jump_actor'],args.files,mode,mapper) for mode in ('fullhop','shorthop')}
         jump_mode=motion['jump_actor']['movement']['mode']
+    sequence_scene=None
+    if motion.get('sequence_actor'):
+        from .sequences import SequenceScene, SequenceProps, phase_drawables
+        mapper=(lambda ts,n:remap_tracks(ts,n,len(model['bones']),reserved_parts(repo),model.get('kirby_part_mask',0))) if model['fighter_kind']==4 else None
+        sequence_scene=SequenceScene(motion['sequence_actor'],args.files,mapper)
     period = metadata["frames"]
     looping = motion.get("effective_loop", motion.get("motion_loop", False))
     count = max(1, math.ceil(period/args.ticks_per_second*args.fps))
@@ -418,7 +426,7 @@ def main():
                 for m in model["materials"] for t in m["textures"] if t.get("image_file")}
     from .roster import visible_drawables
     states=model.get("visibility",{}).get("defaults")
-    if states is not None:
+    if states is not None and not sequence_scene:
         states=states.copy()
         for command in motion.get("script",{}).get("commands",[]):
             if command["opcode"] in (1,2):break
@@ -447,7 +455,8 @@ def main():
         cm,ct,ctracks=load_clip(report,args.action,args.section,args.files,companion["fighter_kind"], args.attack_catalog)
         companion_jumps={mode:JumpScene(cm['jump_actor'],args.files,mode) for mode in ('fullhop','shorthop')} if jump_scenes else None
         vis=visible_drawables(companion)
-        companion["meshes"]=[m for m in companion["meshes"] if m["drawable_index"] in vis]
+        if not sequence_scene:companion["meshes"]=[m for m in companion["meshes"] if m["drawable_index"] in vis]
+        companion_sequence=SequenceScene(cm['sequence_actor'],args.files) if sequence_scene else None
         offset=len(model["materials"])
         for material in companion["materials"]:
             for texture in material["textures"]:
@@ -478,6 +487,26 @@ def main():
             companion_held_joint=hold_joint(args.files,table,companion,Path(__file__).resolve().parents[2],specification)
             add_item_materials(companion_held)
     view = camera_basis(args.yaw, args.pitch, args.roll)
+    sequence_props=None;companion_sequence_props=None
+    if sequence_scene:
+        def matrices_at(scene,bones,tick,root_scale=None,root_rotation=None):
+            meta,ts,time,_,_=scene.sample(tick)
+            return pose_matrices(bones,ts,time,meta['type'],root_scale=root_scale,root_rotation=root_rotation)
+        table=next(t for t in report['normal_tables'] if t['fighter_kind']==model['fighter_kind'])
+        sequence_props=SequenceProps(sequence_scene,args.files,table,model,Path(__file__).resolve().parents[2],
+            lambda tick:matrices_at(sequence_scene,model['bones'],tick,model.get('runtime_root_scale'),runtime_root_rotation(model,args.action)))
+        def add_sequence_materials(props):
+            offset=len(model['materials'])
+            for mesh in props.meshes:mesh['material_index']+=offset
+            model['materials'].extend(props.materials);textures.update(props.textures)
+        add_sequence_materials(sequence_props)
+        phase_visible=[phase_drawables(model,p) for _,_,p in sequence_scene.phases]
+        if companion:
+            table=next(t for t in report['normal_tables'] if t['fighter_kind']==companion['fighter_kind'])
+            companion_sequence_props=SequenceProps(companion_sequence,args.files,table,companion,Path(__file__).resolve().parents[2],
+                                                   lambda tick:matrices_at(companion_sequence,companion['bones'],tick))
+            add_sequence_materials(companion_sequence_props)
+            companion_phase_visible=[phase_drawables(companion,p) for _,_,p in companion_sequence.phases]
     def follow_center(posed,mask):
         return projected_pose_center(posed,mask,view)
     # Precompute poses once; fit over the whole selected source interval.
@@ -487,12 +516,14 @@ def main():
         if key in cache:
             return cache[key]
         pose_meta,pose_tracks,pose_time,height=jump_scenes[scene_mode or jump_mode].sample(frame) if jump_scenes else (metadata,tracks,frame,0.)
+        if sequence_scene:pose_meta,pose_tracks,pose_time,phase_id,_=sequence_scene.sample(frame)
         matrices = pose_matrices(model["bones"], pose_tracks, pose_time, pose_meta["type"],
                                  root_scale=model.get("runtime_root_scale"),
                                  root_rotation=runtime_root_rotation(model, args.action))
         posed=[deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]]
         shown = joint_visibility(model["bones"], pose_tracks, pose_time)
         mask = [shown[mesh["owner_joint_index"]] for mesh in model["meshes"]]
+        if sequence_scene:mask=[active and mesh['drawable_index'] in phase_visible[phase_id] for active,mesh in zip(mask,model['meshes'])]
         if hat:
             extra=attach_geometry(hat_bind,matrices[6],hat_world[0])
             posed.extend(extra)
@@ -501,19 +532,27 @@ def main():
         if held:
             extra,visible=held.pose(matrices[held_joint],frame,view)
             posed.extend(extra);mask.extend(visible)
+        if sequence_props:
+            extra,visible=sequence_props.pose(matrices,frame,view)
+            posed.extend(extra);mask.extend(visible)
         if height:
             for positions,_ in posed:positions[:,1]+=height
         if companion:
             cmeta,cts,ctime,cheight=companion_jumps[scene_mode or jump_mode].sample(frame) if jump_scenes else (ct,ctracks,frame%ct['frames'],0.)
+            if sequence_scene:cmeta,cts,ctime,cphase_id,_=companion_sequence.sample(frame)
             cp=pose_matrices(companion["bones"],cts,ctime,cmeta["type"])
             extra=[deform(mesh,cp,companion["bones"]) for mesh in companion["meshes"]]
             for positions,normals in posed:positions[:,0]-=2.8
             for positions,normals in extra:positions[:,0]+=2.8;positions[:,1]+=cheight
             posed.extend(extra)
             shown = joint_visibility(companion["bones"], cts, ctime)
-            mask.extend(shown[mesh["owner_joint_index"]] for mesh in companion["meshes"])
+            mask.extend(shown[mesh["owner_joint_index"]] and (not sequence_scene or mesh['drawable_index'] in companion_phase_visible[cphase_id]) for mesh in companion["meshes"])
             if companion_held:
                 extra,visible=companion_held.pose(cp[companion_held_joint],frame,view)
+                for positions,_ in extra:positions[:,0]+=2.8
+                posed.extend(extra);mask.extend(visible)
+            if companion_sequence_props:
+                extra,visible=companion_sequence_props.pose(cp,frame,view)
                 for positions,_ in extra:positions[:,0]+=2.8
                 posed.extend(extra);mask.extend(visible)
         cache[key] = (posed, mask)
@@ -533,13 +572,28 @@ def main():
                 geometry,mask=evaluate_pose(duration*i/count,mode)
                 offset=follow_center(geometry,mask) if center_jump else np.zeros(3)
                 fitted.append([(p-offset,n) for (p,n),shown in zip(geometry,mask) if shown] if center_jump else geometry)
+    # Capture fit exclusions before extending the fixed renderer mesh list.
+    sequence_fit_mask=None
+    if sequence_scene:
+        sequence_fit_mask=[True]*(len(model['meshes'])+(len(hat['meshes']) if hat else 0))
+        sequence_fit_mask.extend(not released for released in sequence_props.release_meshes)
+        if companion:
+            sequence_fit_mask.extend([True]*len(companion['meshes']))
+            sequence_fit_mask.extend(not released for released in companion_sequence_props.release_meshes)
     if hat:model['meshes'].extend(hat['meshes'])
     if held:model['meshes'].extend(held.model['meshes'])
+    if sequence_props:model['meshes'].extend(sequence_props.meshes)
     if companion:model["meshes"].extend(companion["meshes"])
     if companion_held:model['meshes'].extend(companion_held.model['meshes'])
+    if companion_sequence_props:model['meshes'].extend(companion_sequence_props.meshes)
     framing = fitted if jump_scenes else fitted+poses if fit_times else poses
     knockdown = args.action.startswith('tech-')
-    if knockdown:
+    if sequence_scene:
+        cloud=np.concatenate([p for frame,mask in sampled for (p,_),shown,fit in zip(frame,mask,sequence_fit_mask) if shown and fit])
+        emitted=sequence_props.emission_geometry(view)
+        if companion_sequence_props:emitted.extend(p+np.array([2.8,0,0]) for p in companion_sequence_props.emission_geometry(view))
+        if emitted:cloud=np.concatenate([cloud]+emitted)
+    elif knockdown:
         fit_samples = [evaluate_pose(t) for t in (fit_times or source_times)]
         cloud = np.concatenate([p for frame, mask in fit_samples for (p,_),shown in zip(frame,mask) if shown])
     else:
@@ -654,6 +708,11 @@ def main():
                                     if center_jump else 'shared complete full-hop and short-hop geometry bounds')
         if center_jump:manifest['camera_sample_centers']=[(center+follow_center(p,v)).tolist() for p,v in sampled]
         if companion:manifest['companion_movement_scenario']=companion_jumps[jump_mode].provenance()
+    if sequence_scene:
+        manifest['sequence']=sequence_scene.provenance()
+        manifest['sequence_props']=sequence_props.provenance()
+        manifest['framing_policy']='stable whole-sequence visible geometry; outgoing needles leave the image'
+        if companion:manifest['companion_sequence']=companion_sequence.provenance()
     if sync_plan:
         manifest['sync_plan'] = sync_plan
         manifest['output_mode'] = 'clapping-sync alteration'

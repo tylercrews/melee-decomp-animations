@@ -4,6 +4,11 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Stitch supported multipart attacks into additional combined presets, including Kirby Final Cutter, Fox/Falco neutral blasters, unambiguous startup/middle/ending specials and rapid jabs. Add missed tech → matching lying cycle for all selectable characters and Sandbag. Preserve original phase choices, local scripts/props, continuous Cutter effect time, single impacts, all colors/powers/angles and GIF/exact-still exports. Verified 153 Python tests / Node controls and 108 full default-costume sequences / 7,476 frames; see investigation section 46.
+- [ ] Add user-adjustable middle-loop repetitions/hold duration and an optional sequence editor, with deterministic timing and manifests.
+- [ ] Add explicit recipes for duplicate-name/branching moves (charge variants, alternate endings, side-special combos, DK hand-slap endings, teleport phases). Read the source state/submotion mapping rather than selecting the first identically named DAT clip.
+- [ ] Compare combined phase boundaries against the game; reproduce transition interpolation, accumulated root movement, input/charge timing and real ground-contact decisions. Kirby's current descent/landing and aerial starting conditions are prescribed presets, not a stage simulation.
+
 - [x] Add Fox/Falco neutral blasters, Sheik's held/released six-needle preset and Kirby's Final Cutter blade. Extend to Kirby hammer, Mario/Dr. Mario cape/sheet, Peach Toad/parasol, Link/Young Link bows and Ness bat. Preserve original profiles/costumes and all preview/export paths; correct base and powered Kirby reserved-slot attachments. See investigation section 45.
 - [ ] Add Ness yo-yo, Sheik chain, Game & Watch attack articles and Samus/Link/Young Link tether models with their procedural/state callbacks.
 - [ ] Extend emitted projectiles beyond Sheik's deterministic needle preset (lasers, arrows, Cutter wave, boomerangs, bombs, spells), then collision/bounce/hit effects and full special-move controllers.

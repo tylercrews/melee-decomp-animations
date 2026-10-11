@@ -206,6 +206,8 @@ def build_attack_catalog(repo, report):
             for actor in actors:actor['render_duration']=duration
             actions.append({'key':f'movement-{mode}_source','animation_type':'movement','animation_id':16,'name':mode,'label':title,'group':'Movement',
                             'ground_effect':None,'actors':actors,'duration_ticks':duration,'available':True,'unavailable_reason':None})
+        from .sequences import combined_actions
+        actions.extend(combined_actions(actions, kind))
         counts = Counter(a['label'] for a in actions)
         used = Counter()
         for a in actions:
@@ -222,7 +224,7 @@ def build_attack_catalog(repo, report):
               f'{sum(not a["available"] for a in actions)} unavailable', flush=True)
     return {'schema':'melee_anim.attacks.v1', 'dol_sha1':report['dol_sha1'], 'characters':entries,
             'limitations':['Isolated source poses with six common held weapons; no opponent, projectiles, charge inputs or full game physics; Tech impact meshes are optional',
-                           'Multipart attacks are separate source clips, not simulated state transitions']}
+                           'Combined multipart choices are finite source-phase presets, not complete game controllers']}
 
 
 def virtual_clips(root):
@@ -246,6 +248,7 @@ def virtual_clips(root):
                                'action_key':action['key'], 'action_label':action['label'], 'animation_type':action.get('animation_type','attack'),
                                'ground_effect':action.get('ground_effect'),
                                'held_item':action.get('held_item'),
+                               'sequence':action.get('sequence'),
                                'costume_id':cid, 'costume_label':color, 'fps':50, 'period':period,
                                'authored_loop':clip['effective_loop'], 'symbol':clip['symbol'],
                                'frame_count':len(times), 'download_name':filename, 'frames':[], 'source_times':[],
@@ -280,8 +283,9 @@ class AttackCache:
             effects = bool(effects and clip.get('ground_effect'))
             paths = [catalog, model, self.repo/'build/melee_anim/motions.json']
             actor=find_action(selection,json.loads(model.read_text()).get('fighter_kind'),action)
-            if actor.get('character_prop'):
-                paths.extend([self.repo/'orig/GALE01/files'/actor['character_prop']['source_archive'],self.repo/'orig/GALE01/files/PlCo.dat'])
+            from .sequences import prop_archives
+            for archive in prop_archives(actor):
+                paths.extend([self.repo/'orig/GALE01/files'/archive,self.repo/'orig/GALE01/files/PlCo.dat'])
             from .held_items import item_for_motion, item_archive
             if item_for_motion(action,json.loads(model.read_text()).get('fighter_kind')):
                 paths.extend([item_archive(self.repo/'orig/GALE01/files'),self.repo/'orig/GALE01/files/PlCo.dat'])
@@ -295,6 +299,7 @@ class AttackCache:
             for source in [model]+([companion] if companion.is_file() else []):
                 data = json.loads(source.read_text()); actor = find_action(selection, data['fighter_kind'], action)
                 paths += [source, self.repo/'orig/GALE01/files'/actor['animation_file']]
+                paths += [self.repo/'orig/GALE01/files'/p['animation_file'] for p in actor.get('sequence',{}).get('phases',[])]
                 paths += [source.parent/t['image_file'] for m in data['materials'] for t in m['textures'] if t.get('image_file')]
             paths += list(Path(__file__).parent.glob('*.py'))
             digest = hashlib.sha256(b'attack-v1-256px-50fps-60ticks')
