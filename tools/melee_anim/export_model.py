@@ -267,11 +267,11 @@ def primary_drawables(count, classes, item_groups=()):
 
 
 def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt"), *, archive_path=None, root_symbol=None, root_offset=None, copy_classes=None, reflection_preview=False):
-    catalog = roster(files_root)
+    catalog = roster(files_root,include_extra=True) if kind>=27 else roster(files_root)
     fighter=next(f for f in catalog["fighters"] if f["fighter_kind"]==kind)
     costume=fighter["costumes"][costume_id]
     motions=json.loads(Path("build/melee_anim/motions.json").read_text())
-    data_root=next(f for f in motions["results"] if f["fighter_kind"]==kind)
+    data_root=next(f for f in motions['normal_tables'] if f['fighter_kind']==kind)
     path = Path(archive_path) if archive_path else files_root / costume["file"]
     model = inspect_model(path, root_symbol or (costume["joint_symbol"] if root_offset is None else None), root_offset=root_offset)
     ar = Archive(path.read_bytes(), str(path))
@@ -316,6 +316,9 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
         exported = dict(material)
         if copy_classes is not None:
             exported['copy_diffuse_only']=True
+        if kind==31:
+            # Giga Bowser's leading bump-map stages are not diffuse RGB.
+            exported['diffuse_texture_only']=True
         if kind==13 or reflection_preview:
             exported['diffuse_texture_only']=True
             if any(t.get('flags',0)&15==1 for t in material['textures']):
@@ -395,6 +398,8 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
         # Fighter_UpdateModelScale assigns it to the root JObj's LOCAL X.
         payload["runtime_root_scale"]=[catalog["game_watch"]["root_x_width"],1.0,1.0]
         payload["outline_rgba"]=catalog["game_watch"]["outline_rgba"]
+    if kind==32:
+        payload['limitations'].append('Sandbag runtime RObj joint constraints/limits are not evaluated')
     target = output_dir / "model.json"
     target.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")
     return target, {"bones": len(bones), "meshes": len(meshes), "materials": len(materials),

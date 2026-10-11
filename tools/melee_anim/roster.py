@@ -10,8 +10,8 @@ from .inspect_models import costume_catalog
 
 
 @lru_cache(maxsize=4)
-def roster(files=Path("orig/GALE01/files")):
-    return costume_catalog(Path(files),Path("orig/GALE01/sys/main.dol"),Path("config/GALE01/symbols.txt"))
+def roster(files=Path("orig/GALE01/files"), *, include_extra=False):
+    return costume_catalog(Path(files),Path("orig/GALE01/sys/main.dol"),Path("config/GALE01/symbols.txt"),include_extra=include_extra)
 
 
 def primary(slug, files=Path("orig/GALE01/files")):

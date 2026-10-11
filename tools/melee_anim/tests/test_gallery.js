@@ -28,7 +28,7 @@ assert.equal(elements.action.options.length, 6);assert.equal(elements.actionlabe
 elements.animationtype.value="clapping";elements.animationtype.onchange();
 assert.equal(elements.costume.options.length, 5);
 assert(elements.character.options.length>=1);
-assert.equal(elements.character.options.length, 26);
+assert.equal(elements.character.options.length, 32);
 assert.equal(elements.powerlabel.hidden,true);
 assert.equal(elements.kirbypower.options.length,26);
 assert.equal(elements.kirbypower.options[0].value,'none');
@@ -344,12 +344,12 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   const attackHandoff=new URLSearchParams(new URL(context.location.href).hash.slice(1));
   assert.match(attackHandoff.get('action'),/^attack-/);assert.equal(attackHandoff.get('costume'),'2');
   assert.equal(attackHandoff.get('yaw'),'0');
-  for(const c of data('characters')){
+  for(const c of data("characters.filter(c=>!['master-hand','crazy-hand','male-wireframe','female-wireframe','giga-bowser','sandbag'].includes(c.slug))")){
     const techs=data('clips').filter(clip=>clip.character===c.slug&&clip.animation_type==='tech');
     assert.equal(techs.length,c.costumes.length*7,'seven tech/ground choices per actual costume');
     assert.equal(new Set(techs.map(clip=>clip.action_key)).size,7);
   }
-  assert.equal(data('clips.filter(c=>c.animation_type===\'tech\').length'),861);
+  assert.equal(data('clips.filter(c=>c.animation_type===\'tech\').length'),886);
   assert.equal(servedElements.techcontrols.hidden,true);
   servedElements.animationtype.value='tech';servedElements.animationtype.onchange();
   assert.equal(servedElements.action.options.length,7);assert.equal(servedElements.techcontrols.hidden,false);
@@ -466,7 +466,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   servedElements.scrub.value='4';servedElements.scrub.oninput();
   assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('action'),'movement-fullhop_source');
   assert.equal(new URL(servedElements.framezip.href,'http://localhost').searchParams.get('frame'),'4');
-  for(const c of data('characters')){
+  for(const c of data("characters.filter(c=>!['master-hand','crazy-hand','male-wireframe','female-wireframe','giga-bowser','sandbag'].includes(c.slug))")){
     const list=data(`clips.filter(c=>c.character==='${c.slug}'&&c.action_key.startsWith('movement-'))`);
     assert(list.some(c=>c.action_key==='movement-fullhop_source'));
     assert(list.some(c=>c.action_key==='movement-shorthop_source'));
@@ -510,6 +510,27 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(centerElements.centerjump.checked,true,'restored browser form must match the requested render setting');
   console.log('Centered hop visibility, toggle, paused frame and all download controls: PASS');
   console.log('Movement dropdown, all-character/costume coverage, lazy jump preview and exact-frame export controls: PASS');
+  servedElements.animationtype.options=['victory','taunt','clapping','attack','tech','movement','hit','other'].map(value=>({value}));
+  for(const slug of ['master-hand','crazy-hand','male-wireframe','female-wireframe','giga-bowser','sandbag']){
+    servedElements.animationtype.value='clapping';servedElements.character.value=slug;servedElements.character.onchange();
+    assert.equal(servedElements.animationtype.value,'movement');
+    assert.equal(servedElements.costume.options.length,1);
+    assert.equal(servedElements.powerlabel.hidden,true);
+    assert(servedElements.action.options.length>0);
+    assert(servedElements.animationtype.options.find(o=>o.value==='clapping').hidden);
+    assert(servedElements.animationtype.options.find(o=>o.value==='victory').hidden);
+    const extraType=slug==='sandbag'?'hit':'other';
+    assert.equal(servedElements.animationtype.options.find(o=>o.value===extraType).hidden,false);
+    servedElements.animationtype.value=extraType;servedElements.animationtype.onchange();
+    assert(servedElements.action.options.length>0);
+    const extraRequest=requests.at(-1);
+    assert.equal(new URL(extraRequest.url,'http://localhost').searchParams.get('character'),slug);
+    extraRequest.resolve({ok:true,json:async()=>({frames:Array.from({length:vm.runInContext('frameCount()',servedContext)},(_,i)=>`extras/${slug}-${i}.png`)})});await settle();
+    servedElements.scrub.value='1';servedElements.scrub.oninput();
+    assert.equal(new URL(servedElements.framezip.href,'http://localhost').searchParams.get('character'),slug);
+    assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('frame'),'1');
+  }
+  console.log('Six non-playable fighters, one-costume menus, valid type fallback, Other motions and exact-frame links: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

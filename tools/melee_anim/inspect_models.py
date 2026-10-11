@@ -307,7 +307,7 @@ def resolved_filename(basename: str, language: str) -> str:
     return basename if dot and suffix else stem + (".usd" if language == "us" else ".dat")
 
 
-def costume_catalog(files_root: Path, dol_path: Path, symbols_path: Path, language: str = "us") -> dict:
+def costume_catalog(files_root: Path, dol_path: Path, symbols_path: Path, language: str = "us", *, include_extra=False) -> dict:
     """Validate selectable costume entries against the verified GALE01 DOL.
 
     The source's external CharacterKind and internal FighterKind differ. Read
@@ -366,6 +366,13 @@ def costume_catalog(files_root: Path, dol_path: Path, symbols_path: Path, langua
             partner_n = fighter(extra, ckind, True)
             if partner_n != n:
                 raise FormatError("paired fighter costume counts require explicit pairing")
+    if include_extra:
+        # Non-playable fighters are absent from the selectable color-count table.
+        for ckind in range(26,32):
+            kind,extra,transformation=maps[ckind*3:ckind*3+3]
+            if extra!=255 or transformation:
+                raise FormatError('Unexpected extra-fighter pairing')
+            fighter(kind,ckind,False)
     gw = Archive((files_root / "PlGw.dat").read_bytes(), "PlGw.dat")
     attr = gw.pointer(gw.public("ftDataGamewatch") + 4)
     if attr is None:

@@ -26,6 +26,12 @@ CHARACTERS = (
     ("roy", "Roy"), ("pichu", "Pichu"), ("ganondorf", "Ganondorf"),
 )
 
+# External CharacterKind 26..31; keep the selectable roster above unchanged.
+EXTRA_CHARACTERS = (("master-hand", "Master Hand"), ("male-wireframe", "Male Wireframe"),
+                    ("female-wireframe", "Female Wireframe"), ("giga-bowser", "Giga Bowser"),
+                    ("crazy-hand", "Crazy Hand"), ("sandbag", "Sandbag"))
+ALL_CHARACTERS = CHARACTERS + EXTRA_CHARACTERS
+
 
 def build_catalog(models, motions):
     costumes = models["costume_catalog"]

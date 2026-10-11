@@ -271,7 +271,7 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
 
 
 def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build/melee_anim/preview/attack-catalog.json')):
-    if action.startswith(('attack-','tech-','movement-')):
+    if action.startswith(('attack-','tech-','movement-','other-')):
         from .attacks import find_action
         actor = find_action(json.loads(attack_catalog.read_text()), kind, action)
         motion = actor['clip']

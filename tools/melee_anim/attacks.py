@@ -17,7 +17,7 @@ import subprocess
 import sys
 import threading
 
-from .catalog import CHARACTERS
+from .catalog import ALL_CHARACTERS
 from .hsd import Archive, Dol, load_symbols, read_global
 from .inspect_motions import motion_entries, read_exact_motion, script_graph_summary
 from .motions import read_figatree
@@ -96,7 +96,9 @@ def build_attack_catalog(repo, report):
     from .roster import roster
     repo = Path(repo).resolve()
     files = repo/'orig/GALE01/files'
-    fighters = roster(files)['fighters']
+    fighters = roster(files,include_extra=True)['fighters']
+    from .extra_fighters import prepare_extra_models,hand_submotions,hand_action,readable
+    prepare_extra_models(repo,fighters)
     tables = {t['fighter_kind']: t for t in report['normal_tables']}
     sources = {}
     for fighter in fighters:
@@ -113,10 +115,11 @@ def build_attack_catalog(repo, report):
     for primary in fighters:
         if primary['paired_member']:
             continue
-        slug, label = CHARACTERS[primary['character_kind']]
+        slug, label = ALL_CHARACTERS[primary['character_kind']]
         companion = next((f for f in fighters if f['paired_member'] and f['character_kind']==primary['character_kind']), None)
         kind = primary['fighter_kind']; _, _, motions = sources[kind]
         expected_nodes = json.loads((repo/'build/melee_anim/exported'/slug/'costume_00/model.json').read_text())['bones']
+        hand_names=hand_submotions(repo,kind,next(k for k,v in common.items() if v=='Count')) if kind in (27,28) else None
         actions = []
         for motion in motions:
             if not motion['size']:
@@ -132,6 +135,13 @@ def build_attack_catalog(repo, report):
             chosen = (locomotion,'Movement') if locomotion else (recovery[0], 'Ground recovery') if recovery else attack_label(semantic)
             if chosen is None:
                 chosen = attack_label(name)
+            category = 'movement' if locomotion else 'tech' if recovery else 'attack'
+            if hand_names is not None:
+                category,title,group=hand_action(hand_names[motion['animation_id']])
+                chosen=(title,group)
+            elif kind>=27 and chosen is None:
+                category='hit' if kind==32 else 'taunt' if name.startswith('Appeal') else 'other'
+                chosen=('Taunt' if category=='taunt' else readable(name),'Hit' if category=='hit' else 'Other')
             if chosen is None:
                 continue
             actors = []
@@ -159,13 +169,14 @@ def build_attack_catalog(repo, report):
                                'animation_file':table['animation_file'], 'clip':{**selected, **metadata,
                                'effective_loop':metadata['tree_loop'] or selected['motion_loop'],
                                'script':script_graph_summary(archive, selected['script_offset'], sizes)}})
-            category = 'movement' if locomotion else 'tech' if recovery else 'attack'
-            actions.append({'key':f'{category}-{motion["animation_id"]}_source', 'animation_id':motion['animation_id'],
+            prefix='other' if category in ('taunt','hit') else category
+            actions.append({'key':f'{prefix}-{motion["animation_id"]}_source', 'animation_id':motion['animation_id'],
                             'animation_type':category, 'ground_effect':recovery[1] if recovery else None,
                             'name':name, 'label':chosen[0], 'group':chosen[1], 'actors':actors,
                             'available':reason is None, 'unavailable_reason':reason})
         # Full/short hops share JumpF but have distinct source launch velocities.
-        for mode,title in [('fullhop','Full hop'),('shorthop','Short hop')]:
+        has_jump=all(aid<len(motions) and motions[aid]['size'] for aid in JUMP_PHASE_IDS.values())
+        for mode,title in ([('fullhop','Full hop'),('shorthop','Short hop')] if has_jump else []):
             actors=[]
             for member in [primary]+([companion] if companion else []):
                 mk=member['fighter_kind'];sk=10 if mk==11 else mk

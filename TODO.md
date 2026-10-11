@@ -4,6 +4,11 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Add both Multi-Man wireframes, Sandbag, Master/Crazy Hand and Giga Bowser to the alphabetical Character menu using original one-costume fighter entries. Automatically export/catalog through the existing import action step; support available movement/hop/taunt/attack/Knockdown/Other clips and Sandbag Hit, valid type fallback, alpha/cameras/sizes/paused and color exports. Correct Giga Bowser's diffuse-vs-bump texture selection. Verified 130 Python tests / Node controls, all 889 choices at four poses, 12 default full renders / 1,160 transparent frames, six rotated probes, exact/color/five-size exports and a final visual review. See investigation section 41.
+- [ ] Extend Hit to the 26 regular forms using original damage/tumble/capture clips, with explicit source/runtime limitations. Keep Sandbag's category labeled Hit.
+- [ ] Implement Sandbag's source OnLoad RObj joint constraints/rotation limits; validate reaction/tumble poses against game references.
+- [ ] Add boss projectiles/effects, movement/state controllers and coordinated Master/Crazy Hand scenes; isolated boss pose clips currently omit these.
+
 - [x] Default Repeat preview to on for every animation; retain manual stop-at-end behavior and explicit handoff overrides without changing saved GIF loop flags.
 
 - [x] Add Keep character centered for full/short hops: fixed zoom with per-frame camera follow, same source timing/poses and shared hop scale; carry through powers, pairs, angles, paused/native saving and selected/all-color/five-size GIF/PNG exports. Default unchecked, hidden for other actions, placed above the Movement description beside the other options. Verified 128 Python tests / Node controls, seven live previews, 14 exact exports, two five-color ZIPs, five PNG sizes and a visual comparison. See investigation section 39.

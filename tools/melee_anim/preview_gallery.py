@@ -45,7 +45,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label id="powerlabel" hidden>Kirby Power <select id="kirbypower" aria-label="Kirby Power" autocomplete="off"></select></label>
 <label>Animation Type <select id="animationtype" aria-label="Animation Type">
 <option value="victory">Victory Pose</option><option value="taunt">Taunt</option>
-<option value="clapping">Clapping</option><option value="attack">Attack</option><option value="tech">Knockdown</option><option value="movement">Movement</option></select></label>
+<option value="clapping">Clapping</option><option value="attack">Attack</option><option value="tech">Knockdown</option><option value="movement">Movement</option><option value="hit">Hit</option><option value="other">Other</option></select></label>
 <label id="actionlabel">Animation <select id="action" aria-label="Animation"></select></label>
 <label>Costume <select id="costume" aria-label="Costume color"></select></label>
 <button id="play">Pause</button><button id="restart">Restart</button>
@@ -90,6 +90,7 @@ If it is closed, start it from the repository with <code>python -m tools.melee_a
 <p>This prototype uses original models and motion curves with approximate shading. Ground-impact effects are optional; other game effects, timed scripts, props, dynamics, and audio are not played. Native seams are preserved.</p>
 <script>
 const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__, powers=__POWERS__;
+const animationTypes=new Map(animations.filter(a=>a.type).map(a=>[a.character+':'+a.key,a.type]));
 const kirbypower=document.getElementById('kirbypower'),powerlabel=document.getElementById('powerlabel');
 let kirbyPower='none';
 powers.forEach(p=>{let o=document.createElement('option');o.value=p.slug;o.textContent=p.label;kirbypower.append(o)});kirbypower.value='none';
@@ -168,9 +169,12 @@ function colors(){let list=characters.find(c=>c.slug===character.value).costumes
 powerlabel.hidden=character.value!=='kirby';kirbypower.value=kirbyPower;
 list.forEach(c=>{let o=document.createElement('option');o.value=String(c.id);o.textContent=c.label;costume.append(o)});
 costume.value=list.some(c=>String(c.id)===old)?old:String(list[0].id)}
-function typeForAction(key){return key.startsWith('movement-')?'movement':key.startsWith('tech-')?'tech':key.startsWith('attack-')?'attack':key.startsWith('victory')?'victory':key==='taunt_source'?'taunt':'clapping'}
-function actions(){let old=action.value;let list=animations.filter(a=>a.character===character.value&&typeForAction(a.key)===animationtype.value);action.options.length=0;
-list.forEach(a=>{let o=document.createElement('option');o.value=a.key;o.textContent=a.unavailable?a.label+' — unavailable (copy model needed)':a.label;o.disabled=Boolean(a.unavailable);action.append(o)});
+function typeForAction(key){return animationTypes.get(character.value+':'+key)||(key.startsWith('movement-')?'movement':key.startsWith('tech-')?'tech':key.startsWith('attack-')?'attack':key.startsWith('victory')?'victory':key==='taunt_source'?'taunt':'clapping')}
+function actions(){let old=action.value;let owned=animations.filter(a=>a.character===character.value);let available=new Set(owned.filter(a=>!a.unavailable).map(a=>typeForAction(a.key)));
+for(const option of animationtype.options){option.disabled=!available.has(option.value);option.hidden=option.disabled}
+if(!available.has(animationtype.value))animationtype.value=available.has('movement')?'movement':available.values().next().value;
+let list=owned.filter(a=>typeForAction(a.key)===animationtype.value);action.options.length=0;
+list.forEach(a=>{let o=document.createElement('option');o.value=a.key;o.textContent=a.unavailable?a.label+' — unavailable':a.label;o.disabled=Boolean(a.unavailable);action.append(o)});
 action.value=list.some(a=>a.key===old&&!a.unavailable)?old:list.find(a=>!a.unavailable).key;
 actionlabel.hidden=list.filter(a=>!a.unavailable).length<=1}
 colors();actions();
@@ -423,6 +427,12 @@ def main():
                     animations.append({'character':fighter['character'],'key':a['key'],'label':a['label'],
                                        'type':a.get('animation_type','attack'),'unavailable':a['unavailable_reason']})
     clips.extend(attack_clips)
+    for slug in dict.fromkeys(c['character'] for c in attack_clips):
+        if any(c['slug']==slug for c in characters):continue
+        owned=[c for c in attack_clips if c['character']==slug]
+        characters.append({'slug':slug,'label':owned[0]['character_label'],'costumes':[
+            {'id':cid,'label':next(c['costume_label'] for c in owned if c['costume_id']==cid)}
+            for cid in sorted({c['costume_id'] for c in owned})]})
     characters.sort(key=lambda character: character['label'].casefold())
     safe_json = lambda value: json.dumps(value).replace("<", "\\u003c")
     from .kirby_powers import powers
