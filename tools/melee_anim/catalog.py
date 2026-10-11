@@ -27,8 +27,8 @@ CHARACTERS = (
 )
 
 # External CharacterKind 26..31; keep the selectable roster above unchanged.
-EXTRA_CHARACTERS = (("master-hand", "Master Hand"), ("male-wireframe", "Male Wireframe"),
-                    ("female-wireframe", "Female Wireframe"), ("giga-bowser", "Giga Bowser"),
+EXTRA_CHARACTERS = (("master-hand", "Master Hand"), ("male-wireframe", "Wireframe - Male"),
+                    ("female-wireframe", "Wireframe - Female"), ("giga-bowser", "Giga Bowser"),
                     ("crazy-hand", "Crazy Hand"), ("sandbag", "Sandbag"))
 ALL_CHARACTERS = CHARACTERS + EXTRA_CHARACTERS
 
