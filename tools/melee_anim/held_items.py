@@ -173,11 +173,17 @@ class HeldItem:
             self.sword_held_scale=.6*self.bones[6]['scale'][1]
             self.sword_glow=ar.f32(attrs+16)
         # PickedUp clears HIDDEN throughout the item's child subtree.
-        for b in self.bones[1:]:b['flags']&=~0x10
+        if specification.get('behavior')!='game-watch':
+            for b in self.bones[1:]:b['flags']&=~0x10
         self.animations={}
         self.timeline=[(0,specification['animation_id'],1.)]
         self.visibility_events=[(0,True)]
         behavior=specification.get('behavior')
+        if behavior=='game-watch' and 'spawn_variable' in specification:
+            self.visibility_events=[(0,False)]
+            for time,cmd in script_events(script or {},duration):
+                if cmd.get('command_variable')=={'index':specification['spawn_variable'],'value':1}:
+                    self.visibility_events.append((time,True));self.timeline=[(time,specification['animation_id'],1.)]
         if behavior=='blaster':
             # Neutral end begins visible and the source cmd_var1=2 hides it.
             for time,cmd in script_events(script or {},duration):
@@ -251,6 +257,14 @@ class HeldItem:
                         ([[dict(joint_index=polygon['shared_joint_index'],weight=1.)]] if polygon.get('shared_joint_index') is not None else []))
             meshes.append(mesh)
         self.model=dict(bones=self.bones,materials=materials,meshes=meshes)
+        if behavior=='game-watch':
+            attrs=ar.pointer(article+4);visibility=ar.pointer(attrs)
+            outline_joints=set(ar.read(ar.pointer(visibility+12),ar.u16(visibility+8)))
+            body_joints=set(ar.read(ar.pointer(visibility+4),ar.u16(visibility)))
+            for joint in outline_joints|body_joints:self.bones[joint]['flags']&=~0x10
+            for mesh in meshes:
+                if mesh['owner_joint_index'] in outline_joints:mesh['outline_pass']=True
+            self.model['outline_geometry']=True
         if specification.get('behavior')=='needle-release':
             self.model['meshes']=[dict(m) for _ in specification['shot_ticks'] for m in meshes]
         self.anchor_at=None
@@ -278,9 +292,9 @@ class HeldItem:
             return geometry,shown
         # Each HSD_AObj has its own end/loop; hold nonlooping terminal curves.
         evaluated=[]
-        start,animation,speed=next(event for event in reversed(self.timeline) if event[0]<=frame)
+        start,animation,speed=next((event for event in reversed(self.timeline) if event[0]<=frame),self.timeline[0])
         tracks,timing=self.animations.get(animation,([],{}))
-        elapsed=(frame-start)*speed+self.specification.get('phase_offset',0)
+        elapsed=self.specification.get('frozen_frame',(frame-start)*speed+self.specification.get('phase_offset',0))
         cutter_expire=self.specification.get('cutter_expire_tick')
         if self.specification.get('behavior')=='cutter' and cutter_expire is not None:
             # efLib_Cb_SetRotYAndTransition: keep frames 60..65 alive until
@@ -295,6 +309,10 @@ class HeldItem:
                 # A constant sampled FObj preserves pose_matrices semantics.
                 evaluated.append(Track(track.joint_index,track.channel,0,0,0,b'\x11'+struct.pack('<f',value)+b'\x01'+struct.pack('<f',value)))
         matrices=pose_matrices(self.bones,evaluated,0,tree_type=None)
+        if self.specification.get('judge_number'):
+            # it_802C78B8 rotates the sign's second child for right-facing play.
+            self.bones[2]['rotation'][1]=np.pi
+            matrices=pose_matrices(self.bones,evaluated,0,tree_type=None)
         if self.specification['item_kind']==12:
             from .motions import Track
             overrides={6:{9:self.sword_held_scale},3:{8:1.5*self.sword_glow+self.sword_held_scale,
@@ -317,6 +335,14 @@ class HeldItem:
         shown=joint_visibility(self.bones,evaluated,0)
         if not next(v for time,v in reversed(self.visibility_events) if time<=frame):shown=[False]*len(shown)
         return geometry,[shown[m['owner_joint_index']] for m in self.model['meshes']]
+
+    def configure_fighter(self,model):
+        if self.specification.get('behavior')!='game-watch':return
+        from .export_model import configure_outline_materials
+        color=model['materials'][0]['diffuse_rgba']
+        for material in self.model['materials']:
+            material.update(diffuse_rgba=color,alpha=1.0,unlit=True,item_alpha_blend=False)
+        configure_outline_materials(self.model,model['outline_rgba'])
 
     def provenance(self):
         return {**self.specification,'source_archive':self.path.name,'archive_sha256':self.archive_sha256,

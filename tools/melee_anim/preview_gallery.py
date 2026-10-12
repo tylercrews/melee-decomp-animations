@@ -63,6 +63,8 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <small>The camera follows the character at a fixed zoom. Applies to previews and GIF/PNG downloads.</small></div>
 <p id="movementhint" hidden>Standing includes the normal idle loop; alternate idles vary by character. Walking, running and dashing preview the original motion in place. Rolls and spot dodge use their original motion clips; forward/backward are relative to facing. Yoshi rolls in his egg and spot dodges outside it; his egg pose is also available. Full/short hops use neutral jump squat, flight and landing with source movement attributes and shared framing; stage physics and movement effects are not simulated.</p>
 <p id="sequencehint" hidden></p>
+<div id="electriccontrols" class="controls" hidden><label><input id="judgeelectric" type="checkbox" checked autocomplete="off"> Electric hit explosion (9)</label>
+<small>Shows the original electric-hit particles at the hammer strike. This is a contact preview preset; no opponent is simulated.</small></div>
 <p id="effecthint" hidden></p>
 <p id="itemhint" hidden></p>
 <div id="techcontrols" class="controls" hidden>
@@ -139,6 +141,11 @@ const preparedCount=clips.filter(c=>!c.lazy).length;
 const exportBase=location.protocol==='http:'?'':'http://127.0.0.1:8765';
 document.getElementById('servicehint').hidden=location.protocol==='http:';
 let current=0,index=0,playing=true,last=performance.now(),carry=0,lastImage=null;
+const electriccontrols=document.getElementById('electriccontrols'),judgeelectric=document.getElementById('judgeelectric');
+let judgeElectricEnabled=true;judgeelectric.checked=true;
+function isJudgeNine(){return current>=0&&clips[current].character==='game-and-watch'&&['attack-305_source','attack-314_source'].includes(clips[current].action_key)}
+function electricSetting(){return judgeElectricEnabled?'on':'off'}
+judgeelectric.onchange=()=>{judgeElectricEnabled=judgeelectric.checked;updateDownloads();loadRotation()};
 const angleInputs=['pitch','yaw','roll'].map(id=>document.getElementById(id));
 const rotationstatus=document.getElementById('rotationstatus'), applyangle=document.getElementById('applyangle'), resetangle=document.getElementById('resetangle');
 let angles=[0,0,0], rotated=null, rotationBusy=false, rotationFailed=false, rotationGeneration=0;
@@ -158,6 +165,7 @@ if(location.protocol!=='http:'){location.href=playerHandoff();return}
 rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
 updateRotationState();
 try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
+if(isJudgeNine())query.set('electric',electricSetting());
 if(hasPower())query.set('power',powerSetting());
 if(isHop())query.set('center',centerSetting());
 if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
@@ -203,9 +211,10 @@ function frameCount(){let c=clips[current];let short=activeCycle();return short?
 function sourceIndex(){let short=activeCycle();return index+(short&&!short.frames?short.start:0)}
 function framePath(){if(rotated)return rotated.frames[index];let short=activeCycle();return short&&short.frames?short.frames[index]:clips[current].frames[sourceIndex()]}
 function sourceTime(){let c=clips[current];let short=activeCycle();return short&&short.frames?short.source_times[index]:c.lazy?(rotated&&rotated.source_times?rotated.source_times[index]:c.period*index/Math.max(1,Math.ceil(c.period/60*c.fps))):c.source_times[sourceIndex()]}
-function markedName(name){name=centeredName(powerName(name));let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
+function markedName(name){name=centeredName(powerName(name));if(isJudgeNine()&&!judgeElectricEnabled)name=name.replace(/(\.[^.]+)$/,'-no-electric$1');let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
+electriccontrols.hidden=!isJudgeNine();judgeelectric.checked=judgeElectricEnabled;
 document.getElementById('movementhint').hidden=!c.action_key.startsWith('movement-');
 document.getElementById('sequencehint').hidden=!c.sequence;
 document.getElementById('sequencehint').textContent=c.sequence?`Combined sequence: ${c.sequence.policy} Uncheck Hide partial animations to see the individual phases. Repeat Preview repeats the entire sequence.`:'';
@@ -228,6 +237,7 @@ document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frame
 function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
 costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:cycleMode()});
 if(isHop())query.set('center',centerSetting());
+if(isJudgeNine())query.set('electric',electricSetting());
 if(hasPower()&&scope!=='all'&&!(scope==='colors'&&includeKirbyHats))query.set('power',powerSetting());
 if(scope!=='costume'&&includeKirbyHats)query.set('hats','all');
 if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
@@ -252,7 +262,7 @@ framezip.href=original&&!colorHats?`${a.stills}/frame-${String(index+1).padStart
 framezip.download=sizedName(angleName(effectName(batchMarkedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`,'colors'))))}
 let batchBusy=false,pendingBatch=null;
 const batchButtons=[archive,framezip,allzip];
-function playerHandoff(batch=null){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show',hats:batchHats()});if(batch)query.set('batch',batch);return `${exportBase}/player.html#${query}`}
+function playerHandoff(batch=null){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show',hats:batchHats()});if(isJudgeNine())query.set('electric',electricSetting());if(batch)query.set('batch',batch);return `${exportBase}/player.html#${query}`}
 function runPendingBatch(){if(location.protocol!=='http:'||!pendingBatch)return;const button={gif:archive,png:framezip,all:allzip}[pendingBatch];pendingBatch=null;if(button&&!button.hidden)batchDownload({preventDefault(){}},button)}
 function batchState(busy,active){batchBusy=busy;for(const button of batchButtons){button.ariaDisabled=String(busy);button.ariaBusy=String(busy&&button===active);button.tabIndex=busy?-1:0;button.className=(button.className||'download').replace(/\s*busy\b/g,'')+(busy&&button===active?' busy':'')}}
 async function batchDownload(event,button){event.preventDefault();if(batchBusy)return;
@@ -324,6 +334,7 @@ if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===
 if(['full','minimum','dirty','sync'].includes(incoming.get('cycle')))checkMode(incoming.get('cycle'));
 if(['128','256','512','1024','2048'].includes(incoming.get('size')))downloadsize.value=incoming.get('size');
 if(action.value.startsWith('tech-')&&['on','off'].includes(incoming.get('effects'))){groundEffectsEnabled=incoming.get('effects')==='on';groundeffects.checked=groundEffectsEnabled}
+if(['on','off'].includes(incoming.get('electric'))){judgeElectricEnabled=incoming.get('electric')==='on';judgeelectric.checked=judgeElectricEnabled}
 if(['movement-fullhop_source','movement-shorthop_source'].includes(action.value)&&['on','off'].includes(incoming.get('center'))){centerJumpEnabled=incoming.get('center')==='on';centerjump.checked=centerJumpEnabled}
 updateSizeWarning();
 select(false,incoming.has('size'));

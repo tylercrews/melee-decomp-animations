@@ -84,6 +84,8 @@ class RotationCache:
                 if action.startswith('tech-'):
                     paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
                     paths.append(self.repo/'orig/GALE01/files/PlCo.dat')
+                if slug=='game-and-watch' and action in ('attack-305','attack-314'):
+                    paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
             elif action == 'taunt':
                 table = next(t for t in report['taunts'] if t['fighter_kind'] == data['fighter_kind'])
                 source_kind = table['standard_facing']['right']['source_fighter_kind']
@@ -100,6 +102,7 @@ class RotationCache:
         settings = {'version': 'camera-v1', 'angles': angles, 'action': action, 'section': section,
                     'kirby_power':power, 'center_jump':center,
                     'ground_effects':manifest.get('ground_effects_enabled',False),
+                    'judge_electric':manifest.get('judge_electric',False),
                     'source_times': selected['sample_source_times'], 'fps': selected['fps'],
                     'sync_plan': selected.get('sync_plan') if sync else None,
                     'fit_source_times': manifest['sample_source_times'], 'size': native_size(clip['action_key'],clip.get('animation_type')),
@@ -152,6 +155,8 @@ class RotationCache:
                     command += ['--attack-catalog', str(self.root/CATALOG)]
                 if settings['action'].startswith('tech-'):
                     command += ['--ground-effects','on' if settings['ground_effects'] else 'off']
+                if settings['action'] in ('attack-305','attack-314') and clip['character']=='game-and-watch':
+                    command+=['--judge-electric','on' if settings['judge_electric'] else 'off']
                 timeline = folder/'timeline.json'
                 if sync:
                     timeline.write_text(json.dumps(settings['sync_plan']))

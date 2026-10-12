@@ -19,7 +19,7 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -798,6 +798,20 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   elements.animationtype.value='taunt';elements.animationtype.onchange();
   assert.equal(data('nativeDefaultSize'),1024);assert.equal(elements.upsizenotice.hidden,true);
   console.log('Type-specific1024 results/512 actions, native stars, default transitions and upsize notices: PASS');
+  elements.character.value='game-and-watch';elements.character.onchange();
+  elements.animationtype.value='attack';elements.animationtype.onchange();
+  elements.action.value='attack-305_source';elements.action.onchange();
+  assert.equal(elements.electriccontrols.hidden,false);assert.equal(elements.judgeelectric.checked,true);
+  elements.scrub.value='3';elements.scrub.oninput();
+  elements.judgeelectric.checked=false;elements.judgeelectric.onchange();
+  assert.equal(new URL(elements.gif.href).searchParams.get('electric'),'off');
+  assert.equal(new URL(elements.framezip.href).searchParams.get('electric'),'off');
+  assert.equal(data('index'),3);assert.equal(data('playing'),false);
+  assert.match(elements.gif.download,/-no-electric-512px.gif$/);
+  assert.equal(new URL(data('playerHandoff()')).hash.includes('electric=off'),true);
+  elements.action.value='attack-304_source';elements.action.onchange();
+  assert.equal(elements.electriccontrols.hidden,true);assert.equal(new URL(elements.gif.href).searchParams.has('electric'),false);
+  console.log('Judgment9-only default-on electric toggle, exact/color exports, paused retention and handoff: PASS');
   console.log('Scoped victory/clap/attack groups, counts, all hats/colors, exact stills, retained frame and batch handoff: PASS');
   console.log('Shared roster color names and exact file-to-HTTP batch handoff: PASS');
   console.log('Selector rows, default partial filter, all-character choices, contiguous families, fallback, paused retention and handoff: PASS');

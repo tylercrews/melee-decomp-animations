@@ -1,5 +1,13 @@
 Current mixed-resolution / scoped-export / README work (2026-10-12; investigation section53):
 
+Game & Watch attack props (2026-10-12; investigation section55):
+
+- [x] Identify missing source articles and timed body parts; add spray, torch, turtle, manhole, parachute, air puff, numbered signs, bucket/oil, pan/chair/key and rescue support.
+- [x] Preserve four actual costume colors, source item outlines/attachments/clocks, all18 Judgment numbers and combined rapid jab phases.
+- [x] Add default-on Judgment9 electric checkbox with matching preview/paused/GIF/PNG/color/rotation/export/handoff behavior.
+- [x] Pass184 Python tests, Node controls,40 full targeted default clips and live settings/color/size/prop checks.
+- [ ] Compare matching original-game poses and complete remaining item/controller/particle/depth behavior; current contact effect is a documented deterministic preset.
+
 - [x] Implement semantic Download All families, grounded/aerial and combined preference, live counts and Kirby batch appearances/colors.
 - [x] Remove the whole-batch server lock while preserving individual render/artifact synchronization;177 Python tests pass.
 - [x] Implement1024 native Victory Pose/Taunt/Clapping and512 other categories across defaults, caches, resume checks and UI native/upsizing policy.

@@ -83,12 +83,14 @@ class DownloadCatalog:
         self.attacks.lock=self.render_lock
         self.rotations.lock=self.render_lock
 
-    def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off'):
+    def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', electric='on'):
         from .movement import centered_jump_setting
         centered = centered_jump_setting(action,center)
         from .kirby_powers import validate_power
         validate_power(character,power)
         angles = camera_angles(pitch, yaw, roll)
+        from .electric_burst import is_judge9
+        if electric not in ('on','off') or electric=='off' and not is_judge9(character,action):raise ValueError('Electric explosion toggle requires Judgment9')
         if cycle not in ('full', 'minimum', 'dirty', 'sync'):
             raise ValueError('Unsupported clapping mode')
         if effects not in ('on','off') or effects=='on' and not action.startswith('tech-'):
@@ -98,7 +100,7 @@ class DownloadCatalog:
             raise ValueError('Unknown character, animation, or costume')
         if cycle == 'sync' and (action != 'results-clap_source' or not clip.get('sync_cycle')):
             raise ValueError('Clapping-sync render is not available for this animation')
-        clip = self.attacks.get(clip,effects=effects=='on')
+        clip = self.attacks.get(clip,effects=effects=='on',**({'electric':False} if electric=='off' else {}))
         clip = self.rotations.get(clip, angles, sync=cycle == 'sync', **({'power':power} if power!='none' else {}), **({'center':True} if centered else {}))
         if cycle == 'sync':
             frames = clip['sync_cycle']['frames']
@@ -112,10 +114,12 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
-    def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off'):
+    def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off', electric='on'):
         if size is None:
             selected=next((c for c in self.clips if c['character']==character and c['action_key']==action),{})
             size=native_size(action,selected.get('animation_type'))
+        from .electric_burst import is_judge9
+        if electric not in ('on','off') or electric=='off' and not is_judge9(character,action):raise ValueError('Electric explosion toggle requires Judgment9')
         from .movement import centered_jump_setting
         centered = centered_jump_setting(action,center)
         from .kirby_powers import validate_power
@@ -159,7 +163,7 @@ class DownloadCatalog:
         prepared=[];bases={}
         for c,variant in jobs:
             identity=(c['character'],c['action_key'],c['costume_id'])
-            if identity not in bases:bases[identity]=self.attacks.get(c,effects=effects=='on')
+            if identity not in bases:bases[identity]=self.attacks.get(c,effects=effects=='on',**({'electric':False} if electric=='off' and is_judge9(c['character'],c['action_key']) else {}))
             base=bases[identity]
             prepared.append(self.rotations.get(base,angles,sync=cycle=='sync',power=variant,center=centered))
             if len(jobs)>1:time.sleep(.005)

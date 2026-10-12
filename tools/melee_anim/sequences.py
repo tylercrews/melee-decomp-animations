@@ -153,6 +153,7 @@ class SequenceProps:
                 spec['phase_offset'] = scene.starts[i]
                 spec['cutter_expire_tick'] = cutter_expire
             item = HeldItem(files, spec, phase['duration_ticks'], phase['clip'].get('script'))
+            item.configure_fighter(model)
             joint = hold_joint(files, table, model, repo, spec)
             item.anchor_at = lambda tick, start=scene.starts[i], j=joint: matrices_at(start+tick)[j]
             offset = len(self.materials)

@@ -148,7 +148,10 @@ def build_attack_catalog(repo, report):
             from .held_items import item_for_motion
             prop=item_for_motion(f'attack-{motion["animation_id"]}',kind) if category=='attack' else None
             from .character_props import character_prop, resolve_profile
-            special=resolve_profile(files,report,character_prop(kind,name)) if category=='attack' else None
+            special=resolve_profile(files,report,character_prop(kind,name,motion['animation_id'])) if category=='attack' else None
+            if kind==24 and 297<=motion['animation_id']<=314:
+                number=(motion['animation_id']-297)%9+1
+                chosen=(chosen[0].rsplit('variant ',1)[0]+f'Judgment {number}',chosen[1])
             from .character_effects import character_effects
             effects=character_effects(kind,name) if category=='attack' else []
             if prop:
@@ -292,7 +295,7 @@ class AttackCache:
         self.repo = Path(repo).resolve() if repo else Path(__file__).resolve().parents[2]
         self.lock = threading.RLock()
 
-    def get(self, clip, effects=False):
+    def get(self, clip, effects=False, electric=True):
         if not clip.get('lazy'):
             return clip
         with self.lock:
@@ -302,7 +305,10 @@ class AttackCache:
             selection = json.loads(catalog.read_text())
             action = clip['action_key'].rsplit('_',1)[0]
             effects = bool(effects and clip.get('ground_effect'))
+            from .electric_burst import is_judge9
+            judge=is_judge9(clip['character'],clip['action_key']);electric=bool(electric and judge)
             paths = [catalog, model, self.repo/'build/melee_anim/motions.json']
+            if judge:paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
             actor=find_action(selection,json.loads(model.read_text()).get('fighter_kind'),action)
             from .character_effects import effect_archives
             paths.extend(self.repo/'orig/GALE01/files'/archive for archive in effect_archives(actor))
@@ -327,7 +333,7 @@ class AttackCache:
             paths += list(Path(__file__).parent.glob('*.py'))
             size=native_size(clip['action_key'],clip.get('animation_type'))
             digest = hashlib.sha256(f'attack-v3-{size}px-50fps-60ticks'.encode())
-            digest.update(repr((clip['character'],clip['costume_id'],action,effects)).encode())
+            digest.update(repr((clip['character'],clip['costume_id'],action,effects,electric)).encode())
             for path in sorted(set(paths)):
                 digest.update(str(path).encode()); digest.update(hashlib.sha256(path.read_bytes()).digest())
             folder = self.root/'attacks'/digest.hexdigest(); marker = folder/'complete.json'
@@ -345,6 +351,7 @@ class AttackCache:
                            '--attack-catalog',str(catalog),'--output',str(folder),'--size',str(size),'--backend','native' if os.name=='nt' else 'python']
                 if companion.is_file():
                     command += ['--companion',str(companion)]
+                if judge:command+=['--judge-electric','on' if electric else 'off']
                 if action.startswith('tech-'):
                     command += ['--ground-effects','on' if effects else 'off']
                 with (folder/'render.log').open('w') as log:
@@ -360,6 +367,7 @@ class AttackCache:
             manifest = json.loads((folder/'preview-manifest.json').read_text())
             relative = folder.relative_to(self.root).as_posix()
             name = clip['download_name'].replace('.gif','-ground-effects.gif') if effects else clip['download_name']
+            if judge and not electric:name=name.replace('.gif','-no-electric.gif')
             return {**clip,'download_name':name,'ground_effects_enabled':effects,
                     'frames':[f'{relative}/frame_{i:04d}.png' for i in range(clip['frame_count'])],
                     'source_times':manifest['sample_source_times'],'gif':f'{relative}/preview.gif'}

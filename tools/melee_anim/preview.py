@@ -340,6 +340,7 @@ def main():
     parser.add_argument("--motions", type=Path, default=Path("build/melee_anim/motions.json"))
     parser.add_argument("--attack-catalog", type=Path, default=Path("build/melee_anim/preview/attack-catalog.json"))
     parser.add_argument('--ground-effects', choices=('on','off'), default='off', help='original tech flash/missed-tech ground burst')
+    parser.add_argument('--judge-electric',choices=('on','off'),default='on',help='Judgment9 electric contact-effect preset')
     parser.add_argument('--kirby-power', default='none', help='copied character slug; none for ordinary Kirby')
     parser.add_argument('--center-jump', choices=('on','off'), default='off', help='follow the visible full/short-hop character with a fixed-scale camera')
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
@@ -444,6 +445,9 @@ def main():
     companion_face=None
     from .roster import visible_drawables
     movement_visibility=[]
+    if model['fighter_kind']==24 and args.action.startswith('attack-') and not sequence_scene:
+        from .game_watch_attacks import visibility_timeline
+        movement_visibility=visibility_timeline(model,motion,int(args.action.split('-')[1]))
     if args.action in ('movement-41','movement-42','movement-43') or (model['fighter_kind']==24 and args.action=='movement-207'):
         from .movement import movement_visibility_timeline
         movement_visibility=movement_visibility_timeline(model,motion)
@@ -494,6 +498,7 @@ def main():
     held=None;companion_held=None
     if specification:
         held=HeldItem(args.files,specification,period,motion.get('script'))
+        held.configure_fighter(model)
         table=next(t for t in report['normal_tables'] if t['fighter_kind']==model['fighter_kind'])
         held_joint=hold_joint(args.files,table,model,Path(__file__).resolve().parents[2],specification)
         if specification.get('behavior')=='needle-release':
@@ -628,6 +633,14 @@ def main():
         if companion:
             sequence_fit_mask.extend([True]*len(companion['meshes']))
             sequence_fit_mask.extend(not released for released in companion_sequence_props.release_meshes)
+    electric=None
+    if model['fighter_kind']==24 and args.action in ('attack-305','attack-314') and args.judge_electric=='on':
+        from .electric_burst import ElectricBurst
+        strike,shown=evaluate_pose(16)
+        hammer=np.concatenate([strike[i][0] for i,m in enumerate(model['meshes'])
+                               if m.get('drawable_index')==90 and not m.get('outline_pass') and shown[i]])
+        head=hammer[hammer[:,0]>=hammer[:,0].max()-.5].mean(axis=0)
+        electric=ElectricBurst(args.files,head)
     if hat:model['meshes'].extend(hat['meshes'])
     if held:model['meshes'].extend(held.model['meshes'])
     if sequence_props:model['meshes'].extend(sequence_props.meshes)
@@ -674,6 +687,9 @@ def main():
             effect = GroundEffect(args.files,effect_kind)
     # Keep one center/scale for the whole clip. Knockdown centers the fighter
     # in the selected view, then fits the complete visible impact at that pivot.
+    if electric:
+        electric_bounds=electric.bounds(fit_times or source_times,view)
+        if electric_bounds:cloud=np.concatenate([cloud]+electric_bounds)
     center, scale = (fit_knockdown_camera if knockdown or center_jump else fit_camera)(cloud, view, args.size)
     if effect and args.ground_effects=='on':
         bounds = effect.visible_bounds(fit_times or source_times,anchors,view)
@@ -698,6 +714,7 @@ def main():
         drawn = [p if shown else (None, None) for p, shown in zip(pose, visibility[i])]
         frame_center=center+follow_center(pose,visibility[i]) if center_jump else center
         image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, frame_center, scale, (34, 38, 46, 0))
+        if electric:image=electric.render(source_times[i],view,args.size,frame_center,scale,image)
         if flash:
             image = flash.apply(image,source_times[i])
         if effect and args.ground_effects=='on':
@@ -750,6 +767,9 @@ def main():
         manifest['framing_policy']='whole-animation fighter and held-item geometry'
         if specification.get('behavior')=='needle-release':manifest['framing_policy']='stable fighter and emission-point fit; needles leave the image naturally'
     if bubbles:manifest['sleep_bubbles']=bubbles.provenance()
+    if model['fighter_kind']==24 and args.action in ('attack-305','attack-314'):
+        manifest['judge_electric']=electric is not None
+        manifest['judge_electric_preset']='original gfx1001 generator12/children13..18; deterministic planar contact at source tick16, no collision simulation'
     if character_fx:
         manifest['character_effects']=character_fx.provenance()
         manifest['fighter_loop_period_ticks']=motion.get('fighter_period')
