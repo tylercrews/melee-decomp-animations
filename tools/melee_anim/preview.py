@@ -336,6 +336,9 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
         motion=next(c for c in table["clips"] if c["animation_id"]==chosen["animation_id"] and c["source_fighter_kind"]==chosen["source_fighter_kind"])
         source=next(x for x in report["taunts"] if x["fighter_kind"]==chosen["source_fighter_kind"])
         data=(files/source["animation_file"]).read_bytes()
+        from .character_props import character_prop, resolve_profile
+        prop=resolve_profile(files,report,character_prop(kind,'AppealR'))
+        if prop:motion={**motion,'character_prop':prop}
     else:
         table=next(x for x in report["results"] if x["fighter_kind"]==kind)
         aid={"results-clap":9,"victory1":0,"victory2":2,"victory3":5}[action]
@@ -486,13 +489,14 @@ def main():
     face=FighterTextures(model,motion,model_folder,textures,sequence=sequence_scene)
     companion_face=None
     from .roster import visible_drawables
-    movement_visibility=[]
+    from .movement import movement_visibility_timeline
+    movement_visibility=movement_visibility_timeline(model,motion) if not sequence_scene else []
+    timed_parts=any(time>0 for time,_ in movement_visibility[1:])
+    if not timed_parts and model['fighter_kind']!=24 and not motion.get('character_prop') and args.action not in ('movement-41','movement-42','movement-43'):
+        movement_visibility=[]
     if model['fighter_kind']==24 and args.action.startswith('attack-') and not sequence_scene:
         from .game_watch_attacks import visibility_timeline
         movement_visibility=visibility_timeline(model,motion,int(args.action.split('-')[1]))
-    if args.action in ('movement-41','movement-42','movement-43') or (model['fighter_kind']==24 and args.action=='movement-207'):
-        from .movement import movement_visibility_timeline
-        movement_visibility=movement_visibility_timeline(model,motion)
     states=model.get("visibility",{}).get("defaults")
     if states is not None and not sequence_scene:
         states=states.copy()
@@ -523,8 +527,11 @@ def main():
         companion=json.loads(args.companion.read_text())
         cm,ct,ctracks=load_clip(report,args.action,args.section,args.files,companion["fighter_kind"], args.attack_catalog)
         companion_jumps={mode:JumpScene(cm['jump_actor'],args.files,mode) for mode in ('fullhop','shorthop')} if jump_scenes else None
-        vis=visible_drawables(companion)
-        if not sequence_scene:companion["meshes"]=[m for m in companion["meshes"] if m["drawable_index"] in vis]
+        companion_visibility=movement_visibility_timeline(companion,cm) if not sequence_scene else []
+        if not sequence_scene and not any(time>0 for time,_ in companion_visibility[1:]):
+            state=companion_visibility[-1][1] if companion_visibility else None
+            vis=visible_drawables(companion,state)
+            companion['meshes']=[m for m in companion['meshes'] if m['drawable_index'] in vis]
         companion_sequence=SequenceScene(cm['sequence_actor'],args.files) if sequence_scene else None
         offset=len(model["materials"])
         for material in companion["materials"]:
@@ -578,13 +585,14 @@ def main():
             for mesh in props.meshes:mesh['material_index']+=offset
             model['materials'].extend(props.materials);textures.update(props.textures)
         add_sequence_materials(sequence_props)
-        phase_visible=[phase_drawables(model,p) for _,_,p in sequence_scene.phases]
+        from .sequences import sequence_visibility
+        phase_visibility=sequence_visibility(model,sequence_scene)
         if companion:
             table=next(t for t in report['normal_tables'] if t['fighter_kind']==companion['fighter_kind'])
             companion_sequence_props=SequenceProps(companion_sequence,args.files,table,companion,Path(__file__).resolve().parents[2],
                                                    lambda tick:matrices_at(companion_sequence,companion['bones'],tick))
             add_sequence_materials(companion_sequence_props)
-            companion_phase_visible=[phase_drawables(companion,p) for _,_,p in companion_sequence.phases]
+            companion_phase_visibility=sequence_visibility(companion,companion_sequence)
     def follow_center(posed,mask):
         return projected_pose_center(posed,mask,view)
     character_fx=None;companion_fx=None;effect_matrices={}
@@ -600,7 +608,7 @@ def main():
             return cache[key]
         pose_meta,pose_tracks,pose_time,height=jump_scenes[scene_mode or jump_mode].sample(frame) if jump_scenes else (metadata,tracks,frame,0.)
         if motion.get('fighter_period'):pose_time=frame%motion['fighter_period']
-        if sequence_scene:pose_meta,pose_tracks,pose_time,phase_id,_=sequence_scene.sample(frame)
+        if sequence_scene:pose_meta,pose_tracks,pose_time,phase_id,phase_time=sequence_scene.sample(frame)
         matrices = pose_matrices(model["bones"], pose_tracks, pose_time, pose_meta["type"],
                                  root_scale=model.get("runtime_root_scale"),
                                  root_rotation=runtime_root_rotation(model, args.action))
@@ -611,7 +619,15 @@ def main():
             state=next(state for time,state in reversed(movement_visibility) if time<=frame)
             visible=visible_drawables(model,state)
             mask=[active and mesh['drawable_index'] in visible for active,mesh in zip(mask,model['meshes'])]
-        if sequence_scene:mask=[active and mesh['drawable_index'] in phase_visible[phase_id] for active,mesh in zip(mask,model['meshes'])]
+        if sequence_scene:
+            state=next(state for time,state in reversed(phase_visibility[phase_id]) if time<=phase_time)
+            visible=visible_drawables(model,state)
+            mask=[active and mesh['drawable_index'] in visible for active,mesh in zip(mask,model['meshes'])]
+        if model['fighter_kind']==24 and not looping and frame>=period and args.action.startswith(('attack-','taunt')):
+            # These states return to Wait at their end. Part visibility resets
+            # there; do not invent an earlier hammer/bell removal timestamp.
+            visible=visible_drawables(model)
+            mask=[shown[mesh['owner_joint_index']] and mesh['drawable_index'] in visible for mesh in model['meshes']]
         if hat:
             extra=attach_geometry(hat_bind,matrices[6],hat_world[0])
             posed.extend(extra)
@@ -627,14 +643,17 @@ def main():
             for positions,_ in posed:positions[:,1]+=height
         if companion:
             cmeta,cts,ctime,cheight=companion_jumps[scene_mode or jump_mode].sample(frame) if jump_scenes else (ct,ctracks,frame%ct['frames'],0.)
-            if sequence_scene:cmeta,cts,ctime,cphase_id,_=companion_sequence.sample(frame)
+            if sequence_scene:cmeta,cts,ctime,cphase_id,cphase_time=companion_sequence.sample(frame)
             cp=pose_matrices(companion["bones"],cts,ctime,cmeta["type"])
             extra=[deform(mesh,cp,companion["bones"]) for mesh in companion["meshes"]]
             for positions,normals in posed:positions[:,0]-=2.8
             for positions,normals in extra:positions[:,0]+=2.8;positions[:,1]+=cheight
             posed.extend(extra)
             shown = joint_visibility(companion["bones"], cts, ctime)
-            mask.extend(shown[mesh["owner_joint_index"]] and (not sequence_scene or mesh['drawable_index'] in companion_phase_visible[cphase_id]) for mesh in companion["meshes"])
+            timeline=companion_phase_visibility[cphase_id] if sequence_scene else companion_visibility
+            state=next(state for time,state in reversed(timeline) if time<=(cphase_time if sequence_scene else frame)) if timeline else None
+            visible=visible_drawables(companion,state)
+            mask.extend(shown[mesh['owner_joint_index']] and mesh['drawable_index'] in visible for mesh in companion['meshes'])
             if companion_held:
                 extra,visible=companion_held.pose(cp[companion_held_joint],frame,view)
                 for positions,_ in extra:positions[:,0]+=2.8
@@ -698,7 +717,12 @@ def main():
         if emitted:cloud=np.concatenate([cloud]+emitted)
     elif knockdown or movement_visibility:
         fit_samples = [evaluate_pose(t) for t in (fit_times or source_times)]
-        cloud = np.concatenate([p for frame, mask in fit_samples for (p,_),shown in zip(frame,mask) if shown])
+        fit_count=len(model['meshes'])-len(held.model['meshes']) if held and specification.get('behavior')=='needle-release' else len(model['meshes'])
+        cloud = np.concatenate([p for frame, mask in fit_samples for (p,_),shown in zip(frame[:fit_count],mask[:fit_count]) if shown])
+        if held and specification.get('behavior')=='needle-release':
+            tick=specification['shot_ticks'][0]
+            spawned,shown=held.pose(held.anchor_at(tick),tick,view)
+            cloud=np.concatenate([cloud]+[p for (p,_),visible in zip(spawned,shown) if visible])
     else:
         fit_count=len(model['meshes'])-len(held.model['meshes']) if held and specification.get('behavior')=='needle-release' else len(model['meshes'])
         cloud = np.concatenate([p for frame in framing for p, _ in frame[:fit_count]])
@@ -838,6 +862,9 @@ def main():
     if motion.get('visibility_override'):
         manifest['visibility_override']=motion['visibility_override']
     if movement_visibility:manifest['movement_visibility_timeline']=movement_visibility
+    from .prop_timing import VERSION
+    manifest['prop_timing_version']=VERSION
+    if companion and companion_visibility:manifest['companion_visibility_timeline']=companion_visibility
     if jump_scenes:
         manifest['movement_scenario']=jump_scenes[jump_mode].provenance()
         manifest['center_jump_enabled']=center_jump

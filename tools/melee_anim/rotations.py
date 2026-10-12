@@ -90,6 +90,9 @@ class RotationCache:
                 if slug=='game-and-watch' and action in ('attack-305','attack-314'):
                     paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
             elif action == 'taunt':
+                from .character_props import character_prop,resolve_profile
+                prop=resolve_profile(self.repo/'orig/GALE01/files',report,character_prop(data['fighter_kind'],'AppealR'))
+                if prop:paths.extend([self.repo/'orig/GALE01/files'/prop['source_archive'],self.repo/'orig/GALE01/files/PlCo.dat'])
                 table = next(t for t in report['taunts'] if t['fighter_kind'] == data['fighter_kind'])
                 source_kind = table['standard_facing']['right']['source_fighter_kind']
                 table = next(t for t in report['taunts'] if t['fighter_kind'] == source_kind)

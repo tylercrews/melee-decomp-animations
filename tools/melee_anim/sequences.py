@@ -149,6 +149,9 @@ class SequenceProps:
             if not spec:
                 continue
             spec = dict(spec)
+            spec['continues_next_phase']=any(
+                (later.get('character_prop') or {}).get('behavior')==spec.get('behavior')
+                for _,_,later in scene.phases[i+1:i+2])
             if spec.get('behavior') == 'cutter':
                 spec['phase_offset'] = scene.starts[i]
                 spec['cutter_expire_tick'] = cutter_expire
@@ -188,16 +191,22 @@ class SequenceProps:
                  **item.provenance()} for i, joint, item in self.entries]
 
 
-def phase_drawables(model, phase):
+def phase_drawables(model, phase, tick=0, initial=None):
     from .roster import visible_drawables
-    states = model.get('visibility', {}).get('defaults')
-    if states is not None:
-        states = states.copy()
-        for command in phase['clip'].get('script', {}).get('commands', []):
-            if command['opcode'] in (1, 2):
-                break
-            if 'visibility_group' in command:
-                i = command['visibility_group']
-                if 0 <= i < len(states):
-                    states[i] = command['visibility_value']
-    return visible_drawables(model, states)
+    from .movement import movement_visibility_timeline
+    timeline=movement_visibility_timeline(model,phase['clip'],initial)
+    states=next(state for time,state in reversed(timeline) if time<=tick) if timeline else None
+    return visible_drawables(model,states)
+
+
+def sequence_visibility(model,scene):
+    """Keep model parts for the profiled bow/rapid-jab retained transitions."""
+    from .movement import movement_visibility_timeline
+    timelines=[];previous=None
+    for _,_,phase in scene.phases:
+        behavior=(phase.get('character_prop') or {}).get('behavior')
+        retained=behavior=='bow' or phase['name'].startswith('Attack100')
+        timeline=movement_visibility_timeline(model,phase['clip'],previous if retained else None)
+        timelines.append(timeline)
+        previous=timeline[-1][1] if timeline else None
+    return timelines

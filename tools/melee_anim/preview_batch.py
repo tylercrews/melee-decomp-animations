@@ -36,6 +36,10 @@ def completed_job(folder, model, action, section, size, files=Path('orig/GALE01/
         return False
     try:
         m = json.loads(path.read_text(encoding="utf-8"))
+        from .prop_timing import VERSION,needs_current_master
+        try:kind=json.loads(model.read_text()).get('fighter_kind')
+        except (ValueError,AttributeError):kind=None  # legacy/synthetic opaque model inputs
+        if needs_current_master(kind,action,section) and m.get('prop_timing_version')!=VERSION:return False
         from .lighting import results_lighting
         if m.get('lighting')!=results_lighting(files):return False
         if not (m["complete_interval"] and m["action"] == action and m["section"] == section

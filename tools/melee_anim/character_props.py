@@ -6,12 +6,14 @@ implement projectile trajectories, collisions or a complete fighter controller.
 def character_prop(kind, name, animation_id=None):
     if kind==24:
         from .game_watch_attacks import prop_profile
-        return prop_profile(animation_id)
+        return prop_profile(animation_id) if animation_id is not None else None
     def article(slot,label,**extra):
         return dict(special=True,item_kind=-1,name=label,article_slot=slot,
                     asset_fighter_kind=kind,animation_id=0,**extra)
     if kind in (1,22) and name in ('SpecialNStart','SpecialNLoop','SpecialNEnd','SpecialAirNStart','SpecialAirNLoop','SpecialAirNEnd'):
-        return article(1,'Blaster',canonical_part=49,scale=.85,behavior='blaster',phase=name)
+        phase=0 if 'Start' in name else 1 if 'Loop' in name else 2
+        return article(1,'Blaster',canonical_part=49,scale=.85,behavior='blaster',phase=name,
+                       animation_id_override=phase+(3 if 'Air' in name else 0))
     if kind==7 and name in ('SpecialNEnd','SpecialAirNEnd'):
         return article(0,'Released needles',raw_joint=0,behavior='needle-release',phase=name,charged_preset=6)
     if kind==7 and name in ('SpecialNLoop','SpecialAirNLoop'):
@@ -34,6 +36,9 @@ def character_prop(kind, name, animation_id=None):
     if kind in (6,20) and name in ('SpecialNStart','SpecialNLoop','SpecialNEnd','SpecialAirNStart','SpecialAirNLoop','SpecialAirNEnd'):
         phase=0 if 'Start' in name else 1 if 'Loop' in name else 2
         return article(4,'Bow',canonical_part=49,behavior='bow',animation_id_override=phase+(3 if 'Air' in name else 0))
+    if kind==20 and name in ('AppealR','AppealL'):
+        # ftCl_AppealS_Anim spawns Article5 at FtPart_LThumbNb (31).
+        return article(5,'Milk bottle',canonical_part=31,behavior='milk',phase=name)
     return None
 
 

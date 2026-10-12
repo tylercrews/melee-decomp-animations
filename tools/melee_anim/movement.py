@@ -32,15 +32,18 @@ def movement_visibility(kind,aid):
     return {0:1} if kind==14 and aid in (37,42,43) else None
 
 
-def movement_visibility_timeline(model,motion):
+def movement_visibility_timeline(model,motion,initial=None):
     """Source model-part commands, including Samus's ball transition."""
     from .held_items import script_events
     defaults=model.get('visibility',{}).get('defaults')
     if defaults is None:return []
-    states=defaults.copy()
+    states=(defaults if initial is None else initial).copy()
     for group,value in motion.get('visibility_override',{}).items():states[int(group)]=value
     timeline=[(0,states.copy())]
-    for tick,command in script_events(motion.get('script',{}),motion['frames']):
+    script=motion.get('script',{})
+    if not any('visibility_group' in cmd for block in [script]+script.get('reachable_blocks',[]) for cmd in block.get('commands',[])):
+        return timeline
+    for tick,command in script_events(script,motion['frames']):
         if 'visibility_group' not in command:continue
         group=command['visibility_group']
         if not 0<=group<len(states):raise ValueError('Dodge visibility group is outside the model')

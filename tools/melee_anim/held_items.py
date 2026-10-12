@@ -70,6 +70,10 @@ def script_events(script, duration):
             if not returns:break
             next_pc=returns.pop()
         elif op==7:next_pc=cmd.get('target')
+        elif op==8:
+            # Command_08 waits for the animation frame counter to wrap. This
+            # reader covers one source interval; do not busy-loop its goto.
+            break
         elif op in (10,19,31,40,42):events.append((time,cmd))
         pc=next_pc
     else:raise FormatError('Held-item script timing exceeds bounded commands')
@@ -172,33 +176,37 @@ class HeldItem:
             attrs=ar.pointer(article+4)
             self.sword_held_scale=.6*self.bones[6]['scale'][1]
             self.sword_glow=ar.f32(attrs+16)
-        # PickedUp clears HIDDEN throughout the item's child subtree.
-        if specification.get('behavior')!='game-watch':
+        # Common PickedUp and the blaster callback clear the child subtree.
+        # Other character articles retain authored visibility alternatives.
+        if not specification.get('special') or specification.get('behavior')=='blaster':
             for b in self.bones[1:]:b['flags']&=~0x10
         self.animations={}
         self.timeline=[(0,specification['animation_id'],1.)]
-        self.visibility_events=[(0,True)]
+        from .prop_timing import fighter_prop_visibility, item_script_events
+        self.fighter_events=script_events(script or {},duration)
+        self.visibility_events=fighter_prop_visibility(specification,duration,self.fighter_events)
         behavior=specification.get('behavior')
+        if behavior=='cutter':
+            expire=specification.get('cutter_expire_tick')
+            if expire is None:
+                local=next((time for time,cmd in self.fighter_events if cmd.get('command_variable')=={'index':2,'value':1}),None)
+                if local is not None:expire=specification.get('phase_offset',0)+local
+            if expire is not None:
+                self.specification={**specification,'cutter_expire_tick':expire}
+                # efLib_Cb_SetRotYAndTransition requests frame65 and gives
+                # the effect eleven remaining ticks, even in a standalone end.
+                self.visibility_events.append((expire-specification.get('phase_offset',0)+11,False))
+                self.visibility_events.sort(key=lambda event:event[0])
         if behavior=='game-watch' and 'spawn_variable' in specification:
-            self.visibility_events=[(0,False)]
             for time,cmd in script_events(script or {},duration):
                 if cmd.get('command_variable')=={'index':specification['spawn_variable'],'value':1}:
-                    self.visibility_events.append((time,True));self.timeline=[(time,specification['animation_id'],1.)]
-        if behavior=='blaster':
-            # Neutral end begins visible and the source cmd_var1=2 hides it.
-            for time,cmd in script_events(script or {},duration):
-                var=cmd.get('command_variable')
-                if var and var['index']==1:self.visibility_events.append((time,var['value']!=2))
-        elif behavior=='hammer':
-            self.visibility_events=[(0,False)]
-            for time,cmd in script_events(script or {},duration):
-                var=cmd.get('command_variable')
-                if var and var['index']==0 and var['value'] in (1,2):self.visibility_events.append((time,var['value']==1))
-        elif behavior=='cape':
-            self.visibility_events=[(0,True)]
-            for time,cmd in script_events(script or {},duration):
-                var=cmd.get('command_variable')
-                if var and var['index']==1:self.visibility_events.append((time,var['value']!=0))
+                    self.timeline=[(time,specification['animation_id'],1.)]
+        if behavior=='milk':
+            self.timeline=[(next((t for t,c in self.fighter_events if c.get('command_variable')=={'index':1,'value':1}),0),0,1.)]
+        if behavior=='peach-parasol':
+            # PickedUp requests closing animation1 at rate16, then rate1.
+            # Fighter opcode42 opens/closes using the original 15/16 lengths.
+            self.timeline=[(0,1,1.)]
         for time,cmd in script_events(script or {},duration):
             word=int(cmd['first_word'],16)
             if specification['item_kind']==13 and cmd['opcode']==42:
@@ -212,7 +220,13 @@ class HeldItem:
                 if var['index']==0 and var['value'] in (1,2):
                     animation=(0,1,2,1,2)[specification['variant']] if var['value']==1 else 3
                     self.timeline.append((time,animation,1.))
+            elif behavior=='peach-parasol' and cmd['opcode']==42:
+                mode=(word>>13)&8191;div=word&8191
+                if mode not in (4,6):raise FormatError('Unsupported Peach parasol mode')
+                animation=0 if mode==4 else 1
+                self.timeline.append((time,animation,(15,16)[animation]/div if div else 1.))
         states=None if effect else ar.pointer(article+12)
+        self.item_events={}
         for animation in {a for _,a,_ in self.timeline if a is not None}:
             tracks=[];timing={}
             def visit(index,node):
@@ -222,6 +236,12 @@ class HeldItem:
                 if aobj is not None:timing[index]=(ar.f32(aobj+4),bool(ar.u32(aobj)&0x20000000))
             matched_tree(ar,self.bones,ar.pointer(effect_desc+8) if effect else ar.pointer(states+animation*16),visit)
             self.animations[animation]=(tracks,timing)
+            if not effect:self.item_events[animation]=item_script_events(ar,ar.pointer(states+animation*16+12),max(1000,duration))
+        if behavior=='peach-parasol':self.specification={**self.specification,'initial_animation_frame':16}
+        if behavior=='blaster':
+            self.blaster_slide_joint=0
+            for _ in range(4):
+                self.blaster_slide_joint=next(b['index'] for b in self.bones if b['parent']==self.blaster_slide_joint)
         ids={m['offset']:i for i,m in enumerate(source['materials'])}
         materials=source['materials']
         self.textures={}
@@ -295,6 +315,7 @@ class HeldItem:
         start,animation,speed=next((event for event in reversed(self.timeline) if event[0]<=frame),self.timeline[0])
         tracks,timing=self.animations.get(animation,([],{}))
         elapsed=self.specification.get('frozen_frame',(frame-start)*speed+self.specification.get('phase_offset',0))
+        if start==0:elapsed+=self.specification.get('initial_animation_frame',0)
         cutter_expire=self.specification.get('cutter_expire_tick')
         if self.specification.get('behavior')=='cutter' and cutter_expire is not None:
             # efLib_Cb_SetRotYAndTransition: keep frames 60..65 alive until
@@ -309,6 +330,13 @@ class HeldItem:
                 # A constant sampled FObj preserves pose_matrices semantics.
                 evaluated.append(Track(track.joint_index,track.channel,0,0,0,b'\x11'+struct.pack('<f',value)+b'\x01'+struct.pack('<f',value)))
         matrices=pose_matrices(self.bones,evaluated,0,tree_type=None)
+        if self.specification.get('behavior')=='blaster':
+            from .prop_timing import blaster_slide
+            from .motions import Track
+            value=blaster_slide(self.specification['phase'],self.fighter_events,frame)
+            evaluated=[t for t in evaluated if not (t.joint_index==self.blaster_slide_joint and t.channel==6)]
+            evaluated.append(Track(self.blaster_slide_joint,6,0,0,0,b'\x11'+struct.pack('<f',value)+b'\x01'+struct.pack('<f',value)))
+            matrices=pose_matrices(self.bones,evaluated,0,tree_type=None)
         if self.specification.get('judge_number'):
             # it_802C78B8 rotates the sign's second child for right-facing play.
             self.bones[2]['rotation'][1]=np.pi
@@ -334,6 +362,13 @@ class HeldItem:
         geometry=[deform(mesh,constrained,self.bones) for mesh in self.model['meshes']]
         shown=joint_visibility(self.bones,evaluated,0)
         if not next(v for time,v in reversed(self.visibility_events) if time<=frame):shown=[False]*len(shown)
+        variables={}
+        for tick,index,value in self.item_events.get(animation,[]):
+            if tick<=elapsed:variables[index]=value
+        # These callbacks use ITEM vars, not same-numbered fighter vars.
+        if self.specification.get('behavior')=='bat' and variables.get(0,0)!=0:shown=[False]*len(shown)
+        if self.specification.get('behavior')=='game-watch' and self.specification.get('phase')==59:
+            if not any(t<=elapsed and i==0 and v!=0 for t,i,v in self.item_events.get(animation,[])):shown=[False]*len(shown)
         return geometry,[shown[m['owner_joint_index']] for m in self.model['meshes']]
 
     def configure_fighter(self,model):
@@ -349,6 +384,7 @@ class HeldItem:
                 'item_attach_joint':self.attach_joint,'joint_animation':any(t for t,_ in self.animations.values()),
                 'animation_timeline':self.timeline,
                 'visibility_timeline':self.visibility_events,
+                'item_command_variables':self.item_events,
                 'limitations':['No collisions or general item script/material VM',
                                'Six deterministic free-flight needles; no bounce/hit effects' if self.specification.get('behavior')=='needle-release' else 'Emitted projectiles are not played for this attached prop',
                                'Character-specific dynamic/material callbacks and full GX glow remain approximate']}

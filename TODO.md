@@ -1,3 +1,15 @@
+Prop timing and paired visibility (2026-10-12; investigation section60):
+
+- [x] Verify all51 changed GIF/PNG clips,984-clip/81369-frame file coverage,209 GIF bundle inventories/member hashes and17348 still-bundle inventories/sample bytes; leave unchanged GIF pixels covered by earlier verification.
+
+- [x] Audit every supported character article and common held weapon against fighter/item callbacks and original scripts; separate item variables from fighter variables.
+- [x] Correct blaster phase animations/holstering, G&W tools/signs/bells/article lifetimes, Cutter landing expiry, cape reflection interpretation, Toad/bow visibility and source article flags.
+- [x] Add Young Link's original milk-bottle taunt with source attachment and13..193 timing in every actual costume.
+- [x] Apply Nana's own clapping/results script and timed model parts to standalone/combined actors; keep retained bow/rapid-jab phases.
+- [x] Rebuild51 affected1024 masters /4586 PNGs, four Ice Climbers sync clips and download bundles/player; preserve source timing, loop cuts, sizes, alpha and lighting.
+- [x] Pass206 Python tests/Node controls,108 full QA clips /3849 PNGs,549 costume/phase attachment checks and11 live exact/rotated/powered/color/export checks. Service session42388, port8765.
+- [ ] Compare exact spawn/despawn boundaries with captured original-game frames; extend general item/material/particle and collision controllers beyond these source-confirmed playback profiles.
+
 Download progress (2026-10-12; investigation section59):
 
 - [x] Add bounded per-export progress snapshots and a nonblocking polling route, retaining the existing preparation API and request limits.
