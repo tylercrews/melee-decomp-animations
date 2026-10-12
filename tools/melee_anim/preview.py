@@ -287,8 +287,11 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
 def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build/melee_anim/preview/attack-catalog.json')):
     if action.startswith(('attack-','tech-','movement-','other-')):
         from .attacks import find_action
-        actor = find_action(json.loads(attack_catalog.read_text()), kind, action)
-        motion = actor['clip']
+        selection=json.loads(attack_catalog.read_text())
+        actor = find_action(selection, kind, action)
+        category=next(a.get('animation_type','attack') for f in selection['characters'] if f['fighter_kind']==kind or kind==11 and f['fighter_kind']==10
+                      for a in f['actions'] if a['key']==action+'_source' and a['available'])
+        motion = {**actor['clip'],'animation_type':category}
         data = (files/actor['animation_file']).read_bytes()
     elif action == "taunt":
         table=next(x for x in report["taunts"] if x["fighter_kind"]==kind)
@@ -346,8 +349,8 @@ def main():
     parser.add_argument("--action", default="results-clap", help="results-clap, victory1/2/3, taunt, or cataloged attack-/tech-<animation ID>")
     parser.add_argument("--section", choices=("source", "wait"), default="source")
     parser.add_argument("--output", type=Path, default=Path("build/melee_anim/preview/mario_clap"))
-    from .render_settings import MASTER_SIZE
-    parser.add_argument("--size", type=int, default=MASTER_SIZE)
+    from .render_settings import native_size
+    parser.add_argument("--size", type=int, help='override native size for this animation type')
     parser.add_argument("--fps", type=int, default=50, choices=(25, 50))
     parser.add_argument("--ticks-per-second", type=float, default=60)
     parser.add_argument("--yaw", type=float, default=0)
@@ -356,7 +359,7 @@ def main():
     parser.add_argument("--backend", choices=("python","native"), default="python")
     parser.add_argument("--max-frames", type=int, help="diagnostic truncation, not a complete export")
     args = parser.parse_args()
-    if not 64 <= args.size <= 1024 or args.ticks_per_second <= 0:
+    if args.size is not None and not 64 <= args.size <= 1024 or args.ticks_per_second <= 0:
         parser.error("size must be 64..1024 and ticks-per-second positive")
     if args.max_frames is not None and args.max_frames <= 0:
         parser.error("max-frames must be positive")
@@ -379,6 +382,7 @@ def main():
 
     report = json.loads(args.motions.read_text())
     motion, metadata, tracks = load_clip(report, args.action, args.section, args.files,model["fighter_kind"], args.attack_catalog)
+    if args.size is None:args.size=native_size(args.action,motion.get('animation_type'))
     hat=None;hat_path=None;power_info=None;model_folder=args.model.parent;render_model_path=args.model
     if model['fighter_kind']==4:
         from .kirby_powers import model_for_power, remap_tracks, reserved_parts

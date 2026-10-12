@@ -13,7 +13,7 @@ from zipfile import ZipFile, ZIP_STORED
 from PIL import Image
 from .preview_gallery import collect_clips
 from .rotations import RotationCache, camera_angles, marked_angle
-from .render_settings import MASTER_SIZE
+from .render_settings import native_size
 
 SIZES = (128, 256, 512, 1024, 2048)
 
@@ -112,7 +112,10 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
-    def export(self, *, character, action, costume=0, size=MASTER_SIZE, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off'):
+    def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off'):
+        if size is None:
+            selected=next((c for c in self.clips if c['character']==character and c['action_key']==action),{})
+            size=native_size(action,selected.get('animation_type'))
         from .movement import centered_jump_setting
         centered = centered_jump_setting(action,center)
         from .kirby_powers import validate_power

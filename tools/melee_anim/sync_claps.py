@@ -10,7 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from .render_settings import MASTER_SIZE
+from .render_settings import RESULTS_SIZE
 import subprocess
 import sys
 
@@ -200,7 +200,7 @@ def main():
             if args.resume and old.is_file():
                 try:data = json.loads(old.read_text())
                 except (ValueError,OSError):data={}
-                if (data.get('size')==MASTER_SIZE and data.get('sync_plan') == plan and data.get('uniform_gif_ticks') and data.get('transparent_background') is True and data.get('model_sha256') == fingerprint and
+                if (data.get('size')==RESULTS_SIZE and data.get('sync_plan') == plan and data.get('uniform_gif_ticks') and data.get('transparent_background') is True and data.get('model_sha256') == fingerprint and
                         data.get('companion_sha256') == companion_hash and (folder/'preview.gif').is_file() and
                         {p.name for p in folder.glob('frame_*.png')} == {f'frame_{i:04d}.png' for i in range(FRAME_COUNT)}):
                     continue
@@ -210,7 +210,7 @@ def main():
     def render(job):
         folder, model, companion, timeline = job
         command = [sys.executable, '-m', 'tools.melee_anim.preview', '--model', str(model), '--action', 'results-clap',
-                   '--output', str(folder), '--size', str(MASTER_SIZE), '--backend', 'native', '--timeline', str(timeline)]
+                   '--output', str(folder), '--size', str(RESULTS_SIZE), '--backend', 'native', '--timeline', str(timeline)]
         if companion:
             command += ['--companion', str(companion)]
         with (folder/'render.log').open('w') as log:

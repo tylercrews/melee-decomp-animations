@@ -79,10 +79,10 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <div class="timeline"><input id="scrub" type="range" min="0" value="0" step="1" aria-label="Animation frame"><span id="time"></span></div>
 <div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
 <option value="128">Extra small (128 × 128)</option><option value="256">Small (256 × 256)</option>
-<option value="512" selected>★ Medium (512 × 512, native render)</option><option value="1024">Large (1024 × 1024)</option>
+<option value="512">Medium (512 × 512)</option><option value="1024" selected>★ Large (1024 × 1024, native render)</option>
 <option value="2048">⚠ X-Large (2048 × 2048)</option>
 </select></label><small id="sizewarning" role="status" aria-live="polite" hidden>Extremely large GIF files</small>
-<small id="upsizenotice" role="status" aria-live="polite" hidden>Upsized from the 512 × 512 render; no additional detail.</small>
+<small id="upsizenotice" role="status" aria-live="polite" hidden></small>
 </div>
 <div class="controls" id="downloadoptions"><label><input id="kirbymode" type="checkbox" autocomplete="off"> Kirby Mode - include all hats all colors</label>
 <small>Adds every Kirby copy appearance to batch ZIPs. First downloads may need additional rendering.</small></div>
@@ -133,7 +133,7 @@ downloadsize=document.getElementById('downloadsize'), allzip=document.getElement
 fullcycle=document.getElementById('fullcycle'), minimumcycle=document.getElementById('minimumcycle'),
 dirtycycle=document.getElementById('dirtycycle'), synccycle=document.getElementById('synccycle'),
 cyclehint=document.getElementById('cyclehint');
-downloadsize.value='512';
+let nativeDefaultSize=1024;downloadsize.value='1024';
 animationtype.value='clapping';
 const preparedCount=clips.filter(c=>!c.lazy).length;
 const exportBase=location.protocol==='http:'?'':'http://127.0.0.1:8765';
@@ -233,7 +233,7 @@ if(scope!=='costume'&&includeKirbyHats)query.set('hats','all');
 if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
 if(hasAngle()){['pitch','yaw','roll'].forEach((key,i)=>query.set(key,String(angles[i])))}return `${exportBase}/export?${query}`}
 function updateDownloads(){if(current<0)return;let c=clips[current];let a=animations.find(a=>a.key===c.action_key&&a.character===c.character);
-let original=downloadsize.value==='512'&&!useMinimum()&&!hasAngle()&&!hasPower()&&!c.lazy;
+let original=Number(downloadsize.value)===nativeDefaultSize&&!useMinimum()&&!hasAngle()&&!hasPower()&&!c.lazy;
 gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(angleName(effectName(markedName(c.download_name))));
 open.href=original?c.gif:exportURL('gif','costume')+'&view=1';
 const colorHats=includeKirbyHats&&c.character==='kirby';
@@ -277,7 +277,8 @@ let savedSrc=playing?open.href.replace(/([?&])frame=\d+(&|$)/,'$1').replace(/[?&
 if(saveimage.getAttribute?saveimage.getAttribute('src')!==savedSrc:saveimage.src!==savedSrc)saveimage.src=savedSrc;
 saveimage.title=playing?'Right-click to save transparent GIF':'Right-click to save transparent PNG';
 clock.textContent=`${index+1}/${frameCount()} / source ${sourceTime().toFixed(2)}`}
-function select(render=true){current=clips.findIndex(c=>c.character===character.value&&c.action_key===action.value&&String(c.costume_id)===costume.value);
+function select(render=true,keepDownloadSize=false){current=clips.findIndex(c=>c.character===character.value&&c.action_key===action.value&&String(c.costume_id)===costume.value);
+updateNativeSize(keepDownloadSize);
 index=0;carry=0;last=performance.now();
 let a=animations.find(a=>a.key===action.value&&a.character===character.value);archive.href=a.zip;archive.download=a.download_name;
 archive.textContent=`Download this animation — ${a.color_count} colors`;
@@ -293,7 +294,8 @@ character.onchange=()=>{colors();actions();select()};animationtype.onchange=()=>
 kirbypower.onchange=()=>{kirbyPower=kirbypower.value;loadRotation()};
 action.onchange=()=>{animationtype.value=typeForAction(action.value);actions();select()};costume.onchange=select;
 hidepartials.onchange=()=>{let old=action.value;partialsHidden=hidepartials.checked;actions();if(action.value!==old)select()};
-function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048';document.getElementById('upsizenotice').hidden=!['1024','2048'].includes(downloadsize.value)}
+function updateNativeSize(keep=false){const size=['victory','taunt','clapping'].includes(typeForAction(action.value))?1024:512;if(!keep&&Number(downloadsize.value)===nativeDefaultSize)downloadsize.value=String(size);nativeDefaultSize=size;const names={128:'Extra small',256:'Small',512:'Medium',1024:'Large',2048:'X-Large'};for(const option of downloadsize.options){const n=Number(option.value);option.textContent=`${n===size?'★ ':n===2048?'⚠ ':''}${names[n]} (${n} × ${n}${n===size?', native render':''})`}updateSizeWarning()}
+function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048';const notice=document.getElementById('upsizenotice');notice.hidden=Number(downloadsize.value)<=nativeDefaultSize;notice.textContent=`Upsized from the ${nativeDefaultSize} × ${nativeDefaultSize} render; no additional detail.`}
 downloadsize.onchange=()=>{updateSizeWarning();show()};
 kirbymode.onchange=()=>{includeKirbyHats=kirbymode.checked;show()};
 groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[current].ground_effect)loadRotation()};
@@ -324,7 +326,7 @@ if(['128','256','512','1024','2048'].includes(incoming.get('size')))downloadsize
 if(action.value.startsWith('tech-')&&['on','off'].includes(incoming.get('effects'))){groundEffectsEnabled=incoming.get('effects')==='on';groundeffects.checked=groundEffectsEnabled}
 if(['movement-fullhop_source','movement-shorthop_source'].includes(action.value)&&['on','off'].includes(incoming.get('center'))){centerJumpEnabled=incoming.get('center')==='on';centerjump.checked=centerJumpEnabled}
 updateSizeWarning();
-select(false);
+select(false,incoming.has('size'));
 let savedFrame=Number(incoming.get('frame'));if(Number.isInteger(savedFrame)&&savedFrame>=0&&savedFrame<frameCount())index=savedFrame;
 if(incoming.has('playing')){playing=incoming.get('playing')==='true';play.textContent=playing?'Pause':'Play'}
 if(incoming.has('repeat'))loop.checked=incoming.get('repeat')==='true';
@@ -473,9 +475,9 @@ def main():
     if args.require_all and expected != actual:
         parser.error(f"Missing animation/costume combinations: {sorted(expected-actual)}")
     if args.require_all:
-        from .render_settings import MASTER_SIZE
-        if any(c['master_size']!=MASTER_SIZE for c in clips):
-            parser.error(f'Rebuild native {MASTER_SIZE}px masters with roster_batch --resume before packaging')
+        from .render_settings import native_size
+        if any(c['master_size']!=native_size(c['action_key'],c.get('animation_type')) for c in clips):
+            parser.error('Rebuild native results masters with roster_batch --resume before packaging')
     downloads = args.root/"downloads"
     downloads.mkdir(parents=True,exist_ok=True)
     by_action = defaultdict(list)

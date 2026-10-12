@@ -15,7 +15,7 @@ import subprocess
 import sys
 
 from .export_model import export_mario
-from .render_settings import MASTER_SIZE
+from .render_settings import RESULTS_SIZE
 from .inspect_models import costume_catalog
 
 
@@ -54,7 +54,7 @@ def main():
     parser.add_argument("--action", choices=("results-clap", "victory1", "victory2", "victory3", "taunt", "all"), default="all")
     parser.add_argument("--costume", default="all", help="actual Mario costume ID or all")
     parser.add_argument("--section", choices=("source", "wait", "all"), default="all")
-    parser.add_argument("--size", type=int, default=MASTER_SIZE, help="override native master size")
+    parser.add_argument("--size", type=int, default=RESULTS_SIZE, help="override native results master size")
     parser.add_argument("--jobs", type=int, default=3, help="concurrent render processes")
     parser.add_argument("--resume", action="store_true", help="verify and reuse completed compatible previews")
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))

@@ -12,7 +12,7 @@ import threading
 from urllib.parse import parse_qs, urlsplit, quote
 
 from .downloads import DownloadCatalog, SIZES
-from .render_settings import MASTER_SIZE
+from .render_settings import MASTER_SIZE,RESULTS_SIZE
 
 
 def make_server(root, port=8765, catalog=None):
@@ -34,6 +34,7 @@ def make_server(root, port=8765, catalog=None):
             if url.path == '/_health':
                 data = json.dumps({'service': 'melee-animation-downloads', 'sizes': SIZES,
                                    'master_size':MASTER_SIZE,
+                                   'results_master_size':RESULTS_SIZE,
                                    'clips': len(catalog.clips), 'root': str(root)}).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')

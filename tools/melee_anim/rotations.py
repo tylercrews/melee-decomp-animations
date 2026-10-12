@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
-from .render_settings import MASTER_SIZE
+from .render_settings import native_size
 
 
 def camera_angles(pitch=0, yaw=0, roll=0):
@@ -102,7 +102,7 @@ class RotationCache:
                     'ground_effects':manifest.get('ground_effects_enabled',False),
                     'source_times': selected['sample_source_times'], 'fps': selected['fps'],
                     'sync_plan': selected.get('sync_plan') if sync else None,
-                    'fit_source_times': manifest['sample_source_times'], 'size': MASTER_SIZE,
+                    'fit_source_times': manifest['sample_source_times'], 'size': native_size(clip['action_key'],clip.get('animation_type')),
                     'backend': 'native' if os.name == 'nt' else 'python',
                     'rotation_order': 'Ry(yaw) @ Rx(pitch) @ Rz(roll)',
                     'framing': 'per-costume whole-original-clip projected bounds'}
@@ -140,7 +140,7 @@ class RotationCache:
                 folder.mkdir(parents=True, exist_ok=True)
                 command = [sys.executable, '-m', 'tools.melee_anim.preview', '--model', str(model),
                            '--action', settings['action'], '--section', settings['section'],
-                           '--output', str(folder), '--size', str(MASTER_SIZE), '--fps', str(settings['fps']),
+                           '--output', str(folder), '--size', str(settings['size']), '--fps', str(settings['fps']),
                            '--backend', settings['backend'], '--pitch', str(angles[0]),
                            '--yaw', str(angles[1]), '--roll', str(angles[2])]
                 if power!='none':command += ['--kirby-power',power]
