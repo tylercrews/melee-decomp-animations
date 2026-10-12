@@ -207,11 +207,32 @@ def inspect_cycles(root):
     return report
 
 
+def preserve_intervals(root):
+    """Refresh fingerprints after resolution changes, retaining source cuts."""
+    root=Path(root);path=root/'minimum-cycles.json';report=json.loads(path.read_text())
+    for key in ('characters','dirty_characters'):
+        for slug,cycle in report.get(key,{}).items():
+            if not cycle:continue
+            manifests=sorted((root/slug).glob('costume_*/results-clap_source/preview-manifest.json'))
+            if len(manifests)!=cycle['costume_count']:raise ValueError('Costume coverage changed; reanalyze claps')
+            for manifest in manifests:
+                data=json.loads(manifest.read_text());times=data['sample_source_times']
+                start,length=cycle['start'],cycle['length']
+                if (len(times)!=cycle['full_length'] or data['fps']!=cycle['fps'] or
+                    [times[start],times[start+length]]!=cycle['source_interval']):
+                    raise ValueError('Source interval changed; reanalyze claps')
+            cycle['input_fingerprint']=input_fingerprint(manifests)
+    report['resolution_refresh']='Source intervals retained; no speed, phase or frame-count edits'
+    temporary=path.with_suffix('.json.tmp');temporary.write_text(json.dumps(report,indent=2)+'\n');temporary.replace(path)
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path('build/melee_anim/preview'))
+    parser.add_argument('--preserve-intervals',action='store_true',help='retain existing source cuts after a resolution-only rebuild')
     args = parser.parse_args()
-    inspect_cycles(args.root)
+    (preserve_intervals if args.preserve_intervals else inspect_cycles)(args.root)
 
 
 if __name__ == '__main__':

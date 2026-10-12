@@ -65,6 +65,13 @@ def script_summary(archive: Archive, at: int | None, sizes: bytes) -> dict:
             command["target"] = archive.pointer(at + 4)
         if opcode in (1, 2):
             command["timer_ticks"] = word & 0x3FFFFFF
+        if opcode==10:
+            gfx,parameter=struct.unpack('>2H',archive.read(at+4,4))
+            offsets=struct.unpack('>3h',archive.read(at+8,6))
+            command['gfx_spawn']={'gfx_id':gfx,'raw_joint':(word>>18)&255,
+                'common_joint':bool(word&(1<<17)),'destroy_on_state_change':bool(word&(1<<16)),
+                'offset':[v/256 for v in offsets],
+                'range':list(struct.unpack('>3H',archive.read(at+14,6))),'parameter':parameter}
         if opcode == 19:
             command["command_variable"] = {"index": (word >> 24) & 3,
                                            "value": word & 0xFFFFFF}
@@ -378,7 +385,7 @@ def inspect(files: Path, dol_path: Path, symbols_path: Path,
                 metadata, tracks = read_figatree(packed, motion["symbol"])
                 entries.append({**motion, **metadata,
                                 "effective_loop": metadata["tree_loop"] or motion["motion_loop"],
-                                "script": script_summary(fighter, motion["script_offset"], script_sizes),
+                                "script": script_graph_summary(fighter, motion["script_offset"], script_sizes),
                                 "endpoint_check": endpoint_report(tracks, metadata["frames"])})
             results.append({"fighter_kind": kind, "fighter_root": root,
                             "fighter_archive": dat_name, "results_archive": path.name,

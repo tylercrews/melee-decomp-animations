@@ -23,6 +23,7 @@ def primary(slug, files=Path("orig/GALE01/files")):
 def color_label(costume, kind):
     if kind==24:return ("Black","Red","Blue","Green")[costume["costume_id"]]
     suffix=Path(costume["file"]).stem[4:]
+    if kind==0 and suffix=='Nr':return 'Red (default)'
     colors={"Nr":"Default","Re":"Red","Bu":"Blue","Gr":"Green","Bk":"Black","Wh":"White",
             "Ye":"Yellow","Or":"Orange","Aq":"Aqua","La":"Lavender","Pi":"Pink","Gy":"Gray"}
     return colors.get(suffix,f"Costume {costume['costume_id']+1} ({suffix})")
@@ -70,7 +71,11 @@ def visible_drawables(model,states=None):
     groups=model["visibility"]["groups"]
     states=states if states is not None else model["visibility"]["defaults"]
     hidden={d for group in groups for option in group for d in option}
+    outlines=model['visibility'].get('outline_groups',[])
+    hidden.update(d for group in outlines for option in group for d in option)
     visible=set(model["visibility"]["base"])-hidden
     for i,group in enumerate(groups):
+        if 0<=states[i]<len(group):visible.update(group[states[i]])
+    for i,group in enumerate(outlines):
         if 0<=states[i]<len(group):visible.update(group[states[i]])
     return visible

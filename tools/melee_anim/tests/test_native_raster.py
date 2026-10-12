@@ -8,6 +8,43 @@ from tools.melee_anim.native_raster import NativeRaster
 
 @unittest.skipUnless(os.name == "nt", "Windows memory-bitmap OpenGL backend")
 class NativeRasterTests(unittest.TestCase):
+    def test_source_specular_mask_uses_its_uv_without_changing_coverage(self):
+        base={'coordinate_type':0,'flags':0x50010,'source':4,'image_file':'skin','texture_matrix':np.eye(4).tolist()}
+        spec={**base,'flags':0x40020,'source':5,'image_file':'shine'}
+        mat={'render_mode':12,'textures':[base,spec],'ambient_rgba':[0]*3+[255],
+             'diffuse_rgba':[255]*4,'specular_rgba':[255]*4,'shininess':50}
+        mesh={'material_index':0,'uvs':[[0,0]]*3,'uv_sets':{'1':[[.75,0]]*3},'triangles':[[0,1,2]]}
+        model={'meshes':[mesh],'materials':[mat],'lighting':{'lights':[{'flags':13,'rgba':[255]*4,'position':[0,0,1]}]}}
+        p=np.array([[-1.,-1,0],[1.,-1,0],[0.,1,0]])
+        textures={'skin':np.array([[[0,0,0,255]]],dtype='uint8'),
+                  'shine':np.array([[[255,0,0,255],[10,80,200,0]]],dtype='uint8')}
+        raster=NativeRaster(32)
+        try:
+            im=raster.render(model,[(p,np.tile([0.,0,1],(3,1)))],textures,np.eye(3),32,32,np.zeros(3),12,(0,0,0,0))
+            self.assertEqual(im.getpixel((16,16)),(10,80,200,255))
+            self.assertEqual(im.getpixel((0,0))[3],0)
+        finally:raster.close()
+
+    def test_yoshi_color_mask_uses_second_uv_and_preserves_body_alpha(self):
+        base = {'coordinate_type':0,'flags':0x30010,'blend':1.,'source':4,
+                'image_file':'skin','texture_matrix':np.eye(4).tolist()}
+        overlay = {**base,'flags':0x10010,'source':5,'image_file':'markings'}
+        mat = {'textures':[base,overlay],'diffuse_rgba':[179]*3+[255],
+               'diffuse_texture_only':True,'color_alpha_mask_layers':True,'unlit':True}
+        mesh = {'material_index':0,'uvs':[[0,0]]*3,'uv_sets':{'1':[[.75,0]]*3},'triangles':[[0,1,2]]}
+        p = np.array([[-1.,-1,0],[1.,-1,0],[0.,1,0]])
+        for alpha, expected in [(255,(255,255,255)),(128,(128,228,128)),(0,(0,200,0))]:
+            textures = {'skin':np.array([[[0,200,0,255]]],dtype='uint8'),
+                        'markings':np.array([[[255,0,0,255],[255,255,255,alpha]]],dtype='uint8')}
+            raster = NativeRaster(32)
+            try:
+                im = raster.render({'meshes':[mesh],'materials':[mat]},[(p,np.tile([0.,0,1],(3,1)))],
+                                   textures,np.eye(3),32,32,np.zeros(3),12,(0,0,0,0))
+                np.testing.assert_allclose(im.getpixel((16,16))[:3],expected,atol=1)
+                self.assertEqual(im.getpixel((16,16))[3],255)
+                self.assertEqual(im.getpixel((0,0))[3],0)
+            finally:raster.close()
+
     def test_translucent_black_prop_keeps_true_alpha_without_color_keying(self):
         mesh={'material_index':0,'uvs':[[0,0]]*3,'triangles':[[0,1,2]]}
         mat={'textures':[],'diffuse_rgba':[0,0,0,255],'unlit':True,'alpha':.25,'item_alpha_blend':True}

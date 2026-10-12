@@ -62,7 +62,7 @@ class AttackTests(unittest.TestCase):
         folder = Path(command[command.index('--output')+1]); folder.mkdir(parents=True,exist_ok=True)
         images = []
         for i in range(self.clip['frame_count']):
-            image = Image.new('RGB',(256,256),(i*50,10,30)); image.save(folder/f'frame_{i:04d}.png'); images.append(image)
+            image = Image.new('RGB',(512,512),(i*50,10,30)); image.save(folder/f'frame_{i:04d}.png'); images.append(image)
         images[0].save(folder/'preview.gif',save_all=True,append_images=images[1:],duration=20)
         (folder/'preview-manifest.json').write_text(json.dumps({'sample_source_times':sample_times(2.4,False)}))
         return type('Result',(),{'returncode':0})()
@@ -85,6 +85,7 @@ class AttackTests(unittest.TestCase):
             second = self.cache.get(self.clip)
             self.assertNotEqual(first['gif'],second['gif']); self.assertEqual(len(self.calls),3)
             self.assertIn('--attack-catalog',self.calls[0])
+            self.assertEqual(self.calls[0][self.calls[0].index('--size')+1],'512')
 
     def test_virtual_preview_export_and_invalid_frame_before_render(self):
         catalog = DownloadCatalog(self.root,clips=[self.clip]); catalog.attacks=self.cache
@@ -132,7 +133,7 @@ class AttackTests(unittest.TestCase):
             self.assertEqual(self.calls[1][self.calls[1].index('--ground-effects')+1],'on')
             catalog=DownloadCatalog(self.root,clips=[self.clip]);catalog.attacks=self.cache
             with self.assertRaises(ValueError):catalog.preview(character='game-and-watch',action='tech-199_source',effects='invalid')
-            with self.assertRaises(ValueError):catalog.export(character='game-and-watch',action='tech-199_source',effects='on',scope='all')
+            with self.assertRaises(ValueError):catalog.export(character='game-and-watch',action='tech-199_source',effects='on',scope='all',hats='bad')
             self.assertEqual(len(catalog.preview(character='game-and-watch',action='tech-199_source',effects='on')['frames']),3)
 
 

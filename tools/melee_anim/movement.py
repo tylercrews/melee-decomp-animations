@@ -10,16 +10,42 @@ from .hsd import Archive, FormatError
 from .inspect_motions import read_exact_motion
 from .motions import read_figatree
 
-MOVEMENT_IDS={2:'Standing',7:'Walking — slow',8:'Walking — medium',9:'Walking — fast',12:'Dashing',13:'Running'}
+MOVEMENT_IDS={2:'Standing',7:'Walking — slow',8:'Walking — medium',9:'Walking — fast',12:'Dashing',13:'Running',
+              41:'Spot dodge',42:'Roll forward',43:'Roll backward',
+              206:'Sleep — falling asleep',207:'Sleep — sleeping',208:'Sleep — waking up'}
 JUMP_PHASE_IDS={'squat':15,'jump':16,'fall':20,'landing':34,'standing':2}
 
 
-def movement_label(aid,name):
+def movement_label(aid,name,kind=None):
+    if kind==14 and aid==37:
+        return 'Yoshi egg'
     if aid in MOVEMENT_IDS:
         return MOVEMENT_IDS[aid]
     if aid in (3,4,5) and name.startswith('Wait') and name!='WaitItem':
         return f'Idle {aid-2}'
     return None
+
+
+def movement_visibility(kind,aid):
+    # ftCo_80099438 selects Yoshi's egg for rolls; ftCo_80099954 restores
+    # the normal body for spot dodge. GuardOn supplies the allowed egg pose.
+    return {0:1} if kind==14 and aid in (37,42,43) else None
+
+
+def movement_visibility_timeline(model,motion):
+    """Source model-part commands, including Samus's ball transition."""
+    from .held_items import script_events
+    defaults=model.get('visibility',{}).get('defaults')
+    if defaults is None:return []
+    states=defaults.copy()
+    for group,value in motion.get('visibility_override',{}).items():states[int(group)]=value
+    timeline=[(0,states.copy())]
+    for tick,command in script_events(motion.get('script',{}),motion['frames']):
+        if 'visibility_group' not in command:continue
+        group=command['visibility_group']
+        if not 0<=group<len(states):raise ValueError('Dodge visibility group is outside the model')
+        states[group]=command['visibility_value'];timeline.append((tick,states.copy()))
+    return timeline
 
 
 def read_jump_parameters(ar,root):

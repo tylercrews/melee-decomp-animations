@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 from .export_model import export_mario
+from .render_settings import RESULTS_SIZE
 from .inspect_models import costume_catalog
 
 
@@ -28,13 +29,16 @@ def action_sections(action, section):
              else ("source",) if section == "all" else (section,))]
 
 
-def completed_job(folder, model, action, section, size):
+def completed_job(folder, model, action, section, size, files=Path('orig/GALE01/files')):
     """Resume only matching complete jobs with the exact expected file set."""
     path = folder / "preview-manifest.json"
     if not path.is_file():
         return False
     try:
         m = json.loads(path.read_text(encoding="utf-8"))
+        if action=='results-clap' or action.startswith('victory'):
+            from .lighting import results_lighting
+            if m.get('lighting')!=results_lighting(files):return False
         if not (m["complete_interval"] and m["action"] == action and m["section"] == section
                 and m["size"] == size and m["fps"] == 50 and m["camera_yaw"] == 0
                 and m["nominal_ticks_per_second"] == 60
@@ -53,7 +57,7 @@ def main():
     parser.add_argument("--action", choices=("results-clap", "victory1", "victory2", "victory3", "taunt", "all"), default="all")
     parser.add_argument("--costume", default="all", help="actual Mario costume ID or all")
     parser.add_argument("--section", choices=("source", "wait", "all"), default="all")
-    parser.add_argument("--size", type=int, help="override size; default keeps clap at 320 and other clips at 256")
+    parser.add_argument("--size", type=int, default=RESULTS_SIZE, help="override native results master size")
     parser.add_argument("--jobs", type=int, default=3, help="concurrent render processes")
     parser.add_argument("--resume", action="store_true", help="verify and reuse completed compatible previews")
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
@@ -79,9 +83,9 @@ def main():
         model_dir = Path("build/melee_anim/exported/mario") / f"costume_{costume:02d}"
         model, _ = export_mario(args.files, model_dir, costume)
         for action, section in choices:
-            size = args.size or (320 if action == "results-clap" else 256)
+            size = args.size
             folder = args.output / "mario" / f"costume_{costume:02d}" / f"{action}_{section}"
-            if args.resume and completed_job(folder, model, action, section, size):
+            if args.resume and completed_job(folder, model, action, section, size, args.files):
                 reused += 1
                 print(f"Verified existing costume {costume}: {action}/{section}", flush=True)
             else:

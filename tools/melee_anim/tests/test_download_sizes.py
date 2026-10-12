@@ -93,6 +93,14 @@ class DownloadSizeTests(unittest.TestCase):
         try:
             with urlopen(base+'/_health') as response:
                 self.assertEqual(json.load(response)['sizes'], list(SIZES))
+            with urlopen(base+'/prepare-export?character=synthetic&action=taunt_source&size=128&kind=png&scope=colors&frame=1') as response:
+                ready=json.load(response)
+                self.assertIn('-frame-0002-all-colors-128px.zip',ready['filename'])
+            with urlopen(base+ready['url']) as response:
+                with ZipFile(BytesIO(response.read())) as archive:
+                    self.assertEqual(len(archive.namelist()),2)
+                    for name in archive.namelist():
+                        with Image.open(BytesIO(archive.read(name))) as image:self.assertEqual(image.size,(128,128))
             with urlopen(base+'/export?character=synthetic&action=taunt_source&size=2048&kind=png&frame=1') as response:
                 self.assertIn('-frame-0002-2048px.png', response.headers['Content-Disposition'])
                 with Image.open(BytesIO(response.read())) as im:

@@ -266,7 +266,7 @@ def primary_drawables(count, classes, item_groups=()):
     return set(range(count)) - (hidden - normal)
 
 
-def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt"), *, archive_path=None, root_symbol=None, root_offset=None, copy_classes=None, reflection_preview=False):
+def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt"), *, archive_path=None, root_symbol=None, root_offset=None, copy_classes=None, reflection_preview=False, outline_groups=None, color_mask_preview=False):
     catalog = roster(files_root,include_extra=True) if kind>=27 else roster(files_root)
     fighter=next(f for f in catalog["fighters"] if f["fighter_kind"]==kind)
     costume=fighter["costumes"][costume_id]
@@ -283,15 +283,20 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
         'costumes':[{'classes':copy_classes,'script_texture_indices_to_global_tobj_indices':[]} for _ in fighter['costumes']]}
     groups=visibility["costumes"][costume_id]["classes"][0]["groups"]
     states=visibility_defaults(kind,costume_id,len(groups)) if copy_classes is None else [0 if group else -1 for group in groups]
-    item_groups = []
+    item_groups = outline_groups or []
     if kind == 24:
-        # ftGw_Init_OnLoad assigns class 4 from items[10].visibility. Without
-        # hiding this list, oil-panic/other silhouettes overlap the fighter.
+        # Source class 4 contains expanded outline meshes. Select its matching
+        # alternatives with the same appearance states as the normal body.
         fighter_ar = Archive((files_root/data_root["fighter_archive"]).read_bytes())
         items = fighter_ar.pointer(fighter_ar.public(data_root["fighter_root"]) + 0x48)
         item_groups = visibility_lookup(fighter_ar, fighter_ar.pointer(items + 10 * 4), len(groups))
     selected = primary_drawables(len(model["drawables"]), visibility["costumes"][costume_id]["classes"], item_groups)
+    outline_ids = {d for group in item_groups for option in group for d in option}
+    selected.update(outline_ids)
     vis={"groups":groups,"defaults":states,"base":sorted(selected)}
+    if item_groups:
+        if len(item_groups)!=len(groups):raise FormatError('Outline/body visibility group counts differ')
+        vis['outline_groups']=item_groups
     used_materials = {d["material"] for d in model["drawables"] if d["index"] in selected}
     material_ids, materials = {}, []
     animations = texture_animations(ar, model["root_symbol"])
@@ -316,11 +321,16 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
         exported = dict(material)
         if copy_classes is not None:
             exported['copy_diffuse_only']=True
-        if kind in (12,23,31):
+        if kind in (12,14,23,31):
             # Giga Bowser's leading bump stages are not diffuse RGB. Pikachu
             # and Pichu's eyes use COLORMAP_BLEND with blending=1: TObjMakeTExp
             # replaces the incoming RGB, rather than multiplying gray diffuse.
             exported['diffuse_texture_only']=True
+        if kind == 14 or color_mask_preview:
+            # Yoshi's cheek/belly markings are a second UV texture: source
+            # TObjMakeTExp ALPHA_MASK interpolates RGB using texture alpha,
+            # while ALPHAMAP_NONE preserves the opaque body coverage.
+            exported['color_alpha_mask_layers'] = True
         if kind==13 or reflection_preview:
             exported['diffuse_texture_only']=True
             if any(t.get('flags',0)&15==1 for t in material['textures']):
@@ -342,6 +352,10 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
             image, palette = ar.pointer(tex + 76), ar.pointer(tex + 80)
             animation = animations.get((material["offset"], descriptor["id"]))
             if animation is not None:
+                from .ground_effects import aobj_tracks
+                descriptor['animation_tracks']=[{'channel':t.channel,'startframe':t.startframe,
+                    'frac_value':t.frac_value,'frac_slope':t.frac_slope,'data':t.data.hex()}
+                    for t in aobj_tracks(ar, ar.pointer(animation+8), 0) if t.channel==1]
                 values = aobj_frame0(ar, ar.pointer(animation + 8))
                 table, palette_table = ar.pointer(animation + 12), ar.pointer(animation + 16)
                 nimages, npalettes = ar.u16(animation + 20), ar.u16(animation + 22)
@@ -375,6 +389,7 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
                      "envelopes": polygon.get("envelopes") or [[{"joint_index":polygon["joint_index"],"weight":1.0}]]+([[{"joint_index":polygon["shared_joint_index"],"weight":1.0}]] if polygon.get("shared_joint_index") is not None else []), "owner_joint_index": polygon["joint_index"],
                      "cull_flags": polygon["flags"],
                      })
+        if polygon['drawable_index'] in outline_ids:mesh['outline_pass']=True
         mesh["weights"]=[mesh["envelopes"][p] for p in mesh["palette_indices"]]
         positions, normals = skin_source_mesh(mesh, bones, worlds)
         mesh["positions_bind"], mesh["normals_bind"] = positions.tolist(), normals.tolist()
@@ -400,6 +415,13 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
         # Fighter_UpdateModelScale assigns it to the root JObj's LOCAL X.
         payload["runtime_root_scale"]=[catalog["game_watch"]["root_x_width"],1.0,1.0]
         payload["outline_rgba"]=catalog["game_watch"]["outline_rgba"]
+    if outline_ids:
+        payload['outline_geometry']=True
+        # Keep materials separate: a source material can be shared by body
+        # and outline drawables, but the outline pass applies a TEV overlay.
+        color=payload.get('outline_rgba')
+        if color is not None:
+            configure_outline_materials(payload,color)
     if kind==32:
         payload['limitations'].append('Sandbag runtime RObj joint constraints/limits are not evaluated')
     target = output_dir / "model.json"
@@ -407,6 +429,19 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
     return target, {"bones": len(bones), "meshes": len(meshes), "materials": len(materials),
                     "textures": len(images), "vertices": len(all_positions),
                     "triangles": sum(len(m["triangles"]) for m in meshes), "bounds_bind": payload["bounds_bind"]}
+
+
+def configure_outline_materials(model, color):
+    from .game_watch import outline_color
+    cloned={}
+    for mesh in model['meshes']:
+        if not mesh.get('outline_pass'):continue
+        index=mesh['material_index']
+        if index not in cloned:
+            material=dict(model['materials'][index])
+            material.update(diffuse_rgba=outline_color(material['diffuse_rgba'],color),alpha=1.0,unlit=True,textures=[])
+            cloned[index]=len(model['materials']);model['materials'].append(material)
+        mesh['material_index']=cloned[index]
 
 
 def export_mario(files_root,output_dir,costume_id=0,dol_path=Path("orig/GALE01/sys/main.dol"),symbols_path=Path("config/GALE01/symbols.txt")):

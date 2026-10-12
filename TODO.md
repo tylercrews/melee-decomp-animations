@@ -1,3 +1,79 @@
+Results lighting for clapping and victories (2026-10-12; investigation section57):
+
+- [x] Verify original panel/full results lights and source material ambient/specular/shininess; implement supported diffuse/specular texture channels in both backends.
+- [x] Apply to all clapping and victory entrance/wait previews/exports; include light asset hashes, manifest provenance and stale-resume checks.
+- [x] Review five matched-pose before/after probes and pass lighting/raster/cache regressions.
+- [x] Finish861 full actual-costume results clips /71331 PNGs and123 synchronized claps, retaining source timelines, loops, framing and cuts.
+- [x] Repackage GIF/still/aggregate bundles, regenerate player, restart service and verify exact/rotated/powered/all-color/all-size exports;192 Python tests, Node controls and full984-clip bundle verification pass.
+- [x] Record final verification and remaining perspective/bump/TEV/game-reference limits in all four notes; service session54811, port8765.
+
+Yoshi white markings (2026-10-12; investigation section56):
+
+- [x] Verify original base skin and second-UV cheek/belly masks in all six costumes; implement source RGB alpha-mask blending without changing fighter coverage.
+- [x] Apply the same material fix to Kirby's Yoshi hat and both raster backends; pass186 Python tests and Node controls.
+- [x] Rebuild48 results/taunt clips /3078 PNG masters, six synchronized claps, all-color GIF/still bundles, aggregate and player, retaining prior source timing/cuts.
+- [x] Complete live normal/rotated/powered/all-size/all-color download verification and record the final service (exec session1315, port8765).
+
+Current mixed-resolution / scoped-export / README work (2026-10-12; investigation section53):
+
+Game & Watch attack props (2026-10-12; investigation section55):
+
+- [x] Identify missing source articles and timed body parts; add spray, torch, turtle, manhole, parachute, air puff, numbered signs, bucket/oil, pan/chair/key and rescue support.
+- [x] Preserve four actual costume colors, source item outlines/attachments/clocks, all18 Judgment numbers and combined rapid jab phases.
+- [x] Add default-on Judgment9 electric checkbox with matching preview/paused/GIF/PNG/color/rotation/export/handoff behavior.
+- [x] Pass184 Python tests, Node controls,40 full targeted default clips and live settings/color/size/prop checks.
+- [ ] Compare matching original-game poses and complete remaining item/controller/particle/depth behavior; current contact effect is a documented deterministic preset.
+
+- [x] Implement semantic Download All families, grounded/aerial and combined preference, live counts and Kirby batch appearances/colors.
+- [x] Remove the whole-batch server lock while preserving individual render/artifact synchronization;177 Python tests pass.
+- [x] Implement1024 native Victory Pose/Taunt/Clapping and512 other categories across defaults, caches, resume checks and UI native/upsizing policy.
+- [x] Finish all984 native1024 base clips and123 sync claps, retaining source cuts and42-frame sync schedules.
+- [x] Regenerate native GIF/paused-still ZIPs and actual player.html; pass full coverage and Node controls.
+- [x] Restart production service and verify selected/all-color defaults, native stars/notices, scoped batches and actual1024 PNG/GIF exports.
+- [x] Make root README primary by archiving .github/README.md; rewrite summary, Windows setup, size rationale and early **~67 GB** warning.
+- [x] Finish curated generated samples and real UI screenshots in docs/media; document this limited tracked-media exception.
+- [x] Update final verification/evidence and remaining batch/fidelity limits in all four handoff documents.
+
+Game & Watch source outlines (2026-10-12; investigation section54):
+
+- [x] Recover original class-4 meshes, matching visibility alternatives, TEV RGB overlay and color/depth-only passes for all four colors and Kirby's copy.
+- [x] Replace the one-pixel approximation with source geometry in both raster backends;180 Python tests pass.
+- [x] Rebuild32 results/taunt clips, four sync claps and refreshed player/bundles, preserving timing/cuts.
+- [x] Complete frame/download/bundle checks, powered/rotated probes, service restart and source-pass notes.
+- [x] Refresh README media and verify final links/Git checks.
+
+Native512 migration (2026-10-11; investigation section52):
+
+- [x] Share512 native resolution across previews, batches, action/rotation/power/centered/sync caches and default exports.
+- [x] Default/star the512 Medium option; explain1024/2048 upsizing beside the independent yellow2048 GIF warning.
+- [x] Include resolution in cache identity/resume validation; reject old native dimensions in packaging/coverage verification.
+- [x] Preserve source clapping cuts/sync schedules with validated fingerprint refreshes.
+- [x] Finish native512 base/sync rebuild and GIF/paused-frame bundles; verify coverage and restart the service.
+
+Resolution investigation (2026-10-11; section51):
+
+- [x] Measure true256/512/1024 rendering file sizes for a flat silhouette and textured character; inventory existing984 base PNG/GIF masters.
+- [ ] If requested, implement higher-resolution masters and supersampled/antialiased outlines, updating cache identities and preserving export transparency/timing. Current resize-only download behavior remains unchanged.
+
+Sleep-bubble effect completed (2026-10-11; investigation section 50):
+
+- [x] Inspect original sleeping-victory gfx416 spawns and common particle/sprite data.
+- [x] Render original bubble growth, drift, colors and fade in every Pikachu/Jigglypuff Victory3 costume; carry surviving entrance particles into waits.
+- [x] Include bubbles in transparent GIF/PNG, rotated views, paused frames, every size and all-color ZIPs; repackage existing bundles.
+- [x] Validate 169 Python tests / Node controls, 18 full clips / 1,979 frames and 12 live export checks.
+- [ ] Compare bubble depth, exact RNG and game-tick scheduling against original gameplay capture before claiming runtime fidelity or seamless effect loops.
+
+Latest completed work (2026-10-11; investigation section 49):
+
+- [x] Movement: all playable forms/costumes have original sleep start, sleeping loop and wake-up clips, plus spot dodge and both ground rolls.
+- [x] Add Yoshi-only egg pose/roll visibility and Samus's source-timed morph-ball transition; exclude general shields and air dodge.
+- [x] Evaluate original costume-specific eye-image FObjs and timed script requests for sleep, Rest and sleeping victory poses; preserve entrance state for victory waits.
+- [x] Rebuild Pikachu/Pichu/Jigglypuff results/taunts in all costumes, then refresh cycle/sync assets and download bundles.
+- [x] Add batch spinner/shared duplicate lock, click-time selection snapshot, error recovery and cached artifact preparation; preserve exact file-to-HTTP handoff.
+- [x] Audit costume names and share the complete color-label helper across selectors/downloads; remove generic labels for supplied alternate colors.
+- [x] Validate 166 synthetic tests, Node controls and 175 full movement clips / 7,313 frames; exercise real paused/GIF/all-color exports.
+- [ ] Compare sleeping eye timings and dodge/egg assembly against original-game capture; extend remaining texture/material/runtime callbacks only with source evidence.
+
 # Ordered implementation checklist
 
 Updated 2026-10-11 after Tech/ground-motion playback and optional core impact effects. There are also 861 on-demand Tech costume choices. All 26 selectable character entries / 123 actual costumes have clapping, standard taunt, three victory entrances, and three primary wait clips: 984 GIFs and 81,369 PNG masters. Production fidelity and MP4 remain future work. See `AGENTS.md`'s current handoff for the resume order.

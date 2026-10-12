@@ -8,6 +8,7 @@ from zipfile import ZipFile
 
 from tools.melee_anim.preview_batch import action_sections, completed_job
 from tools.melee_anim.preview_gallery import collect_clips, write_bundle, write_still_bundle
+from tools.melee_anim.roster import color_label
 
 
 class DownloadTests(unittest.TestCase):
@@ -28,6 +29,7 @@ class DownloadTests(unittest.TestCase):
         model = self.root/f"model_{costume}.json"
         model.write_text(f"model {costume}")
         manifest = {"complete_interval": True, "action": action, "section": section,
+                    "source_model_archive":('PlMrNr.dat','PlMrYe.dat','PlMrBk.dat','PlMrBu.dat','PlMrGr.dat')[costume],
                     "costume_id": costume, "sample_source_times": [0, 1],
                     "fps": 50, "camera_yaw": 0, "nominal_ticks_per_second": 60,
                     "source_period_frames": 2, "source_symbol": "synthetic_clip",
@@ -56,6 +58,22 @@ class DownloadTests(unittest.TestCase):
             manifest = json.loads(archive.read("manifest.json"))
             for row in manifest["files"]:
                 self.assertEqual(row["sha256"], hashlib.sha256(archive.read(row["file"])).hexdigest())
+
+    def test_named_costumes_use_the_shared_label_in_prebuilt_and_lazy_clips(self):
+        for archive,kind,label in [('PlFxLa.dat',1,'Lavender'),('PlCaGy.dat',2,'Gray'),
+                                   ('PlSsLa.dat',13,'Lavender'),('PlGnLa.dat',25,'Lavender')]:
+            self.assertEqual(color_label({'file':archive,'costume_id':2},kind),label)
+        self.assertEqual(color_label({'file':'PlMrNr.dat','costume_id':0},0),'Red (default)')
+        self.assertEqual([color_label({'file':'PlGwNr.dat','costume_id':i},24) for i in range(4)],
+                         ['Black','Red','Blue','Green'])
+        folder,_=self.fixture(2)
+        manifest=folder/'preview-manifest.json'
+        data=json.loads(manifest.read_text());data['source_model_archive']='PlFxLa.dat'
+        manifest.write_text(json.dumps(data))
+        (self.root/'mario').rename(self.root/'fox')
+        clip=collect_clips(self.root,include_attacks=False)[0]
+        self.assertEqual(clip['costume_label'],'Lavender')
+        self.assertTrue(clip['download_name'].endswith('-lavender.gif'))
 
     def test_resume_refuses_missing_stale_frames_or_changed_model(self):
         folder, model = self.fixture(0)

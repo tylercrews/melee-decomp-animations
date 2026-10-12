@@ -101,12 +101,23 @@ class RotationCacheTests(unittest.TestCase):
         (out/'preview-manifest.json').write_text(json.dumps({'sample_source_times': times}))
         return type('Result', (), {'returncode': 0})()
 
+    def test_results_light_archive_invalidates_clap_and_victory_caches(self):
+        archive = self.repo/'orig/GALE01/files/GmRst.usd'
+        for action in ('results-clap_source','victory1_source','victory1_wait'):
+            clip = {**self.clip,'action_key':action}
+            archive.write_bytes(b'original scene light bytes')
+            before = self.cache._inputs(clip,(0,25,0),False)[0]
+            archive.write_bytes(b'replacement scene light bytes')
+            after = self.cache._inputs(clip,(0,25,0),False)[0]
+            self.assertNotEqual(before,after)
+
     def test_resume_hashes_timeline_and_resources_and_recovers_corruption(self):
         with patch('tools.melee_anim.rotations.subprocess.run', side_effect=self.render):
             self.assertIs(self.cache.get(self.clip, (0, 0, 0)), self.clip)
             first = self.cache.get(self.clip, (20, 45, 10))
             self.assertEqual(self.cache.get(self.clip, (20, 45, 10)), first)
             self.assertEqual(len(self.calls), 1)
+            self.assertEqual(self.calls[0][self.calls[0].index('--size')+1],'1024')
             self.assertIn('--pitch', self.calls[0]); self.assertIn('--samples', self.calls[0])
             self.assertEqual(json.loads((self.root/Path(first['gif']).parent/'preview-manifest.json').read_text())['sample_source_times'], [0, 1, 2])
             (self.root/first['frames'][1]).write_bytes(b'corrupt')

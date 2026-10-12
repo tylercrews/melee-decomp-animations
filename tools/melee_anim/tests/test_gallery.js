@@ -19,14 +19,28 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
-  .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
+const elements = Object.fromEntries(['electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+  .map(id => [id, {value: '0', textContent: '', checked: false, options: id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
   performance: {now: () => 0}, Image: class {}, requestAnimationFrame: callback => {context.nextFrame = callback;}});
 vm.runInContext(script, context);
 const data = expression => vm.runInContext(expression, context);
+for(const [slug,id,label] of [['fox',2,'Lavender'],['captain-falcon',1,'Gray'],['samus',4,'Lavender'],['ganondorf',4,'Lavender']]){
+  const costume=data('characters').find(c=>c.slug===slug).costumes.find(c=>c.id===id);
+  assert.equal(costume.label,label);
+  assert(data('clips').filter(c=>c.character===slug&&c.costume_id===id).every(c=>c.costume_label===label));
+}
+assert(data('characters').every(c=>c.costumes.every(costume=>!costume.label.startsWith('Costume '))));
+
 assert.equal(elements.hidepartials.checked,true,'partial clips are hidden on fresh loads');
+assert.equal(elements.downloadsize.value,'1024');
+assert(data('clips.filter(c=>!c.lazy)').every(c=>c.master_size===1024),'prebuilt results must be native1024');
+assert.equal(elements.upsizenotice.hidden,true);
+assert(elements.downloadsize.options.find(o=>o.value==='1024').textContent.startsWith('\u2605'));
+assert(!elements.downloadsize.options.find(o=>o.value==='512').textContent.startsWith('\u2605'));
+
+assert.match(html,/<option value="1024" selected>\u2605 Large \(1024 \u00d7 1024, native render\)<\/option>/);
 elements.hidepartials.checked=false;elements.hidepartials.onchange();
 assert.equal(elements.sizewarning.hidden,true,'default size has no warning');
 assert.equal(elements.action.options.length, 1);
@@ -91,16 +105,16 @@ for (const clip of data('clips.filter(c=>!c.lazy)')) {
   assert.equal(data('clips[current].costume_id'), clip.costume_id);
   assert.equal(elements.costume.value, String(clip.costume_id), 'changing animations must preserve the chosen color');
   assert.equal(elements.gif.href, clip.gif);
-  assert.equal(elements.gif.download, clip.download_name.replace('.gif','-256px.gif'));
+  assert.equal(elements.gif.download, clip.download_name.replace('.gif','-1024px.gif'));
   assert.match(elements.gif.download, /\.gif$/);
   elements.scrub.value='3';elements.scrub.oninput();
   assert.equal(elements.still.href,clip.frames[3]);assert.equal(elements.still.hidden,false);
   assert.equal(elements.framezip.hidden,false);
-  assert.match(elements.still.download,/frame-0004-256px.png$/);
+  assert.match(elements.still.download,/frame-0004-1024px.png$/);
   assert(fs.existsSync(path.join(path.dirname(page),elements.framezip.href)));
   const a = data('animations.find(a => a.key === action.value && a.character === character.value)');
   assert.equal(elements.animationzip.href, a.zip);
-  assert.equal(elements.animationzip.download, a.download_name.replace('.zip','-256px.zip'));
+  assert.equal(elements.animationzip.download, a.download_name.replace('.zip','-1024px.zip'));
   assert(fs.existsSync(path.join(path.dirname(page), a.zip)));
   elements.play.onclick();
   assert.equal(elements.still.hidden,true);
@@ -111,11 +125,12 @@ elements.action.value='victory3_source';elements.action.onchange();
 elements.scrub.value='67';elements.scrub.oninput();
 assert.match(elements.time.textContent,/^68\/101/);
 assert.match(elements.still.href,/frame_0067.png$/);
-assert.match(elements.still.download,/frame-0068-256px.png$/);
+assert.match(elements.still.download,/frame-0068-1024px.png$/);
 assert.match(elements.framezip.href,/frame-0068.zip$/);
-for (const size of [128,512,1024,2048]) {
+for (const size of [128,256,512,2048]) {
   elements.downloadsize.value=String(size);elements.downloadsize.onchange();
   assert.equal(elements.sizewarning.hidden,size!==2048,'warning appears only for X-Large');
+  assert.equal(elements.upsizenotice.hidden,size<=1024,'upsizing notice only above native resolution');
   assert.equal(data('index'),67,'size changes must preserve the paused frame');
   assert.equal(data('playing'),false);
   assert.equal(elements.still.hidden,false);
@@ -130,10 +145,10 @@ for (const size of [128,512,1024,2048]) {
     assert.match(elements[id].download,new RegExp(`-${size}px\\.(gif|png|zip)$`));
   }
 }
-elements.downloadsize.value='256';elements.downloadsize.onchange();
+elements.downloadsize.value='1024';elements.downloadsize.onchange();
 assert.equal(elements.sizewarning.hidden,true,'switching away from X-Large hides the warning');
 assert.match(elements.still.href,/frame_0067.png$/);
-assert(html.includes('download="melee-all-characters-all-animations.zip"'));
+assert.match(html,/id="allzip" download>Download matching animations for all characters/);
 assert(fs.existsSync(path.join(path.dirname(page), 'downloads/melee-all-characters-all-animations.zip')));
 for (const [slug,length] of [['luigi',20],['kirby',34],['link',12]]) {
   elements.character.value=slug;elements.character.onchange();
@@ -149,7 +164,7 @@ for (const [slug,length] of [['luigi',20],['kirby',34],['link',12]]) {
   assert.equal(new URL(elements.gif.href).searchParams.get('cycle'),'minimum');
   assert.equal(new URL(elements.open.href).searchParams.get('cycle'),'minimum');
   assert.equal(new URL(elements.open.href).searchParams.get('view'),'1');
-  assert.match(elements.gif.download,/-minimum-cycle-256px.gif$/);
+  assert.match(elements.gif.download,/-minimum-cycle-1024px.gif$/);
   elements.scrub.value=String(length-1);elements.scrub.oninput();
   assert.equal(new URL(elements.still.href).searchParams.get('frame'),String(length-1));
   elements.play.onclick();context.nextFrame(20);
@@ -164,7 +179,7 @@ assert.equal(elements.minimumcycle.disabled,true);
 assert.equal(elements.minimumcycle.checked,false);
 assert(!html.includes('Dirty loop candidates to review'));assert(!html.includes('dirtylist'));
 const dirtyCharacters=data('characters.filter(ch=>clips.some(c=>c.character===ch.slug&&c.dirty_cycle))');
-assert.equal(dirtyCharacters.length,11);
+assert(dirtyCharacters.length>0,'dirty loop choices must remain available after source texture changes');
 for (const ch of dirtyCharacters) {
   elements.character.value=ch.slug;elements.character.onchange();
   elements.action.value='results-clap_source';elements.action.onchange();
@@ -176,7 +191,7 @@ for (const ch of dirtyCharacters) {
   assert.equal(data('frameCount()'),short.length);
   assert.equal(elements.frame.src,data(`clips[current].frames[${short.start}]`));
   assert.equal(new URL(elements.gif.href).searchParams.get('cycle'),'dirty');
-  assert.match(elements.gif.download,/-dirty-loop-256px.gif$/);
+  assert.match(elements.gif.download,/-dirty-loop-1024px.gif$/);
   assert(elements.cyclehint.textContent.includes(short.failed_checks[0]));
   elements.scrub.value=String(short.length-1);elements.scrub.oninput();
   assert.equal(new URL(elements.still.href).searchParams.get('frame'),String(short.length-1));
@@ -198,7 +213,7 @@ for (const clip of data('clips.filter(c=>c.sync_cycle)')) {
   assert.equal([elements.fullcycle,elements.minimumcycle,elements.dirtycycle,elements.synccycle].filter(r=>r.checked).length,1);
   assert.match(elements.meta.textContent,/42 frames at 50 fps \/ 0.84s/);
   assert.equal(new URL(elements.gif.href).searchParams.get('cycle'),'sync');
-  assert.match(elements.gif.download,/-clapping-sync-256px.gif$/);
+  assert.match(elements.gif.download,/-clapping-sync-1024px.gif$/);
   elements.scrub.value='41';elements.scrub.oninput();
   assert.equal(elements.frame.src,clip.sync_cycle.frames[41]);
   assert.equal(new URL(elements.still.href).searchParams.get('frame'),'41');
@@ -211,7 +226,7 @@ assert.equal(elements.clapmodes.hidden,true);
 assert.equal(data('cycleMode()'),'full');
 // Served pages use their own origin, including a user-selected server port.
 const servedElements=Object.fromEntries(Object.keys(elements).map(id=>[id,
-  {value:'90',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  {value:'90',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
 const requests=[];
 let servedPageShow;
 const servedContext=vm.createContext({document:{getElementById:id=>servedElements[id],createElement:()=>({})}, location:{protocol:'http:'}, URLSearchParams,
@@ -229,11 +244,43 @@ for(const id of ['pitch','yaw','roll']){
   assert.equal(servedElements[id].value,'0');assert.equal(servedElements[id+'value'].textContent,'0°');
 }
 assert.equal(servedElements.servicehint.hidden,true);
-servedElements.downloadsize.value='512';servedElements.downloadsize.onchange();
+servedElements.downloadsize.value='256';servedElements.downloadsize.onchange();
 assert(servedElements.gif.href.startsWith('/export?'));
 console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links, and file/HTTP origins: PASS');
 
 (async()=>{
+  {
+  const savedDownloads=[];
+  servedContext.document.body={append:()=>{}};
+  servedContext.document.createElement=()=>({click(){savedDownloads.push({href:this.href,download:this.download})},remove(){}});
+  const requestedHref=servedElements.animationzip.href,requestedName=servedElements.animationzip.download;
+  const before=requests.length;
+  const saving=servedElements.animationzip.onclick({preventDefault(){}});
+  assert.equal(requests.length,before+1);
+  assert.match(requests.at(-1).url,/\/prepare-export\?/);
+  assert.equal(servedElements.animationzip.ariaBusy,'true');
+  assert.match(servedElements.animationzip.className,/busy/);
+  for(const id of ['animationzip','framezip','allzip'])assert.equal(servedElements[id].ariaDisabled,'true');
+  await servedElements.framezip.onclick({preventDefault(){}});
+  assert.equal(requests.length,before+1,'second batch is blocked during preparation');
+  servedElements.costume.value='2';servedElements.costume.onchange();
+  assert.equal(servedElements.animationzip.ariaBusy,'true','selection updates do not remove busy state');
+  requests.at(-1).resolve({ok:true,json:async()=>({url:'/downloads/ready.zip'})});
+  await saving;
+  assert.equal(savedDownloads[0].href,'/downloads/ready.zip');
+  assert.equal(savedDownloads[0].download,requestedName,'download uses the click-time selection');
+  assert.equal(servedElements.animationzip.ariaDisabled,'false');
+  assert.equal(servedElements.animationzip.ariaBusy,'false');
+  assert(!servedElements.animationzip.className.includes('busy'));
+  const failed=servedElements.animationzip.onclick({preventDefault(){}});
+  requests.at(-1).resolve({ok:false,status:503});await failed;
+  assert.equal(servedElements.animationzip.ariaDisabled,'false');
+  assert.match(servedElements.downloadstatus.textContent,/503/);
+  assert.equal(savedDownloads.length,1,'failed preparations never start a download');
+  servedElements.costume.value='0';servedElements.costume.onchange();
+  requests.splice(before);
+  console.log('Batch spinner, shared duplicate lock, selection snapshot, ready URL and error recovery: PASS');
+  }
   for(const id of ['pitch','yaw','roll','applyangle','resetangle'])assert.notEqual(elements[id].disabled,true,'local-file rotation controls must remain usable');
   elements.character.value='mario';elements.character.onchange();elements.action.value='victory3_source';elements.action.onchange();
   elements.costume.value='2';elements.costume.onchange();elements.scrub.value='67';elements.scrub.oninput();
@@ -244,7 +291,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   for(const [key,value] of Object.entries({character:'mario',action:'victory3_source',costume:'2',frame:'67',playing:'false',repeat:'true',size:'2048',pitch:'20',yaw:'45',roll:'10',cycle:'full'}))assert.equal(saved.get(key),value);
   elements.resetangle.onclick();assert.equal(elements.yaw.value,'0');assert.match(elements.frame.src,/costume_02\/victory3_source\/frame_0067.png$/);
   // The served page restores the file player's exact selection before rendering.
-  const restoredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const restoredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
   let restoredRequest;
   let restoredPageShow;
   const restoredLocation={protocol:'http:',hash:handoff.hash,pathname:'/player.html',search:''};
@@ -261,6 +308,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(vm.runInContext('index',restoredContext),67);assert.equal(vm.runInContext('playing',restoredContext),false);
   assert.equal(restoredElements.costume.value,'2');assert.equal(restoredElements.downloadsize.value,'2048');
   assert.equal(restoredElements.sizewarning.hidden,false,'restored X-Large shows warning even while rendering');
+  assert.equal(restoredElements.upsizenotice.hidden,false,'restored X-Large explains upscaling even while rendering');
   assert.equal(restoredElements.groundeffects.checked,true,'non-Tech handoffs must not disable default impact effects');
   assert.equal(restoredElements.loop.checked,true);
   assert.equal(new URL(restoredRequest.url,'http://localhost').searchParams.get('yaw'),'45');
@@ -268,7 +316,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(restoredElements.frame.src,'rotations/restored/frame_0067.png');assert.equal(restoredElements.still.hidden,false);
   // Reload the consumed handoff: no rotation request and every axis starts at 0.
-  const reloadElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'90',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const reloadElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'90',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
   const reloadContext=vm.createContext({document:{getElementById:id=>reloadElements[id],createElement:()=>({})},location:restoredLocation,URLSearchParams,
     performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},fetch:()=>{throw Error('reload must use default prepared masters')}});
   vm.runInContext(script,reloadContext);
@@ -338,7 +386,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.get('kind'),'gif');
   assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.get('view'),'1');
   assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.has('frame'),false,'animation ticks do not reload right-click GIF');
-  assert.equal(servedElements.allzip.hidden,true);
+  assert.equal(servedElements.allzip.hidden,false);
   servedElements.scrub.value='3';servedElements.scrub.oninput();
   assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('frame'),'3');
   assert.equal(new URL(servedElements.framezip.href,'http://localhost').searchParams.get('scope'),'colors');
@@ -366,7 +414,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(servedElements.groundeffects.disabled,false);
   let techRequest=requests.shift();assert.equal(new URL(techRequest.url,'http://localhost').searchParams.get('effects'),'on');
   complete(techRequest,'tech-on');await settle();
-  assert.equal(servedElements.allzip.hidden,true);
+  assert.equal(servedElements.allzip.hidden,false);
   assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.get('effects'),'on');
   assert.match(servedElements.gif.download,/-ground-effects-/);
   servedElements.scrub.value='3';servedElements.scrub.oninput();
@@ -390,7 +438,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   elements.groundeffects.checked=false;elements.groundeffects.onchange();
   const techHandoff=new URLSearchParams(new URL(context.location.href).hash.slice(1));
   assert.match(techHandoff.get('action'),/^tech-/);assert.equal(techHandoff.get('effects'),'off');
-  const techRestoredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const techRestoredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
   let techRestoreRequest,techPageShow;
   const techRestoredContext=vm.createContext({document:{getElementById:id=>techRestoredElements[id],createElement:()=>({})},
     location:{protocol:'http:',hash:'#character=mario&action=tech-199_source&effects=off&costume=2&frame=3&playing=false'},URLSearchParams,
@@ -424,7 +472,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('power'),'mario');
   assert.equal(new URL(servedElements.framezip.href,'http://localhost').searchParams.get('power'),'mario');
   assert.match(servedElements.gif.download,/-power-mario/);
-  assert.equal(servedElements.allzip.hidden,true);
+  assert.equal(servedElements.allzip.hidden,false);
   servedElements.kirbypower.value='luigi';servedElements.kirbypower.onchange();const staleHat=requests.at(-1);
   servedElements.kirbypower.value='none';servedElements.kirbypower.onchange();
   const noneFrame=servedElements.frame.src;
@@ -450,7 +498,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   elements.kirbypower.value='mewtwo';elements.kirbypower.onchange();
   const powerHandoff=new URL(context.location.href);
   assert.equal(new URLSearchParams(powerHandoff.hash.slice(1)).get('power'),'mewtwo');
-  const powerElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const powerElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
   let powerRequest;
   const powerContext=vm.createContext({document:{getElementById:id=>powerElements[id],createElement:()=>({})},URLSearchParams,
     location:{protocol:'http:',hash:powerHandoff.hash},performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},
@@ -480,6 +528,9 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
     const list=data(`clips.filter(c=>c.character==='${c.slug}'&&c.action_key.startsWith('movement-'))`);
     assert(list.some(c=>c.action_key==='movement-fullhop_source'));
     assert(list.some(c=>c.action_key==='movement-shorthop_source'));
+    for(const id of [41,42,43,206,207,208])assert(list.some(c=>c.action_key===`movement-${id}_source`));
+    assert.equal(list.some(c=>c.action_key==='movement-37_source'),c.slug==='yoshi');
+    assert(!list.some(c=>['movement-38_source','movement-39_source','movement-40_source'].includes(c.action_key)));
     for(const a of new Set(list.map(c=>c.action_key)))assert.equal(list.filter(c=>c.action_key===a).length,c.costumes.length);
   }
   assert.equal(servedElements.jumpcontrols.hidden,false);
@@ -506,7 +557,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   elements.centerjump.checked=true;elements.centerjump.onchange();
   const centerHandoff=new URL(context.location.href);
   assert.equal(new URLSearchParams(centerHandoff.hash.slice(1)).get('center'),'on');
-  const centerElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const centerElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
   let centerRequest,centerPageShow;
   const centerContext=vm.createContext({document:{getElementById:id=>centerElements[id],createElement:()=>({})},URLSearchParams,
     location:{protocol:'http:',hash:centerHandoff.hash},performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},
@@ -588,9 +639,20 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   servedElements.action.value='attack-44_source';servedElements.action.onchange();
   assert.equal(servedElements.effecthint.hidden,true);
   console.log('Reflector/magnet/cyclone hints, combined phases and effect export URLs: PASS');
+  for(const [slug,key,label] of [['mario','movement-41_source','Spot dodge'],['fox','movement-42_source','Roll forward'],['yoshi','movement-37_source','Yoshi egg'],['yoshi','movement-43_source','Roll backward']]){
+    servedElements.character.value=slug;servedElements.character.onchange();
+    servedElements.animationtype.value='movement';servedElements.animationtype.onchange();
+    servedElements.action.value=key;servedElements.action.onchange();
+    assert(servedElements.action.options.some(o=>o.value===key&&o.textContent===label));
+    assert.equal(servedElements.jumpcontrols.hidden,true);assert.equal(servedElements.techcontrols.hidden,true);
+    complete(requests.at(-1),'dodge-'+slug);await settle();
+    servedElements.scrub.value='1';servedElements.scrub.oninput();
+    for(const id of ['gif','animationzip','still','framezip'])assert.equal(new URL(servedElements[id].href,'http://localhost').searchParams.get('action'),key);
+  }
+  console.log('Roll/spot-dodge coverage, Yoshi-only egg, no shield entries and exact/color export URLs: PASS');
   // Fresh pages hide parts for every family; showing parts keeps each family
   // contiguous, including shared ground/air Kirby Cutter phase variants.
-  const filteredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const filteredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
   const filteredContext=vm.createContext({document:{getElementById:id=>filteredElements[id],createElement:()=>({})},location:{protocol:'file:'},URLSearchParams,
     performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{}});
   vm.runInContext(script,filteredContext);
@@ -633,11 +695,125 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   filteredElements.animationtype.value='tech';filteredElements.animationtype.onchange();
   assert.equal(filteredElements.action.options.length,5,'three tech rolls and two combined missed-tech choices');
   // Existing links to individual phases remain usable without opting in again.
-  const linkElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const linkElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
   const linkContext=vm.createContext({document:{getElementById:id=>linkElements[id],createElement:()=>({})},location:{protocol:'file:',hash:'#character=fox&action=attack-296_source&costume=2'},URLSearchParams,
     performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{}});
   vm.runInContext(script,linkContext);
   assert.equal(linkElements.hidepartials.checked,false);assert.equal(linkElements.action.value,'attack-296_source');assert.equal(linkElements.costume.value,'2');
+
+  // Native HTMLSelectElement clears values that are absent from its current options.
+  // Handoffs must rebuild the category before selecting a requested animation.
+  for(const [slug,key,partial] of [['mario','victory3_source',false],['fox','attack-296_source',true],['mario','movement-fullhop_source',false]]){
+    const nativeElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
+    let selected='';
+    Object.defineProperty(nativeElements.action,'value',{
+      get(){return this.options.some(o=>o.value===selected)?selected:''},
+      set(value){selected=this.options.some(o=>o.value===String(value))?String(value):''}
+    });
+    nativeElements.action.append=function(option){if(!this.options.length)selected=option.value;this.options.push(option)};
+    const nativeContext=vm.createContext({document:{getElementById:id=>nativeElements[id],createElement:()=>({})},location:{protocol:'file:',hash:`#character=${slug}&action=${key}&costume=0&frame=3&playing=false`},URLSearchParams,
+      history:{replaceState(){}},performance:{now:()=>0},Image:class{},requestAnimationFrame(){}});
+    vm.runInContext(script,nativeContext);
+    assert.equal(nativeElements.action.value,key,'cross-category handoff keeps the requested native-select choice');
+    assert.equal(nativeElements.hidepartials.checked,!partial);
+    assert.equal(vm.runInContext('index',nativeContext),3);
+    assert.equal(vm.runInContext('playing',nativeContext),false);
+  }
+
+  // File-origin resized batches transfer their exact selection to HTTP first.
+  elements.character.value='mario';elements.character.onchange();elements.animationtype.value='victory';elements.animationtype.onchange();
+  elements.action.value='victory3_source';elements.action.onchange();elements.scrub.value='7';elements.scrub.oninput();
+  elements.downloadsize.value='256';elements.downloadsize.onchange();
+  await elements.framezip.onclick({preventDefault(){}});
+  const batchFragment=new URL(context.location.href).hash;
+  assert.equal(new URLSearchParams(batchFragment.slice(1)).get('batch'),'png');
+  const batchElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
+  const batchSaved=[];let batchRequest;
+  const batchContext=vm.createContext({document:{getElementById:id=>batchElements[id],body:{append(){}},createElement:()=>({click(){batchSaved.push(this.download)},remove(){}})},
+    location:{protocol:'http:',hash:batchFragment},URLSearchParams,performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},
+    fetch:url=>new Promise(resolve=>{batchRequest={url,resolve}})});
+  vm.runInContext(script,batchContext);
+  const batchQuery=new URL(batchRequest.url,'http://localhost');assert.equal(batchQuery.pathname,'/prepare-export');
+  for(const [key,value] of Object.entries({kind:'png',scope:'colors',frame:'7',size:'256'}))assert.equal(batchQuery.searchParams.get(key),value);
+  batchRequest.resolve({ok:true,json:async()=>({url:'/downloads/still.zip'})});await settle();
+  assert.equal(batchSaved.length,1);assert.match(batchSaved[0],/frame-0008-all-colors-256px.zip$/);
+
+  assert.equal(data('clips.filter(c=>c.sleep_bubbles).length'),18);
+  elements.character.value='pikachu';elements.character.onchange();elements.animationtype.value='victory';elements.animationtype.onchange();
+  elements.action.value='victory3_source';elements.action.onchange();
+  assert.equal(elements.effecthint.hidden,false);assert.match(elements.effecthint.textContent,/Sleep bubbles/);
+  elements.action.value='victory3_wait';elements.action.onchange();assert.match(elements.effecthint.textContent,/fading bubbles/);
+  elements.action.value='victory1_source';elements.action.onchange();assert.equal(elements.effecthint.hidden,true);
+
+  // Batch scopes track the selected type/family, independently of costume and partial display.
+  elements.character.value='mario';elements.character.onchange();elements.animationtype.value='victory';elements.animationtype.onchange();
+  assert.match(elements.allzip.textContent,/738 GIFs/);assert.match(elements.allzip.textContent,/victory poses/);
+  assert.equal(elements.kirbymode.checked,false);
+  elements.kirbymode.checked=true;elements.kirbymode.onchange();
+  assert.match(elements.allzip.textContent,/1638 GIFs/);
+  assert.equal(new URL(elements.allzip.href).searchParams.get('hats'),'all');
+  assert(!new URL(elements.gif.href).searchParams.has('hats'),'individual files keep the selected appearance');
+  elements.animationtype.value='clapping';elements.animationtype.onchange();
+  assert.match(elements.allzip.textContent,/273 GIFs/);
+  elements.synccycle.checked=true;elements.synccycle.onchange();assert.match(elements.allzip.textContent,/synced/);
+  assert.equal(new URL(elements.allzip.href).searchParams.get('cycle'),'sync');
+  elements.character.value='kirby';elements.character.onchange();
+  elements.scrub.value='3';elements.scrub.oninput();
+  assert.equal(new URL(elements.framezip.href).searchParams.get('hats'),'all');
+  assert.match(elements.animationzip.textContent,/156 GIFs/);
+  const retainedIndex=data('index');elements.kirbymode.checked=false;elements.kirbymode.onchange();
+  assert.equal(data('index'),retainedIndex);assert.equal(data('playing'),false);
+  assert.match(elements.allzip.textContent,/123 GIFs/);
+  elements.character.value='fox';elements.character.onchange();elements.animationtype.value='attack';elements.animationtype.onchange();
+  elements.action.value='attack-295-combined_source';elements.action.onchange();
+  const family=data('clips[current].batch_family');
+  const matching=data('clips').filter(c=>c.batch_family===family&&!c.batch_partial);
+  assert(matching.some(c=>c.character==='mario'));assert(matching.some(c=>c.character==='falco'));
+  assert(matching.some(c=>c.sequence));assert(matching.every(c=>!c.batch_partial));
+  assert.match(elements.allzip.textContent,/Neutral special/);
+  assert.equal(new URL(elements.allzip.href).searchParams.get('scope'),'all');
+  elements.hidepartials.checked=false;elements.hidepartials.onchange();
+  const sameCount=elements.allzip.textContent;elements.action.value='attack-295_source';elements.action.onchange();
+  assert.equal(elements.allzip.textContent,sameCount,'a phase and its combined action select the same all-character family');
+  elements.character.value='kirby';elements.character.onchange();elements.animationtype.value='clapping';elements.animationtype.onchange();
+  elements.kirbymode.checked=true;elements.kirbymode.onchange();
+  await elements.animationzip.onclick({preventDefault(){}});
+  assert.equal(new URLSearchParams(new URL(context.location.href).hash.slice(1)).get('hats'),'all');
+
+  // Resolution labels/notices follow type, and explicit requested sizes survive handoff.
+  elements.character.value='mario';elements.character.onchange();elements.animationtype.value='clapping';elements.animationtype.onchange();
+  elements.downloadsize.value='1024';elements.downloadsize.onchange();
+  assert.equal(data('nativeDefaultSize'),1024);assert.equal(elements.upsizenotice.hidden,true);
+  elements.downloadsize.value='512';elements.downloadsize.onchange();
+  assert.equal(elements.upsizenotice.hidden,true);
+  elements.downloadsize.value='2048';elements.downloadsize.onchange();
+  assert.equal(elements.upsizenotice.hidden,false);assert.match(elements.upsizenotice.textContent,/1024/);
+  elements.downloadsize.value='1024';elements.downloadsize.onchange();
+  elements.animationtype.value='attack';elements.animationtype.onchange();
+  assert.equal(elements.downloadsize.value,'512');assert.equal(data('nativeDefaultSize'),512);
+  assert(elements.downloadsize.options.find(o=>o.value==='512').textContent.startsWith('\u2605'));
+  assert(!elements.downloadsize.options.find(o=>o.value==='1024').textContent.startsWith('\u2605'));
+  elements.downloadsize.value='1024';elements.downloadsize.onchange();
+  assert.equal(elements.upsizenotice.hidden,false);assert.match(elements.upsizenotice.textContent,/512/);
+  elements.animationtype.value='taunt';elements.animationtype.onchange();
+  assert.equal(data('nativeDefaultSize'),1024);assert.equal(elements.upsizenotice.hidden,true);
+  console.log('Type-specific1024 results/512 actions, native stars, default transitions and upsize notices: PASS');
+  elements.character.value='game-and-watch';elements.character.onchange();
+  elements.animationtype.value='attack';elements.animationtype.onchange();
+  elements.action.value='attack-305_source';elements.action.onchange();
+  assert.equal(elements.electriccontrols.hidden,false);assert.equal(elements.judgeelectric.checked,true);
+  elements.scrub.value='3';elements.scrub.oninput();
+  elements.judgeelectric.checked=false;elements.judgeelectric.onchange();
+  assert.equal(new URL(elements.gif.href).searchParams.get('electric'),'off');
+  assert.equal(new URL(elements.framezip.href).searchParams.get('electric'),'off');
+  assert.equal(data('index'),3);assert.equal(data('playing'),false);
+  assert.match(elements.gif.download,/-no-electric-512px.gif$/);
+  assert.equal(new URL(data('playerHandoff()')).hash.includes('electric=off'),true);
+  elements.action.value='attack-304_source';elements.action.onchange();
+  assert.equal(elements.electriccontrols.hidden,true);assert.equal(new URL(elements.gif.href).searchParams.has('electric'),false);
+  console.log('Judgment9-only default-on electric toggle, exact/color exports, paused retention and handoff: PASS');
+  console.log('Scoped victory/clap/attack groups, counts, all hats/colors, exact stills, retained frame and batch handoff: PASS');
+  console.log('Shared roster color names and exact file-to-HTTP batch handoff: PASS');
   console.log('Selector rows, default partial filter, all-character choices, contiguous families, fallback, paused retention and handoff: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');

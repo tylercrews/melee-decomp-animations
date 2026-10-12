@@ -3,7 +3,10 @@
 Profiles identify ftData.x48 article slots or effect descriptors. They do not
 implement projectile trajectories, collisions or a complete fighter controller.
 """
-def character_prop(kind, name):
+def character_prop(kind, name, animation_id=None):
+    if kind==24:
+        from .game_watch_attacks import prop_profile
+        return prop_profile(animation_id)
     def article(slot,label,**extra):
         return dict(special=True,item_kind=-1,name=label,article_slot=slot,
                     asset_fighter_kind=kind,animation_id=0,**extra)

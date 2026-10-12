@@ -191,17 +191,23 @@ def reflection_uv(normals, view):
     return np.stack((.5+.5*n[...,0],.5-.5*n[...,1]),axis=-1)
 
 
+def color_alpha_mask_layers(material):
+    """Supported source RGB overlays; their alpha blends color, not coverage."""
+    if not material.get('color_alpha_mask_layers'):
+        return []
+    return [t for t in material['textures'][1:]
+            if t.get('coordinate_type', t.get('flags', 0) & 15) == 0
+            and (t.get('flags', 0) >> 16) & 255 == 1 and t.get('image_file')]
+
+
 def render_frame(model, posed, textures, view, width, height, center, pixels_per_unit, background):
     color = np.empty((height, width, 4), dtype=np.uint8)
     color[:] = background
     depth = np.full((height, width), -np.inf)
-    light = np.array([-0.35, 0.6, 0.72])
-    light /= np.linalg.norm(light)
-    ordered=list(zip(model['meshes'],posed))
-    if any(m.get('item_alpha_blend') for m in model['materials']):
-        ordered.sort(key=lambda pair:(bool(model['materials'][pair[0]['material_index']].get('item_alpha_blend')),
-                                       np.mean((pair[1][0]-center)@view,axis=0)[2] if pair[1][0] is not None else 0))
-    for mesh, (positions, normals) in ordered:
+    from .lighting import lighting_factors, specular_texture
+    rig = model.get('lighting')
+    from .game_watch import draw_passes
+    for mesh, (positions, normals), pass_type in draw_passes(model,posed,center,view):
         if positions is None:
             continue
         projected = (positions - center) @ view
@@ -211,7 +217,7 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
         material = model["materials"][mesh["material_index"]]
         rgba = np.array(material.get("diffuse_rgba") or [255, 255, 255, 255], dtype=float)
         candidates = [t for t in material["textures"] if t.get("coordinate_type", t.get("flags", 0) & 15) == 0]
-        diffuse_only=material.get('copy_diffuse_only') or material.get('diffuse_texture_only')
+        diffuse_only=bool(rig) or material.get('copy_diffuse_only') or material.get('diffuse_texture_only')
         if diffuse_only:
             diffuse=[t for t in candidates if t.get('flags',0)&0x10]
             if diffuse:candidates=diffuse
@@ -261,12 +267,43 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
                 mode = (base.get("flags", 0) >> 16) & 15
                 replace_color=mode==5 or diffuse_only and mode==3 and base.get('blend',0)==1
                 rgb = sampled if replace_color else rgb*sampled/255
+            for layer in color_alpha_mask_layers(material):
+                pixels = textures.get(layer['image_file'])
+                if pixels is None:
+                    continue
+                layer_uvs = np.asarray(mesh.get('uv_sets', {}).get(
+                    str(max(0, layer.get('source', 4)-4)), mesh['uvs']), dtype=float)
+                uv = texture_uv(w0[..., None]*layer_uvs[ids[0]] +
+                                w1[..., None]*layer_uvs[ids[1]] +
+                                w2[..., None]*layer_uvs[ids[2]], layer)
+                tx = np.minimum((uv[..., 0]*pixels.shape[1]).astype(int), pixels.shape[1]-1)
+                ty = np.minimum((uv[..., 1]*pixels.shape[0]).astype(int), pixels.shape[0]-1)
+                sampled = pixels[ty, tx].astype(float)
+                weight = sampled[..., 3:4]/255
+                rgb[..., :3] = rgb[..., :3]*(1-weight) + sampled[..., :3]*weight
             interpolated = (w0[..., None]*normals[ids[0]] + w1[..., None]*normals[ids[1]]
                             + w2[..., None]*normals[ids[2]])
             interpolated /= np.maximum(np.linalg.norm(interpolated, axis=2)[..., None], 1e-12)
-            if not material.get("unlit"):
-                shade = 0.6+0.4*np.maximum(0, interpolated @ light)
-                rgb[..., :3] *= shade[..., None]
+            shade, shine = lighting_factors(material, interpolated, view, rig)
+            rgb[..., :3] *= shade
+            if rig and np.any(shine):
+                spec_rgb = np.broadcast_to(np.asarray(material.get('specular_rgba') or [255]*4)[:3],
+                                           (*mask.shape, 3)).astype(float).copy()
+                spec = specular_texture(material)
+                if spec and spec['image_file'] in textures:
+                    spec_uvs = np.asarray(mesh.get('uv_sets', {}).get(
+                        str(max(0, spec.get('source', 4)-4)), mesh['uvs']), dtype=float)
+                    uv = texture_uv(w0[..., None]*spec_uvs[ids[0]] +
+                                    w1[..., None]*spec_uvs[ids[1]] + w2[..., None]*spec_uvs[ids[2]], spec)
+                    pixels = textures[spec['image_file']]
+                    tx = np.minimum((uv[..., 0]*pixels.shape[1]).astype(int), pixels.shape[1]-1)
+                    ty = np.minimum((uv[..., 1]*pixels.shape[0]).astype(int), pixels.shape[0]-1)
+                    sampled = pixels[ty, tx, :3].astype(float)
+                    mode = (spec.get('flags', 0) >> 16) & 15
+                    if mode == 3:spec_rgb = spec_rgb*(1-spec.get('blend', 0))+sampled*spec.get('blend', 0)
+                    elif mode == 5:spec_rgb = sampled
+                    elif mode == 4:spec_rgb *= sampled/255
+                rgb[..., :3] += spec_rgb*shine
             output = color[ymin:ymax+1, xmin:xmax+1]
             if material.get('item_alpha_blend'):
                 src_alpha=np.clip(rgb[...,3]*alpha/255,0,1)
@@ -279,16 +316,19 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
                 output[mask]=np.clip(np.rint(combined[mask]),0,255).astype('uint8')
             else:
                 mask &= rgb[..., 3]*alpha >= 128
-                output[mask] = np.clip(rgb[mask], 0, 255).astype(np.uint8)
-                region[mask] = z[mask]
+                if pass_type!='outline-depth':output[mask] = np.clip(rgb[mask], 0, 255).astype(np.uint8)
+                if pass_type!='outline-color':region[mask] = z[mask]
     return Image.fromarray(color)
 
 
 def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build/melee_anim/preview/attack-catalog.json')):
     if action.startswith(('attack-','tech-','movement-','other-')):
         from .attacks import find_action
-        actor = find_action(json.loads(attack_catalog.read_text()), kind, action)
-        motion = actor['clip']
+        selection=json.loads(attack_catalog.read_text())
+        actor = find_action(selection, kind, action)
+        category=next(a.get('animation_type','attack') for f in selection['characters'] if f['fighter_kind']==kind or kind==11 and f['fighter_kind']==10
+                      for a in f['actions'] if a['key']==action+'_source' and a['available'])
+        motion = {**actor['clip'],'animation_type':category}
         data = (files/actor['animation_file']).read_bytes()
     elif action == "taunt":
         table=next(x for x in report["taunts"] if x["fighter_kind"]==kind)
@@ -301,6 +341,9 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
         aid={"results-clap":9,"victory1":0,"victory2":2,"victory3":5}[action]
         if section=="wait" and action.startswith("victory"):aid+=1
         motion=table["motions"][aid]
+        if section=='wait' and action.startswith('victory'):
+            entrance=table['motions'][aid-1]
+            motion={**motion,'texture_initial_scripts':[(entrance.get('script',{}),entrance['frames'])]}
         outer=Archive((files/table["results_archive"]).read_bytes())
         base,length=outer.public_extent(table["motion_file_symbol"])
         data=outer.data[base:base+length]
@@ -312,6 +355,10 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
     if action.startswith('movement-') and actor.get('movement'):
         motion={**motion,'jump_actor':actor}
         metadata={**metadata,'frames':actor['render_duration']}
+    if action.startswith('movement-') and actor.get('visibility_override'):
+        motion={**motion,'visibility_override':actor['visibility_override']}
+    if action.startswith('movement-') and actor.get('texture_initial_scripts'):
+        motion={**motion,'texture_initial_scripts':actor['texture_initial_scripts']}
     if action.startswith(('attack-','tech-')) and actor.get('sequence'):
         motion={**motion,'sequence_actor':actor}
         metadata={**metadata,'frames':actor['render_duration']}
@@ -333,13 +380,15 @@ def main():
     parser.add_argument("--motions", type=Path, default=Path("build/melee_anim/motions.json"))
     parser.add_argument("--attack-catalog", type=Path, default=Path("build/melee_anim/preview/attack-catalog.json"))
     parser.add_argument('--ground-effects', choices=('on','off'), default='off', help='original tech flash/missed-tech ground burst')
+    parser.add_argument('--judge-electric',choices=('on','off'),default='on',help='Judgment9 electric contact-effect preset')
     parser.add_argument('--kirby-power', default='none', help='copied character slug; none for ordinary Kirby')
     parser.add_argument('--center-jump', choices=('on','off'), default='off', help='follow the visible full/short-hop character with a fixed-scale camera')
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
     parser.add_argument("--action", default="results-clap", help="results-clap, victory1/2/3, taunt, or cataloged attack-/tech-<animation ID>")
     parser.add_argument("--section", choices=("source", "wait"), default="source")
     parser.add_argument("--output", type=Path, default=Path("build/melee_anim/preview/mario_clap"))
-    parser.add_argument("--size", type=int, default=320)
+    from .render_settings import native_size
+    parser.add_argument("--size", type=int, help='override native size for this animation type')
     parser.add_argument("--fps", type=int, default=50, choices=(25, 50))
     parser.add_argument("--ticks-per-second", type=float, default=60)
     parser.add_argument("--yaw", type=float, default=0)
@@ -348,7 +397,7 @@ def main():
     parser.add_argument("--backend", choices=("python","native"), default="python")
     parser.add_argument("--max-frames", type=int, help="diagnostic truncation, not a complete export")
     args = parser.parse_args()
-    if not 64 <= args.size <= 1024 or args.ticks_per_second <= 0:
+    if args.size is not None and not 64 <= args.size <= 1024 or args.ticks_per_second <= 0:
         parser.error("size must be 64..1024 and ticks-per-second positive")
     if args.max_frames is not None and args.max_frames <= 0:
         parser.error("max-frames must be positive")
@@ -371,6 +420,7 @@ def main():
 
     report = json.loads(args.motions.read_text())
     motion, metadata, tracks = load_clip(report, args.action, args.section, args.files,model["fighter_kind"], args.attack_catalog)
+    if args.size is None:args.size=native_size(args.action,motion.get('animation_type'))
     hat=None;hat_path=None;power_info=None;model_folder=args.model.parent;render_model_path=args.model
     if model['fighter_kind']==4:
         from .kirby_powers import model_for_power, remap_tracks, reserved_parts
@@ -428,19 +478,33 @@ def main():
     stale = {p.name for p in args.output.glob("frame_*.png")} - expected_frames
     if stale:
         parser.error(f"Output has extra frame files; choose a fresh output directory: {sorted(stale)[:5]}")
+    if args.action == 'results-clap' or args.action.startswith('victory'):
+        from .lighting import results_lighting
+        model['lighting'] = results_lighting(args.files)
     textures = {t["image_file"]: np.asarray(Image.open(model_folder/t["image_file"]).convert("RGBA"))
                 for m in model["materials"] for t in m["textures"] if t.get("image_file")}
+    from .fighter_textures import FighterTextures
+    face=FighterTextures(model,motion,model_folder,textures,sequence=sequence_scene)
+    companion_face=None
     from .roster import visible_drawables
+    movement_visibility=[]
+    if model['fighter_kind']==24 and args.action.startswith('attack-') and not sequence_scene:
+        from .game_watch_attacks import visibility_timeline
+        movement_visibility=visibility_timeline(model,motion,int(args.action.split('-')[1]))
+    if args.action in ('movement-41','movement-42','movement-43') or (model['fighter_kind']==24 and args.action=='movement-207'):
+        from .movement import movement_visibility_timeline
+        movement_visibility=movement_visibility_timeline(model,motion)
     states=model.get("visibility",{}).get("defaults")
     if states is not None and not sequence_scene:
         states=states.copy()
+        for group,value in motion.get('visibility_override',{}).items():states[int(group)]=value
         for command in motion.get("script",{}).get("commands",[]):
             if command["opcode"] in (1,2):break
             if "visibility_group" in command:
                 i=command["visibility_group"]
                 if 0<=i<len(states):states[i]=command["visibility_value"]
         visible=visible_drawables(model,states)
-        model["meshes"]=[m for m in model["meshes"] if m["drawable_index"] in visible]
+        if not movement_visibility:model["meshes"]=[m for m in model["meshes"] if m["drawable_index"] in visible]
     if hat:
         from .kirby_powers import attach_geometry
         visible=visible_drawables(hat)
@@ -470,12 +534,14 @@ def main():
                     old=texture["image_file"];new="companion/"+old
                     textures[new]=np.asarray(Image.open(args.companion.parent/old).convert("RGBA"));texture["image_file"]=new
         for mesh in companion["meshes"]:mesh["material_index"]+=offset
+        companion_face=FighterTextures(companion,cm,args.companion.parent,textures,'companion/',companion_sequence)
         model["materials"].extend(companion["materials"])
     from .held_items import HeldItem, hold_joint, item_for_motion
     specification=motion.get('character_prop') or item_for_motion(args.action,model['fighter_kind'])
     held=None;companion_held=None
     if specification:
         held=HeldItem(args.files,specification,period,motion.get('script'))
+        held.configure_fighter(model)
         table=next(t for t in report['normal_tables'] if t['fighter_kind']==model['fighter_kind'])
         held_joint=hold_joint(args.files,table,model,Path(__file__).resolve().parents[2],specification)
         if specification.get('behavior')=='needle-release':
@@ -493,6 +559,13 @@ def main():
             companion_held_joint=hold_joint(args.files,table,companion,Path(__file__).resolve().parents[2],specification)
             add_item_materials(companion_held)
     view = camera_basis(args.yaw, args.pitch, args.roll)
+    bubbles=None
+    if args.action=='victory3' and model['fighter_kind'] in (12,15):
+        from .sleep_bubbles import SleepBubbles
+        entrance,emeta,etracks=load_clip(report,args.action,'source',args.files,model['fighter_kind'],args.attack_catalog)
+        bubbles=SleepBubbles(args.files,entrance,lambda tick:pose_matrices(model['bones'],etracks,tick,emeta['type'],
+            root_scale=model.get('runtime_root_scale'),root_rotation=runtime_root_rotation(model,args.action)),
+            emeta['frames'] if args.section=='wait' else 0)
     sequence_props=None;companion_sequence_props=None
     if sequence_scene:
         def matrices_at(scene,bones,tick,root_scale=None,root_rotation=None):
@@ -535,6 +608,10 @@ def main():
         posed=[deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]]
         shown = joint_visibility(model["bones"], pose_tracks, pose_time)
         mask = [shown[mesh["owner_joint_index"]] for mesh in model["meshes"]]
+        if movement_visibility:
+            state=next(state for time,state in reversed(movement_visibility) if time<=frame)
+            visible=visible_drawables(model,state)
+            mask=[active and mesh['drawable_index'] in visible for active,mesh in zip(mask,model['meshes'])]
         if sequence_scene:mask=[active and mesh['drawable_index'] in phase_visible[phase_id] for active,mesh in zip(mask,model['meshes'])]
         if hat:
             extra=attach_geometry(hat_bind,matrices[6],hat_world[0])
@@ -599,6 +676,14 @@ def main():
         if companion:
             sequence_fit_mask.extend([True]*len(companion['meshes']))
             sequence_fit_mask.extend(not released for released in companion_sequence_props.release_meshes)
+    electric=None
+    if model['fighter_kind']==24 and args.action in ('attack-305','attack-314') and args.judge_electric=='on':
+        from .electric_burst import ElectricBurst
+        strike,shown=evaluate_pose(16)
+        hammer=np.concatenate([strike[i][0] for i,m in enumerate(model['meshes'])
+                               if m.get('drawable_index')==90 and not m.get('outline_pass') and shown[i]])
+        head=hammer[hammer[:,0]>=hammer[:,0].max()-.5].mean(axis=0)
+        electric=ElectricBurst(args.files,head)
     if hat:model['meshes'].extend(hat['meshes'])
     if held:model['meshes'].extend(held.model['meshes'])
     if sequence_props:model['meshes'].extend(sequence_props.meshes)
@@ -612,7 +697,7 @@ def main():
         emitted=sequence_props.emission_geometry(view)
         if companion_sequence_props:emitted.extend(p+np.array([2.8,0,0]) for p in companion_sequence_props.emission_geometry(view))
         if emitted:cloud=np.concatenate([cloud]+emitted)
-    elif knockdown:
+    elif knockdown or movement_visibility:
         fit_samples = [evaluate_pose(t) for t in (fit_times or source_times)]
         cloud = np.concatenate([p for frame, mask in fit_samples for (p,_),shown in zip(frame,mask) if shown])
     else:
@@ -632,6 +717,9 @@ def main():
             if companion_fx:bounds.extend(companion_fx.bounds(tick,cfm,view))
         if bounds:cloud=np.concatenate([cloud]+bounds)
     effect = None
+    if bubbles:
+        bounds=bubbles.bounds(fit_times or source_times,view)
+        if bounds:cloud=np.concatenate([cloud]+bounds)
     flash = None
     anchors = [[-2.8,0,0],[2.8,0,0]] if companion else [[0,0,0]]
     if knockdown:
@@ -642,6 +730,9 @@ def main():
             effect = GroundEffect(args.files,effect_kind)
     # Keep one center/scale for the whole clip. Knockdown centers the fighter
     # in the selected view, then fits the complete visible impact at that pivot.
+    if electric:
+        electric_bounds=electric.bounds(fit_times or source_times,view)
+        if electric_bounds:cloud=np.concatenate([cloud]+electric_bounds)
     center, scale = (fit_knockdown_camera if knockdown or center_jump else fit_camera)(cloud, view, args.size)
     if effect and args.ground_effects=='on':
         bounds = effect.visible_bounds(fit_times or source_times,anchors,view)
@@ -661,9 +752,12 @@ def main():
         print(f"Offscreen raster: {raster.renderer}",flush=True)
     started = time.monotonic()
     for i, pose in enumerate(poses):
+        face.apply(source_times[i])
+        if companion_face:companion_face.apply(source_times[i])
         drawn = [p if shown else (None, None) for p, shown in zip(pose, visibility[i])]
         frame_center=center+follow_center(pose,visibility[i]) if center_jump else center
         image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, frame_center, scale, (34, 38, 46, 0))
+        if electric:image=electric.render(source_times[i],view,args.size,frame_center,scale,image)
         if flash:
             image = flash.apply(image,source_times[i])
         if effect and args.ground_effects=='on':
@@ -673,6 +767,7 @@ def main():
             fm,cfm=effect_matrices[(round(source_times[i],10),None)]
             image=character_fx.render(source_times[i],fm,view,args.size,frame_center,scale,image)
             if companion_fx:image=companion_fx.render(source_times[i],cfm,view,args.size,frame_center,scale,image)
+        if bubbles:image=bubbles.render(source_times[i],view,args.size,frame_center,scale,image)
         image.save(args.output/f"frame_{i:04d}.png")
         images.append(image.convert("RGBA"))
         if i == 0 or (i+1) % 20 == 0 or i == len(poses)-1:
@@ -714,6 +809,11 @@ def main():
                               'companion_hold_joint':companion_held_joint if companion_held else None}
         manifest['framing_policy']='whole-animation fighter and held-item geometry'
         if specification.get('behavior')=='needle-release':manifest['framing_policy']='stable fighter and emission-point fit; needles leave the image naturally'
+    if bubbles:manifest['sleep_bubbles']=bubbles.provenance()
+    if model.get('lighting'):manifest['lighting']=model['lighting']
+    if model['fighter_kind']==24 and args.action in ('attack-305','attack-314'):
+        manifest['judge_electric']=electric is not None
+        manifest['judge_electric_preset']='original gfx1001 generator12/children13..18; deterministic planar contact at source tick16, no collision simulation'
     if character_fx:
         manifest['character_effects']=character_fx.provenance()
         manifest['fighter_loop_period_ticks']=motion.get('fighter_period')
@@ -736,6 +836,9 @@ def main():
             'body_archive_sha256':hashlib.sha256(power_info['body'].read_bytes()).hexdigest() if power_info['body'] else None,
             'attachment_part':6 if hat else None,'reserved_part_mask':power_info['mask'],
             'limitations':['Hat dynamics remain at bind pose; copied projectiles, items and complete runtime scripts are not executed']}
+    if motion.get('visibility_override'):
+        manifest['visibility_override']=motion['visibility_override']
+    if movement_visibility:manifest['movement_visibility_timeline']=movement_visibility
     if jump_scenes:
         manifest['movement_scenario']=jump_scenes[jump_mode].provenance()
         manifest['center_jump_enabled']=center_jump
@@ -753,7 +856,11 @@ def main():
         manifest['output_mode'] = 'clapping-sync alteration'
         manifest['uniform_gif_ticks'] = True
         manifest['companion_sha256'] = hashlib.sha256(args.companion.read_bytes()).hexdigest() if args.companion else None
-    (args.output/"preview-manifest.json").write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")
+    manifest['fighter_texture_commands']='source opcode 40, frozen TObj image FObjs; costume-specific mapping'
+    manifest_path=args.output/'preview-manifest.json'
+    temporary=manifest_path.with_suffix('.json.tmp')
+    temporary.write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")
+    temporary.replace(manifest_path)
     print(f"Preview: {args.output/'preview.gif'}", flush=True)
 
 

@@ -1,9 +1,33 @@
 import unittest
+import json
+from pathlib import Path
+import shutil
+import uuid
 import numpy as np
-from tools.melee_anim.cycles import find_minimum_cycle, find_dirty_cycle
+from tools.melee_anim.cycles import find_minimum_cycle, find_dirty_cycle,preserve_intervals,input_fingerprint
 
 
 class CycleTests(unittest.TestCase):
+    def test_resolution_refresh_retains_cut_and_rejects_changed_source_timing(self):
+        build=Path('build/melee_anim_tests').resolve();root=build/f'cycles_{uuid.uuid4().hex}'
+        folder=root/'synthetic/costume_00/results-clap_source';folder.mkdir(parents=True)
+        manifest=folder/'preview-manifest.json'
+        data={'sample_source_times':list(range(20)),'fps':50}
+        manifest.write_text(json.dumps(data))
+        for i in range(20):(folder/f'frame_{i:04d}.png').write_bytes(b'larger synthetic frame')
+        cycle=dict(start=2,length=4,full_length=20,fps=50,source_interval=[2,6],costume_count=1,input_fingerprint='old')
+        report=root/'minimum-cycles.json';report.write_text(json.dumps({'characters':{'synthetic':cycle}}))
+        try:
+            result=preserve_intervals(root)['characters']['synthetic']
+            self.assertEqual(result['input_fingerprint'],input_fingerprint([manifest]))
+            self.assertEqual(result['source_interval'],[2,6]);self.assertEqual(result['length'],4)
+            original=report.read_bytes();data['sample_source_times'][6]=6.5;manifest.write_text(json.dumps(data))
+            with self.assertRaises(ValueError):preserve_intervals(root)
+            self.assertEqual(report.read_bytes(),original)
+        finally:
+            if not root.is_relative_to(build):raise RuntimeError('Unexpected cleanup path')
+            shutil.rmtree(root)
+
     def test_finds_smallest_real_repeat_not_a_matching_endpoint(self):
         time = np.arange(120)*2*np.pi/20
         wave = np.column_stack((np.sin(time), np.cos(time)))

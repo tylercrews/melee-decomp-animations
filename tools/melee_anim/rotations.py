@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+from .render_settings import native_size
 
 
 def camera_angles(pitch=0, yaw=0, roll=0):
@@ -29,7 +30,7 @@ def marked_angle(name, angles):
 class RotationCache:
     """One render subprocess at a time, bounded duration, content-based resume.
 
-    Always render 256px masters. Size downloads retain the existing resampling
+    Always render native master resolution. Downloads retain the resampling
     policy. Minimum/dirty intervals select these new full-clip masters; sync
     renders its exact fractional source-time plan separately.
     """
@@ -49,6 +50,10 @@ class RotationCache:
             selected = json.loads((self.root/Path(clip['sync_cycle']['gif']).parent/'preview-manifest.json').read_text())
         action, section = clip['action_key'].rsplit('_', 1)
         paths = [original, model, self.repo/'build/melee_anim/motions.json']
+        if clip['action_key']=='results-clap_source' or clip['action_key'].startswith('victory'):
+            lights = next((self.repo/'orig/GALE01/files'/name for name in ('GmRst.usd','GmRst.dat')
+                           if (self.repo/'orig/GALE01/files'/name).is_file()), None)
+            if lights is not None:paths.append(lights)
         if power!='none':
             from .kirby_powers import model_for_power
             appearance,desc=model_for_power(self.repo,power,cid)
@@ -83,6 +88,8 @@ class RotationCache:
                 if action.startswith('tech-'):
                     paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
                     paths.append(self.repo/'orig/GALE01/files/PlCo.dat')
+                if slug=='game-and-watch' and action in ('attack-305','attack-314'):
+                    paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
             elif action == 'taunt':
                 table = next(t for t in report['taunts'] if t['fighter_kind'] == data['fighter_kind'])
                 source_kind = table['standard_facing']['right']['source_fighter_kind']
@@ -91,15 +98,18 @@ class RotationCache:
             else:
                 table = next(t for t in report['results'] if t['fighter_kind'] == data['fighter_kind'])
                 archive = table['results_archive']
+                if action=='victory3' and data['fighter_kind'] in (12,15):
+                    paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
             paths.append(self.repo/'orig/GALE01/files'/archive)
         # Include evaluators, texture codecs and the renderer, not merely models.
         paths.extend(Path(__file__).parent.glob('*.py'))
         settings = {'version': 'camera-v1', 'angles': angles, 'action': action, 'section': section,
                     'kirby_power':power, 'center_jump':center,
                     'ground_effects':manifest.get('ground_effects_enabled',False),
+                    'judge_electric':manifest.get('judge_electric',False),
                     'source_times': selected['sample_source_times'], 'fps': selected['fps'],
                     'sync_plan': selected.get('sync_plan') if sync else None,
-                    'fit_source_times': manifest['sample_source_times'], 'size': 256,
+                    'fit_source_times': manifest['sample_source_times'], 'size': native_size(clip['action_key'],clip.get('animation_type')),
                     'backend': 'native' if os.name == 'nt' else 'python',
                     'rotation_order': 'Ry(yaw) @ Rx(pitch) @ Rz(roll)',
                     'framing': 'per-costume whole-original-clip projected bounds'}
@@ -137,7 +147,7 @@ class RotationCache:
                 folder.mkdir(parents=True, exist_ok=True)
                 command = [sys.executable, '-m', 'tools.melee_anim.preview', '--model', str(model),
                            '--action', settings['action'], '--section', settings['section'],
-                           '--output', str(folder), '--size', '256', '--fps', str(settings['fps']),
+                           '--output', str(folder), '--size', str(settings['size']), '--fps', str(settings['fps']),
                            '--backend', settings['backend'], '--pitch', str(angles[0]),
                            '--yaw', str(angles[1]), '--roll', str(angles[2])]
                 if power!='none':command += ['--kirby-power',power]
@@ -149,6 +159,8 @@ class RotationCache:
                     command += ['--attack-catalog', str(self.root/CATALOG)]
                 if settings['action'].startswith('tech-'):
                     command += ['--ground-effects','on' if settings['ground_effects'] else 'off']
+                if settings['action'] in ('attack-305','attack-314') and clip['character']=='game-and-watch':
+                    command+=['--judge-electric','on' if settings['judge_electric'] else 'off']
                 timeline = folder/'timeline.json'
                 if sync:
                     timeline.write_text(json.dumps(settings['sync_plan']))
