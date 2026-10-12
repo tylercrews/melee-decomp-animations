@@ -1,3 +1,12 @@
+Results lighting for clapping and victories (2026-10-12; investigation section57):
+
+- [x] Verify original panel/full results lights and source material ambient/specular/shininess; implement supported diffuse/specular texture channels in both backends.
+- [x] Apply to all clapping and victory entrance/wait previews/exports; include light asset hashes, manifest provenance and stale-resume checks.
+- [x] Review five matched-pose before/after probes and pass lighting/raster/cache regressions.
+- [x] Finish861 full actual-costume results clips /71331 PNGs and123 synchronized claps, retaining source timelines, loops, framing and cuts.
+- [x] Repackage GIF/still/aggregate bundles, regenerate player, restart service and verify exact/rotated/powered/all-color/all-size exports;192 Python tests, Node controls and full984-clip bundle verification pass.
+- [x] Record final verification and remaining perspective/bump/TEV/game-reference limits in all four notes; service session54811, port8765.
+
 Yoshi white markings (2026-10-12; investigation section56):
 
 - [x] Verify original base skin and second-UV cheek/belly masks in all six costumes; implement source RGB alpha-mask blending without changing fighter coverage.

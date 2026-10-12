@@ -204,8 +204,8 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
     color = np.empty((height, width, 4), dtype=np.uint8)
     color[:] = background
     depth = np.full((height, width), -np.inf)
-    light = np.array([-0.35, 0.6, 0.72])
-    light /= np.linalg.norm(light)
+    from .lighting import lighting_factors, specular_texture
+    rig = model.get('lighting')
     from .game_watch import draw_passes
     for mesh, (positions, normals), pass_type in draw_passes(model,posed,center,view):
         if positions is None:
@@ -217,7 +217,7 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
         material = model["materials"][mesh["material_index"]]
         rgba = np.array(material.get("diffuse_rgba") or [255, 255, 255, 255], dtype=float)
         candidates = [t for t in material["textures"] if t.get("coordinate_type", t.get("flags", 0) & 15) == 0]
-        diffuse_only=material.get('copy_diffuse_only') or material.get('diffuse_texture_only')
+        diffuse_only=bool(rig) or material.get('copy_diffuse_only') or material.get('diffuse_texture_only')
         if diffuse_only:
             diffuse=[t for t in candidates if t.get('flags',0)&0x10]
             if diffuse:candidates=diffuse
@@ -284,9 +284,26 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
             interpolated = (w0[..., None]*normals[ids[0]] + w1[..., None]*normals[ids[1]]
                             + w2[..., None]*normals[ids[2]])
             interpolated /= np.maximum(np.linalg.norm(interpolated, axis=2)[..., None], 1e-12)
-            if not material.get("unlit"):
-                shade = 0.6+0.4*np.maximum(0, interpolated @ light)
-                rgb[..., :3] *= shade[..., None]
+            shade, shine = lighting_factors(material, interpolated, view, rig)
+            rgb[..., :3] *= shade
+            if rig and np.any(shine):
+                spec_rgb = np.broadcast_to(np.asarray(material.get('specular_rgba') or [255]*4)[:3],
+                                           (*mask.shape, 3)).astype(float).copy()
+                spec = specular_texture(material)
+                if spec and spec['image_file'] in textures:
+                    spec_uvs = np.asarray(mesh.get('uv_sets', {}).get(
+                        str(max(0, spec.get('source', 4)-4)), mesh['uvs']), dtype=float)
+                    uv = texture_uv(w0[..., None]*spec_uvs[ids[0]] +
+                                    w1[..., None]*spec_uvs[ids[1]] + w2[..., None]*spec_uvs[ids[2]], spec)
+                    pixels = textures[spec['image_file']]
+                    tx = np.minimum((uv[..., 0]*pixels.shape[1]).astype(int), pixels.shape[1]-1)
+                    ty = np.minimum((uv[..., 1]*pixels.shape[0]).astype(int), pixels.shape[0]-1)
+                    sampled = pixels[ty, tx, :3].astype(float)
+                    mode = (spec.get('flags', 0) >> 16) & 15
+                    if mode == 3:spec_rgb = spec_rgb*(1-spec.get('blend', 0))+sampled*spec.get('blend', 0)
+                    elif mode == 5:spec_rgb = sampled
+                    elif mode == 4:spec_rgb *= sampled/255
+                rgb[..., :3] += spec_rgb*shine
             output = color[ymin:ymax+1, xmin:xmax+1]
             if material.get('item_alpha_blend'):
                 src_alpha=np.clip(rgb[...,3]*alpha/255,0,1)
@@ -461,6 +478,9 @@ def main():
     stale = {p.name for p in args.output.glob("frame_*.png")} - expected_frames
     if stale:
         parser.error(f"Output has extra frame files; choose a fresh output directory: {sorted(stale)[:5]}")
+    if args.action == 'results-clap' or args.action.startswith('victory'):
+        from .lighting import results_lighting
+        model['lighting'] = results_lighting(args.files)
     textures = {t["image_file"]: np.asarray(Image.open(model_folder/t["image_file"]).convert("RGBA"))
                 for m in model["materials"] for t in m["textures"] if t.get("image_file")}
     from .fighter_textures import FighterTextures
@@ -790,6 +810,7 @@ def main():
         manifest['framing_policy']='whole-animation fighter and held-item geometry'
         if specification.get('behavior')=='needle-release':manifest['framing_policy']='stable fighter and emission-point fit; needles leave the image naturally'
     if bubbles:manifest['sleep_bubbles']=bubbles.provenance()
+    if model.get('lighting'):manifest['lighting']=model['lighting']
     if model['fighter_kind']==24 and args.action in ('attack-305','attack-314'):
         manifest['judge_electric']=electric is not None
         manifest['judge_electric_preset']='original gfx1001 generator12/children13..18; deterministic planar contact at source tick16, no collision simulation'

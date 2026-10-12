@@ -12,6 +12,7 @@ from .render_settings import RESULTS_SIZE
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--character',default='all');p.add_argument('--jobs',type=int,default=8)
+    p.add_argument('--action',choices=('all','results','results-clap','victory1','victory2','victory3','taunt'),default='all')
     p.add_argument('--resume',action='store_true');p.add_argument('--size',type=int,default=RESULTS_SIZE)
     a=p.parse_args()
     if a.character != 'all' and a.character not in dict(CHARACTERS):p.error('unknown character slug')
@@ -27,7 +28,8 @@ def main():
             model,_=export_fighter(Path('orig/GALE01/files'),base,fighter['fighter_kind'],cid)
             paired=None
             if companion:paired,_=export_fighter(Path('orig/GALE01/files'),base/'companion',companion['fighter_kind'],cid)
-            for action,section in action_sections('all','all'):
+            for action,section in action_sections('all' if a.action=='results' else a.action,'all'):
+                if a.action=='results' and action=='taunt':continue
                 out=Path('build/melee_anim/preview')/slug/f'costume_{cid:02d}'/f'{action}_{section}'
                 if a.resume and completed_job(out,model,action,section,a.size):
                     reused+=1;continue

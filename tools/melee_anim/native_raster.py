@@ -108,7 +108,8 @@ class NativeRaster:
             result=Image.fromarray(rgba.astype('uint8'))
             return Image.alpha_composite(Image.new('RGBA',result.size,background),result)
         self.gl.glClearColor(*(v/255 for v in background)); self.gl.glClear(0x4100)
-        light=np.array([-.35,.6,.72]); light/=np.linalg.norm(light)
+        from .lighting import lighting_factors, specular_texture
+        rig = model.get('lighting')
         from .game_watch import draw_passes
         for mesh,(positions,normals),pass_type in draw_passes(model,posed,center,view):
             if positions is None:
@@ -124,7 +125,7 @@ class NativeRaster:
             self.gl.glDepthFunc(0x0203 if depth_only else 0x0201)
             if pass_type=='outline-color':self.gl.glDepthMask(0)
             candidates=[t for t in mat["textures"] if t.get("coordinate_type",0)==0 and t.get("image_file") in textures]
-            diffuse_only=mat.get('copy_diffuse_only') or mat.get('diffuse_texture_only')
+            diffuse_only=bool(rig) or mat.get('copy_diffuse_only') or mat.get('diffuse_texture_only')
             if diffuse_only:
                 diffuse=[t for t in candidates if t.get('flags',0)&0x10]
                 if diffuse:candidates=diffuse
@@ -134,8 +135,8 @@ class NativeRaster:
             verts=np.ascontiguousarray((positions-center)@view,dtype=np.float32)
             verts[:,:2]*=pixels_per_unit*2/width
             rgba=np.array(mat.get("diffuse_rgba") or [255]*4,dtype=np.float32)/255
-            shade=np.ones(len(verts)) if mat.get("unlit") else .6+.4*np.maximum(0,normals@light)
-            colors=np.tile(rgba,(len(verts),1)); colors[:,:3]*=shade[:,None]
+            shade, shine = lighting_factors(mat, normals, view, rig)
+            colors=np.tile(rgba,(len(verts),1)); colors[:,:3]*=shade
             colors[:,3]*=mat.get("alpha",1)
             if base:
                 uvset=str(max(0,base.get("source",4)-4)); uv=np.asarray(mesh.get("uv_sets",{}).get(uvset,mesh["uvs"]))
@@ -149,7 +150,7 @@ class NativeRaster:
                 uv=np.ascontiguousarray(uv,dtype=np.float32)
                 mode=(base.get("flags",0)>>16)&15
                 if mode==5 or diffuse_only and mode==3 and base.get('blend',0)==1:
-                    colors[:,:3]=shade[:,None]
+                    colors[:,:3]=shade
                 self.gl.glEnable(0x0DE1);self.gl.glEnableClientState(0x8078)
                 self.gl.glBindTexture(0x0DE1,self.texture(base["image_file"],textures[base["image_file"]],base))
                 self.gl.glTexCoordPointer(2,0x1406,0,uv.ctypes.data)
@@ -174,7 +175,7 @@ class NativeRaster:
                     if mode == 2:layer_uv[:, i] /= 2
                 layer_uv = np.ascontiguousarray(layer_uv, dtype=np.float32)
                 layer_colors = np.ones((len(verts), 4), dtype=np.float32)
-                layer_colors[:, :3] = shade[:, None]
+                layer_colors[:, :3] = shade
                 self.gl.glEnable(0x0DE1);self.gl.glEnableClientState(0x8078)
                 self.gl.glEnable(0x0BE2);self.gl.glBlendFunc(0x0302, 0x0303)
                 self.gl.glDepthMask(0);self.gl.glDepthFunc(0x0203)
@@ -183,6 +184,38 @@ class NativeRaster:
                 self.gl.glTexCoordPointer(2, 0x1406, 0, layer_uv.ctypes.data)
                 self.gl.glColorPointer(4, 0x1406, 0, layer_colors.ctypes.data)
                 self.gl.glDrawElements(4, indices.size, 0x1405, indices.ctypes.data)
+            if rig and not depth_only and np.any(shine):
+                spec = specular_texture(mat)
+                spec_rgb = np.asarray((mat.get('specular_rgba') or [255]*4)[:3])/255
+                stages = [(spec_rgb, None)]
+                if spec and spec['image_file'] in textures:
+                    mode = (spec.get('flags', 0) >> 16) & 15
+                    if mode == 4:stages = [(spec_rgb, spec)]
+                    elif mode == 5:stages = [(np.ones(3), spec)]
+                    elif mode == 3:
+                        blend = spec.get('blend', 0)
+                        stages = [(spec_rgb*(1-blend), None), (np.full(3, blend), spec)]
+                self.gl.glEnable(0x0BE2);self.gl.glBlendFunc(1, 1)
+                self.gl.glDepthMask(0);self.gl.glDepthFunc(0x0202)
+                self.gl.glColorMask(1, 1, 1, 0);self.gl.glAlphaFunc(0x0207, 0)
+                for tint, spec_layer in stages:
+                    if not np.any(tint):continue
+                    spec_colors = np.ones((len(verts), 4), dtype=np.float32)
+                    spec_colors[:, :3] = shine*tint
+                    self.gl.glColorPointer(4, 0x1406, 0, spec_colors.ctypes.data)
+                    if spec_layer:
+                        uvset = str(max(0, spec_layer.get('source', 4)-4))
+                        spec_uv = np.asarray(mesh.get('uv_sets', {}).get(uvset, mesh['uvs']))
+                        coords = np.column_stack((spec_uv, np.ones((len(spec_uv), 2))))
+                        spec_uv = (coords@np.asarray(spec_layer['texture_matrix']).T)[:, :2]
+                        for i, mode in enumerate((spec_layer.get('wrap_s', 1), spec_layer.get('wrap_t', 1))):
+                            if mode == 2:spec_uv[:, i] /= 2
+                        spec_uv = np.ascontiguousarray(spec_uv, dtype=np.float32)
+                        self.gl.glEnable(0x0DE1);self.gl.glEnableClientState(0x8078)
+                        self.gl.glBindTexture(0x0DE1, self.texture(spec_layer['image_file'], textures[spec_layer['image_file']], spec_layer))
+                        self.gl.glTexCoordPointer(2, 0x1406, 0, spec_uv.ctypes.data)
+                    else:self.gl.glDisable(0x0DE1);self.gl.glDisableClientState(0x8078)
+                    self.gl.glDrawElements(4, indices.size, 0x1405, indices.ctypes.data)
             self.gl.glDepthFunc(0x0201)
         self.gl.glDepthMask(1);self.gl.glDisable(0x0BE2);self.gl.glColorMask(1,1,1,1);self.gl.glDepthFunc(0x0201)
         pixels=np.empty((height,width,4),dtype=np.uint8)

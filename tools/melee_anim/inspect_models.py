@@ -225,8 +225,11 @@ def material(ar: Archive, at: int) -> dict:
                                  "format": ar.u32(palette + 4), "entries": ar.u16(palette + 12)}
         textures.append(detail)
     return {"offset": at, "render_mode": ar.u32(at + 4),
+            "ambient_rgba": list(ar.read(mat, 4)) if mat is not None else None,
             "diffuse_rgba": list(ar.read(mat + 4, 4)) if mat is not None else None,
+            "specular_rgba": list(ar.read(mat + 8, 4)) if mat is not None else None,
             "alpha": ar.f32(mat + 12) if mat is not None else None,
+            "shininess": ar.f32(mat + 16) if mat is not None else None,
             "textures": textures, "pixel_engine": ar.pointer(at + 20)}
 
 
