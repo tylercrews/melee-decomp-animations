@@ -191,6 +191,15 @@ def reflection_uv(normals, view):
     return np.stack((.5+.5*n[...,0],.5-.5*n[...,1]),axis=-1)
 
 
+def color_alpha_mask_layers(material):
+    """Supported source RGB overlays; their alpha blends color, not coverage."""
+    if not material.get('color_alpha_mask_layers'):
+        return []
+    return [t for t in material['textures'][1:]
+            if t.get('coordinate_type', t.get('flags', 0) & 15) == 0
+            and (t.get('flags', 0) >> 16) & 255 == 1 and t.get('image_file')]
+
+
 def render_frame(model, posed, textures, view, width, height, center, pixels_per_unit, background):
     color = np.empty((height, width, 4), dtype=np.uint8)
     color[:] = background
@@ -258,6 +267,20 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
                 mode = (base.get("flags", 0) >> 16) & 15
                 replace_color=mode==5 or diffuse_only and mode==3 and base.get('blend',0)==1
                 rgb = sampled if replace_color else rgb*sampled/255
+            for layer in color_alpha_mask_layers(material):
+                pixels = textures.get(layer['image_file'])
+                if pixels is None:
+                    continue
+                layer_uvs = np.asarray(mesh.get('uv_sets', {}).get(
+                    str(max(0, layer.get('source', 4)-4)), mesh['uvs']), dtype=float)
+                uv = texture_uv(w0[..., None]*layer_uvs[ids[0]] +
+                                w1[..., None]*layer_uvs[ids[1]] +
+                                w2[..., None]*layer_uvs[ids[2]], layer)
+                tx = np.minimum((uv[..., 0]*pixels.shape[1]).astype(int), pixels.shape[1]-1)
+                ty = np.minimum((uv[..., 1]*pixels.shape[0]).astype(int), pixels.shape[0]-1)
+                sampled = pixels[ty, tx].astype(float)
+                weight = sampled[..., 3:4]/255
+                rgb[..., :3] = rgb[..., :3]*(1-weight) + sampled[..., :3]*weight
             interpolated = (w0[..., None]*normals[ids[0]] + w1[..., None]*normals[ids[1]]
                             + w2[..., None]*normals[ids[2]])
             interpolated /= np.maximum(np.linalg.norm(interpolated, axis=2)[..., None], 1e-12)

@@ -266,7 +266,7 @@ def primary_drawables(count, classes, item_groups=()):
     return set(range(count)) - (hidden - normal)
 
 
-def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt"), *, archive_path=None, root_symbol=None, root_offset=None, copy_classes=None, reflection_preview=False, outline_groups=None):
+def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol_path=Path("orig/GALE01/sys/main.dol"), symbols_path=Path("config/GALE01/symbols.txt"), *, archive_path=None, root_symbol=None, root_offset=None, copy_classes=None, reflection_preview=False, outline_groups=None, color_mask_preview=False):
     catalog = roster(files_root,include_extra=True) if kind>=27 else roster(files_root)
     fighter=next(f for f in catalog["fighters"] if f["fighter_kind"]==kind)
     costume=fighter["costumes"][costume_id]
@@ -321,11 +321,16 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
         exported = dict(material)
         if copy_classes is not None:
             exported['copy_diffuse_only']=True
-        if kind in (12,23,31):
+        if kind in (12,14,23,31):
             # Giga Bowser's leading bump stages are not diffuse RGB. Pikachu
             # and Pichu's eyes use COLORMAP_BLEND with blending=1: TObjMakeTExp
             # replaces the incoming RGB, rather than multiplying gray diffuse.
             exported['diffuse_texture_only']=True
+        if kind == 14 or color_mask_preview:
+            # Yoshi's cheek/belly markings are a second UV texture: source
+            # TObjMakeTExp ALPHA_MASK interpolates RGB using texture alpha,
+            # while ALPHAMAP_NONE preserves the opaque body coverage.
+            exported['color_alpha_mask_layers'] = True
         if kind==13 or reflection_preview:
             exported['diffuse_texture_only']=True
             if any(t.get('flags',0)&15==1 for t in material['textures']):

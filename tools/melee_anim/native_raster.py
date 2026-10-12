@@ -160,6 +160,30 @@ class NativeRaster:
             indices=np.ascontiguousarray(mesh["triangles"],dtype=np.uint32)
             self.gl.glVertexPointer(3,0x1406,0,verts.ctypes.data);self.gl.glColorPointer(4,0x1406,0,colors.ctypes.data)
             self.gl.glDrawElements(4,indices.size,0x1405,indices.ctypes.data)
+            from .preview import color_alpha_mask_layers
+            for layer in color_alpha_mask_layers(mat):
+                if depth_only or layer['image_file'] not in textures:
+                    continue
+                # Original ALPHA_MASK affects RGB alone. Draw the same
+                # surface at equal depth, retaining its opaque alpha/depth.
+                uvset = str(max(0, layer.get('source', 4)-4))
+                layer_uv = np.asarray(mesh.get('uv_sets', {}).get(uvset, mesh['uvs']))
+                coords = np.column_stack((layer_uv, np.ones((len(layer_uv), 2))))
+                layer_uv = (coords@np.asarray(layer['texture_matrix']).T)[:, :2]
+                for i, mode in enumerate((layer.get('wrap_s', 1), layer.get('wrap_t', 1))):
+                    if mode == 2:layer_uv[:, i] /= 2
+                layer_uv = np.ascontiguousarray(layer_uv, dtype=np.float32)
+                layer_colors = np.ones((len(verts), 4), dtype=np.float32)
+                layer_colors[:, :3] = shade[:, None]
+                self.gl.glEnable(0x0DE1);self.gl.glEnableClientState(0x8078)
+                self.gl.glEnable(0x0BE2);self.gl.glBlendFunc(0x0302, 0x0303)
+                self.gl.glDepthMask(0);self.gl.glDepthFunc(0x0203)
+                self.gl.glColorMask(1, 1, 1, 0);self.gl.glAlphaFunc(0x0206, 0)
+                self.gl.glBindTexture(0x0DE1, self.texture(layer['image_file'], textures[layer['image_file']], layer))
+                self.gl.glTexCoordPointer(2, 0x1406, 0, layer_uv.ctypes.data)
+                self.gl.glColorPointer(4, 0x1406, 0, layer_colors.ctypes.data)
+                self.gl.glDrawElements(4, indices.size, 0x1405, indices.ctypes.data)
+            self.gl.glDepthFunc(0x0201)
         self.gl.glDepthMask(1);self.gl.glDisable(0x0BE2);self.gl.glColorMask(1,1,1,1);self.gl.glDepthFunc(0x0201)
         pixels=np.empty((height,width,4),dtype=np.uint8)
         self.gl.glFinish();self.gl.glReadPixels(0,0,width,height,0x1908,0x1401,pixels.ctypes.data)

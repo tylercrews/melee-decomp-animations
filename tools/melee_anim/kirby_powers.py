@@ -117,7 +117,7 @@ def model_for_power(repo, power, costume):
         target,_=export_fighter(repo/'orig/GALE01/files',folder,4,costume,
             archive_path=d['body'] or d['archive'],root_symbol=d['symbol'],
             root_offset=None if d['body'] else d['hat_root'],copy_classes=d['classes'],reflection_preview=d['fighter_kind']==13,
-            outline_groups=d.get('outline_groups'))
+            outline_groups=d.get('outline_groups'),color_mask_preview=d['fighter_kind']==14)
         model=json.loads(target.read_text())
         model.update(kirby_power=power,kirby_part_mask=d['mask'],kirby_appearance_mode='body' if d['body'] else 'hat')
         if power=='game-and-watch':

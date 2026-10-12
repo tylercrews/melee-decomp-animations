@@ -1,3 +1,10 @@
+Yoshi white markings (2026-10-12; investigation section56):
+
+- [x] Verify original base skin and second-UV cheek/belly masks in all six costumes; implement source RGB alpha-mask blending without changing fighter coverage.
+- [x] Apply the same material fix to Kirby's Yoshi hat and both raster backends; pass186 Python tests and Node controls.
+- [x] Rebuild48 results/taunt clips /3078 PNG masters, six synchronized claps, all-color GIF/still bundles, aggregate and player, retaining prior source timing/cuts.
+- [x] Complete live normal/rotated/powered/all-size/all-color download verification and record the final service (exec session1315, port8765).
+
 Current mixed-resolution / scoped-export / README work (2026-10-12; investigation section53):
 
 Game & Watch attack props (2026-10-12; investigation section55):
