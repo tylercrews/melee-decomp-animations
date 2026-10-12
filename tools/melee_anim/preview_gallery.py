@@ -186,7 +186,7 @@ powerlabel.hidden=character.value!=='kirby';kirbypower.value=kirbyPower;
 list.forEach(c=>{let o=document.createElement('option');o.value=String(c.id);o.textContent=c.label;costume.append(o)});
 costume.value=list.some(c=>String(c.id)===old)?old:String(list[0].id)}
 function typeForAction(key){return animationTypes.get(character.value+':'+key)||(key.startsWith('movement-')?'movement':key.startsWith('tech-')?'tech':key.startsWith('attack-')?'attack':key.startsWith('victory')?'victory':key==='taunt_source'?'taunt':'clapping')}
-function actions(){let old=action.value;let owned=animations.filter(a=>a.character===character.value);let available=new Set(owned.filter(a=>!a.unavailable).map(a=>typeForAction(a.key)));
+function actions(preferred=action.value){let old=preferred;let owned=animations.filter(a=>a.character===character.value);let available=new Set(owned.filter(a=>!a.unavailable).map(a=>typeForAction(a.key)));
 for(const option of animationtype.options){option.disabled=!available.has(option.value);option.hidden=option.disabled}
 if(!available.has(animationtype.value))animationtype.value=available.has('movement')?'movement':available.values().next().value;
 let list=owned.filter(a=>typeForAction(a.key)===animationtype.value&&(!partialsHidden||!a.partial));action.options.length=0;
@@ -319,7 +319,7 @@ let requested=animations.find(a=>a.character===character.value&&a.key===incoming
 if(['show','hide'].includes(incoming.get('partials')))partialsHidden=incoming.get('partials')==='hide';
 else if(requested?.partial)partialsHidden=false;
 hidepartials.checked=partialsHidden;
-if(requested){animationtype.value=typeForAction(requested.key);action.value=requested.key;actions()}
+if(requested){animationtype.value=typeForAction(requested.key);actions(requested.key)}
 if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===incoming.get('costume')))costume.value=incoming.get('costume');
 if(['full','minimum','dirty','sync'].includes(incoming.get('cycle')))checkMode(incoming.get('cycle'));
 if(['128','256','512','1024','2048'].includes(incoming.get('size')))downloadsize.value=incoming.get('size');

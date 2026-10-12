@@ -701,6 +701,25 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   vm.runInContext(script,linkContext);
   assert.equal(linkElements.hidepartials.checked,false);assert.equal(linkElements.action.value,'attack-296_source');assert.equal(linkElements.costume.value,'2');
 
+  // Native HTMLSelectElement clears values that are absent from its current options.
+  // Handoffs must rebuild the category before selecting a requested animation.
+  for(const [slug,key,partial] of [['mario','victory3_source',false],['fox','attack-296_source',true],['mario','movement-fullhop_source',false]]){
+    const nativeElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
+    let selected='';
+    Object.defineProperty(nativeElements.action,'value',{
+      get(){return this.options.some(o=>o.value===selected)?selected:''},
+      set(value){selected=this.options.some(o=>o.value===String(value))?String(value):''}
+    });
+    nativeElements.action.append=function(option){if(!this.options.length)selected=option.value;this.options.push(option)};
+    const nativeContext=vm.createContext({document:{getElementById:id=>nativeElements[id],createElement:()=>({})},location:{protocol:'file:',hash:`#character=${slug}&action=${key}&costume=0&frame=3&playing=false`},URLSearchParams,
+      history:{replaceState(){}},performance:{now:()=>0},Image:class{},requestAnimationFrame(){}});
+    vm.runInContext(script,nativeContext);
+    assert.equal(nativeElements.action.value,key,'cross-category handoff keeps the requested native-select choice');
+    assert.equal(nativeElements.hidepartials.checked,!partial);
+    assert.equal(vm.runInContext('index',nativeContext),3);
+    assert.equal(vm.runInContext('playing',nativeContext),false);
+  }
+
   // File-origin resized batches transfer their exact selection to HTTP first.
   elements.character.value='mario';elements.character.onchange();elements.animationtype.value='victory';elements.animationtype.onchange();
   elements.action.value='victory3_source';elements.action.onchange();elements.scrub.value='7';elements.scrub.oninput();

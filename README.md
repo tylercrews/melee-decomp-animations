@@ -1,9 +1,9 @@
-# Melee Animation Studio
+# Melee Decomp Animation UI
 
 Turn Super Smash Bros. Melee animations into transparent GIFs and PNGs. This Windows tool builds on the Melee decompilation: import assets from your own game ISO, choose a character and costume, play an animation, rotate the view, and download the animation or a single paused frame.
 
 > [!WARNING]
-> **Plan for roughly 40 GB — FORTY GIGABYTES — of local project data.** That is the author's current estimate, including generated assets, rather than the size of the source download. Importing and rendering creates extracted files, PNG frames, GIFs, ZIP bundles and caches. More animations, Kirby hats, viewing angles and larger native renders increase it further; the 1024px rebuild will change this estimate. Leave additional free space for preparation and downloads.
+> **Plan for roughly 67 GB — SIXTY-SEVEN GIGABYTES — of local project data.** That is the author's reported checkout size after the larger renders, including generated assets, rather than the size of the source download. Importing and rendering creates extracted files, PNG frames, GIFs, ZIP bundles and caches. More animations, Kirby hats, viewing angles and larger native renders increase it further. Leave additional free space for preparation and downloads.
 
 ![The animation player with character, costume, playback and export controls](docs/media/player.png)
 
@@ -22,6 +22,13 @@ The roster also includes Giga Bowser, both wireframes, Master Hand, Crazy Hand a
 | ![Mario's third victory pose](docs/media/mario-victory.gif) | ![Mr. Game & Watch clapping](docs/media/game-and-watch-clap.gif) | ![Pikachu's sleeping victory pose](docs/media/pikachu-sleep.png) |
 
 These examples come from the actual renderer and are downsampled for this README. Full-resolution exports are generated locally from your ISO.
+
+<details>
+<summary>See Kirby's power selector and batch options</summary>
+
+![Kirby with the Samus copy appearance, costume selection and all-hats batch option](docs/media/kirby-player.png)
+
+</details>
 
 ## Set up on Windows
 
@@ -104,7 +111,7 @@ I chose **512 × 512 as the native render size for most animations** to balance 
 
 Downloads offer **128, 256, 512, 1024 and 2048px** square images. A **★** marks the selected type's native size: **512 for most types, 1024 for Taunt, Victory Pose and Clapping**. Smaller exports downsample. Larger exports upscale the native image, adding dimensions without extra detail. The UI explains upsizing and shows a dark-yellow large-GIF warning for 2048px.
 
-To make a smaller collection—or spend the same space on higher native resolution—limit the characters, actions, colors and cached views you render. Rendering Kirby's 25 copied appearances in all six colors adds **150 extra appearance/color variants per animation**, so omitting unneeded hats can save substantial space. The current estimate is about **40 GB**, and higher-resolution builds will increase it. CLI render commands accept `--size` for custom builds; keep custom outputs separate from the standard player collection unless you also update its resolution policy.
+To make a smaller collection—or spend the same space on higher native resolution—limit the characters, actions, colors and cached views you render. Adding all Kirby powers and colors roughly doubled my earlier storage estimate. Rendering his 25 copied appearances in all six colors adds **150 extra appearance/color variants per animation**, so omitting unneeded hats can save substantial space. The current estimate is about **67 GB**, and higher-resolution builds will increase it. CLI render commands accept `--size` for custom builds; keep custom outputs separate from the standard player collection unless you also update its resolution policy.
 
 ## Troubleshooting and manual setup
 
