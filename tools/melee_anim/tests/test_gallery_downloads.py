@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import unittest
 import uuid
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from tools.melee_anim.preview_batch import action_sections, completed_job
@@ -16,6 +17,10 @@ class DownloadTests(unittest.TestCase):
         self.build = Path("build/melee_anim_tests").resolve()
         self.root = self.build / f"downloads_{uuid.uuid4().hex}"
         self.root.mkdir(parents=True)
+        self.light_fixture = {'source':'synthetic lighting fixture'}
+        lighting = patch('tools.melee_anim.lighting.results_lighting',return_value=self.light_fixture)
+        lighting.start()
+        self.addCleanup(lighting.stop)
 
     def tearDown(self):
         target = self.root.resolve()
@@ -34,7 +39,8 @@ class DownloadTests(unittest.TestCase):
                     "fps": 50, "camera_yaw": 0, "nominal_ticks_per_second": 60,
                     "source_period_frames": 2, "source_symbol": "synthetic_clip",
                     "authored_loop": False, "size": 256, "transparent_background": True,
-                    "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest()}
+                    "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
+                    "lighting": self.light_fixture}
         (folder/"preview-manifest.json").write_text(json.dumps(manifest))
         for i in range(2):
             (folder/f"frame_{i:04d}.png").write_bytes(b"synthetic PNG placeholder")
@@ -80,6 +86,7 @@ class DownloadTests(unittest.TestCase):
         self.assertTrue(completed_job(folder, model, "taunt", "source", 256))
         (folder/"frame_9999.png").write_bytes(b"unexpected")
         self.assertFalse(completed_job(folder, model, "taunt", "source", 256))
+
         (folder/"frame_9999.png").unlink()
         (folder/"frame_0001.png").unlink()
         self.assertFalse(completed_job(folder, model, "taunt", "source", 256))
@@ -88,6 +95,14 @@ class DownloadTests(unittest.TestCase):
         (folder/"frame_0001.png").write_bytes(b"restored frame")
         model.write_text("changed model")
         self.assertFalse(completed_job(folder, model, "taunt", "source", 256))
+
+    def test_resume_rejects_unlit_taunt_manifest(self):
+        folder,model = self.fixture(0)
+        self.assertTrue(completed_job(folder,model,'taunt','source',256))
+        path = folder/'preview-manifest.json'
+        data = json.loads(path.read_text());data.pop('lighting')
+        path.write_text(json.dumps(data))
+        self.assertFalse(completed_job(folder,model,'taunt','source',256))
 
     def test_all_includes_every_intro_and_wait_without_duplicates(self):
         jobs = action_sections("all", "all")

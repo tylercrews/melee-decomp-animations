@@ -103,7 +103,12 @@ class RotationCacheTests(unittest.TestCase):
 
     def test_results_light_archive_invalidates_clap_and_victory_caches(self):
         archive = self.repo/'orig/GALE01/files/GmRst.usd'
-        for action in ('results-clap_source','victory1_source','victory1_wait'):
+        report_path = self.repo/'build/melee_anim/motions.json'
+        report = json.loads(report_path.read_text())
+        report['taunts'] = [{'fighter_kind':0,'animation_file':'fake.dat',
+                             'standard_facing':{'right':{'source_fighter_kind':0}}}]
+        report_path.write_text(json.dumps(report))
+        for action in ('results-clap_source','victory1_source','victory1_wait','taunt_source'):
             clip = {**self.clip,'action_key':action}
             archive.write_bytes(b'original scene light bytes')
             before = self.cache._inputs(clip,(0,25,0),False)[0]

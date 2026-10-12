@@ -308,6 +308,9 @@ class AttackCache:
             from .electric_burst import is_judge9
             judge=is_judge9(clip['character'],clip['action_key']);electric=bool(electric and judge)
             paths = [catalog, model, self.repo/'build/melee_anim/motions.json']
+            lights = next((self.repo/'orig/GALE01/files'/name for name in ('GmRst.usd','GmRst.dat')
+                           if (self.repo/'orig/GALE01/files'/name).is_file()), None)
+            if lights is not None:paths.append(lights)
             if judge:paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
             actor=find_action(selection,json.loads(model.read_text()).get('fighter_kind'),action)
             from .character_effects import effect_archives

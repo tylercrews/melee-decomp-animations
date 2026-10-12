@@ -1,3 +1,12 @@
+All-pose lighting (2026-10-12; investigation section58):
+
+- [x] Compare original gameplay fallback/stage descriptors with results; add a reusable source inspection tool and document stage selection/override/animation limits.
+- [x] Apply the original results rig to every animation, preserving unlit materials/effects and hashing GmRst in every ordinary/rotation/power cache path.
+- [x] Omit lighting-off per the user's extra-render/storage condition; maintain no paired lit/unlit export variants.
+- [x] Rebuild123 taunts /10038 native1024 PNGs and26 all-color GIF/still families; refresh984-member aggregate and all129 primary costume models' material metadata.
+- [x] Pass194 Python tests/Node controls and51 full clips /5941 PNGs across32 forms, categories, props and effects.
+- [x] Finish full984-clip/209-GIF-bundle/17348-still-bundle verification and live rotated/powered/centered/all-color/five-size checks; record final evidence in all four notes. Service session83416, port8765.
+
 Results lighting for clapping and victories (2026-10-12; investigation section57):
 
 - [x] Verify original panel/full results lights and source material ambient/specular/shininess; implement supported diffuse/specular texture channels in both backends.

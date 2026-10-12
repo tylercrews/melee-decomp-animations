@@ -111,6 +111,16 @@ class AttackTests(unittest.TestCase):
             self.assertNotEqual(first['gif'],second['gif'])
             self.assertEqual(len(self.calls),2)
 
+    def test_scene_light_archive_change_invalidates_ordinary_attack_cache(self):
+        archive = self.repo/'orig/GALE01/files/GmRst.usd'
+        archive.write_bytes(b'original scene lighting')
+        with patch('tools.melee_anim.attacks.subprocess.run',side_effect=self.render):
+            first = self.cache.get(self.clip)
+            archive.write_bytes(b'changed scene lighting')
+            second = self.cache.get(self.clip)
+        self.assertNotEqual(first['gif'],second['gif'])
+        self.assertEqual(len(self.calls),2)
+
     def test_tech_effect_toggle_has_separate_cache_and_names_without_mutation(self):
         action=self.catalog['characters'][0]['actions'][0]
         action.update(key='tech-199_source',animation_type='tech',ground_effect='tech')

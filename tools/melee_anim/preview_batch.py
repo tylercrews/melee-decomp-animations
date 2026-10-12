@@ -36,9 +36,8 @@ def completed_job(folder, model, action, section, size, files=Path('orig/GALE01/
         return False
     try:
         m = json.loads(path.read_text(encoding="utf-8"))
-        if action=='results-clap' or action.startswith('victory'):
-            from .lighting import results_lighting
-            if m.get('lighting')!=results_lighting(files):return False
+        from .lighting import results_lighting
+        if m.get('lighting')!=results_lighting(files):return False
         if not (m["complete_interval"] and m["action"] == action and m["section"] == section
                 and m["size"] == size and m["fps"] == 50 and m["camera_yaw"] == 0
                 and m["nominal_ticks_per_second"] == 60

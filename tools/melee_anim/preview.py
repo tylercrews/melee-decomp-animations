@@ -478,9 +478,8 @@ def main():
     stale = {p.name for p in args.output.glob("frame_*.png")} - expected_frames
     if stale:
         parser.error(f"Output has extra frame files; choose a fresh output directory: {sorted(stale)[:5]}")
-    if args.action == 'results-clap' or args.action.startswith('victory'):
-        from .lighting import results_lighting
-        model['lighting'] = results_lighting(args.files)
+    from .lighting import results_lighting
+    model['lighting'] = results_lighting(args.files)
     textures = {t["image_file"]: np.asarray(Image.open(model_folder/t["image_file"]).convert("RGBA"))
                 for m in model["materials"] for t in m["textures"] if t.get("image_file")}
     from .fighter_textures import FighterTextures

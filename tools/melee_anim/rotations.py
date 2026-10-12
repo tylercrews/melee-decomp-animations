@@ -50,10 +50,9 @@ class RotationCache:
             selected = json.loads((self.root/Path(clip['sync_cycle']['gif']).parent/'preview-manifest.json').read_text())
         action, section = clip['action_key'].rsplit('_', 1)
         paths = [original, model, self.repo/'build/melee_anim/motions.json']
-        if clip['action_key']=='results-clap_source' or clip['action_key'].startswith('victory'):
-            lights = next((self.repo/'orig/GALE01/files'/name for name in ('GmRst.usd','GmRst.dat')
-                           if (self.repo/'orig/GALE01/files'/name).is_file()), None)
-            if lights is not None:paths.append(lights)
+        lights = next((self.repo/'orig/GALE01/files'/name for name in ('GmRst.usd','GmRst.dat')
+                       if (self.repo/'orig/GALE01/files'/name).is_file()), None)
+        if lights is not None:paths.append(lights)
         if power!='none':
             from .kirby_powers import model_for_power
             appearance,desc=model_for_power(self.repo,power,cid)
