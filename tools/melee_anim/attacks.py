@@ -295,7 +295,7 @@ class AttackCache:
         self.repo = Path(repo).resolve() if repo else Path(__file__).resolve().parents[2]
         self.lock = threading.RLock()
 
-    def get(self, clip, effects=False, electric=True):
+    def get(self, clip, effects=False, electric=True, progress=None):
         if not clip.get('lazy'):
             return clip
         with self.lock:
@@ -358,8 +358,10 @@ class AttackCache:
                 if action.startswith('tech-'):
                     command += ['--ground-effects','on' if effects else 'off']
                 with (folder/'render.log').open('w') as log:
-                    result = subprocess.run(command,cwd=self.repo,stdout=log,stderr=subprocess.STDOUT,timeout=600,
-                                            env={**os.environ,'OPENBLAS_NUM_THREADS':'1','OMP_NUM_THREADS':'1'})
+                    from .export_progress import render_progress
+                    with render_progress(folder/'render.log',clip['frame_count'],progress):
+                        result = subprocess.run(command,cwd=self.repo,stdout=log,stderr=subprocess.STDOUT,timeout=600,
+                                                env={**os.environ,'OPENBLAS_NUM_THREADS':'1','OMP_NUM_THREADS':'1'})
                 if result.returncode or not all((folder/n).is_file() for n in expected):
                     raise RuntimeError('Attack rendering failed; see '+str(folder/'render.log'))
                 manifest = json.loads((folder/'preview-manifest.json').read_text())

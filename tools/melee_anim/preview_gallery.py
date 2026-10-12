@@ -38,6 +38,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 #scrub{flex:1}a{color:#81baff}.meta{background:#202a36;padding:16px;border-radius:8px}
 [hidden]{display:none!important}small{color:#b5c0ce}
 #sizewarning{color:#b59a19}
+#downloadprogress{margin:12px 0}#downloadbar{width:100%;height:18px;accent-color:#3878cb}#downloadcount{display:block;margin-top:6px}
 </style><h1>Melee animation preview</h1>
 <p>Choose a character and costume color, then an animation type and animation. Save its GIF or download a bundle of colors.</p>
 <div class="controls" id="charactercontrols">
@@ -95,6 +96,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <a class="download" id="framezip" hidden download>Download paused frame in all colors</a>
 <a id="open" target="_blank" rel="noopener">Open GIF</a></div>
 <small id="downloadstatus" role="status" aria-live="polite"></small>
+<div id="downloadprogress" hidden><progress id="downloadbar" max="100" value="0" aria-label="Download preparation progress"></progress><small id="downloadcount"></small></div>
 <small>Repeat preview does not alter the saved GIF. Victory loops are the separate authored wait animations. If a browser opens a local file instead of downloading it, use Save link as.</small>
 <p id="servicehint" hidden>For attacks, viewing angles, or resized downloads, open the <a href="http://127.0.0.1:8765/player.html">local download player</a>.
 If it is closed, start it from the repository with <code>python -m tools.melee_anim.player_server</code>.</p>
@@ -261,18 +263,25 @@ still.download=sizedName(angleName(effectName(markedName(c.download_name)).repla
 framezip.href=original&&!colorHats?`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`:exportURL('png','colors');
 framezip.download=sizedName(angleName(effectName(batchMarkedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`,'colors'))))}
 let batchBusy=false,pendingBatch=null;
-const batchButtons=[archive,framezip,allzip];
+const batchButtons=[gif,still,archive,framezip,allzip];
 function playerHandoff(batch=null){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show',hats:batchHats()});if(isJudgeNine())query.set('electric',electricSetting());if(batch)query.set('batch',batch);return `${exportBase}/player.html#${query}`}
-function runPendingBatch(){if(location.protocol!=='http:'||!pendingBatch)return;const button={gif:archive,png:framezip,all:allzip}[pendingBatch];pendingBatch=null;if(button&&!button.hidden)batchDownload({preventDefault(){}},button)}
+function runPendingBatch(){if(location.protocol!=='http:'||!pendingBatch)return;const button={gif:archive,png:framezip,all:allzip,'single-gif':gif,'single-png':still}[pendingBatch];pendingBatch=null;if(button&&!button.hidden)batchDownload({preventDefault(){}},button)}
 function batchState(busy,active){batchBusy=busy;for(const button of batchButtons){button.ariaDisabled=String(busy);button.ariaBusy=String(busy&&button===active);button.tabIndex=busy?-1:0;button.className=(button.className||'download').replace(/\s*busy\b/g,'')+(busy&&button===active?' busy':'')}}
+function downloadProgress(state){document.getElementById('downloadprogress').hidden=false;document.getElementById('downloadbar').value=Math.max(0,Math.min(100,Number(state.percent)||0));document.getElementById('downloadcount').textContent=state.total?`Animations ready: ${state.completed}/${state.total} · Files ready: ${state.files_completed}/${state.total}`:'';const frames=state.frames_total?` · ${state.frames_done}/${state.frames_total} ${state.unit||'frames'}`:'';document.getElementById('downloadstatus').textContent=`${state.phase||'Preparing download'}${state.label?' · '+state.label:''}${frames}`}
+async function prepareDownload(href){const id=typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():`download-${Date.now()}-${Math.random().toString(36).slice(2)}`;let stopped=false,timer=null;
+const responsePromise=fetch(href.replace('/export?','/prepare-export?')+`&progress=${id}`);
+async function poll(){if(stopped)return;try{const response=await fetch(`${exportBase}/export-progress?id=${id}`);if(response.ok){const state=await response.json();if(!stopped)downloadProgress(state)}}catch(error){}finally{if(!stopped&&typeof setTimeout==='function')timer=setTimeout(poll,500)}}
+if(typeof setTimeout==='function')timer=setTimeout(poll,250);
+try{const response=await responsePromise;if(!response.ok)throw Error(`Preparation failed (${response.status}). Try again.`);const result=await response.json();if(result.progress)downloadProgress(result.progress);return exportBase+result.url}
+finally{stopped=true;if(timer!==null&&typeof clearTimeout==='function')clearTimeout(timer)}}
 async function batchDownload(event,button){event.preventDefault();if(batchBusy)return;
 const href=button.href,filename=button.download,status=document.getElementById('downloadstatus');
-batchState(true,button);status.textContent='Preparing download… Additional characters, colors or Kirby hats may need rendering. Please wait.';
+batchState(true,button);downloadProgress({percent:0,phase:'Preparing download…'});
 try{let ready=href;
-if(location.protocol!=='http:'&&href.includes('/export?')){location.href=playerHandoff(button===framezip?'png':button===allzip?'all':'gif');return}
-if(href.includes('/export?')){const response=await fetch(href.replace('/export?','/prepare-export?'));if(!response.ok)throw Error(`Preparation failed (${response.status}). Try again.`);const result=await response.json();ready=exportBase+result.url}
+if(location.protocol!=='http:'&&href.includes('/export?')){location.href=playerHandoff(button===gif?'single-gif':button===still?'single-png':button===framezip?'png':button===allzip?'all':'gif');return}
+if(href.includes('/export?')){ready=await prepareDownload(href)}
 else if(location.protocol==='http:'){const response=await fetch(href,{method:'HEAD'});if(!response.ok)throw Error(`Download unavailable (${response.status}).`)}
-const link=document.createElement('a');link.href=ready;link.download=filename;document.body.append(link);link.click();link.remove();status.textContent='Download ready. Your browser is saving the file.';
+const link=document.createElement('a');link.href=ready;link.download=filename;document.body.append(link);link.click();link.remove();document.getElementById('downloadbar').value=100;status.textContent='Download ready. Your browser is saving the file.';
 }catch(error){status.textContent=`${error.message} Open the local download player if it is not running.`}
 finally{batchState(false,button)}}
 for(const button of batchButtons)button.onclick=event=>batchDownload(event,button);
@@ -320,7 +329,7 @@ while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.chec
 last=now;requestAnimationFrame(tick)}
 function restoreSelection(){let incoming=new URLSearchParams((location.hash||'').slice(1));
 includeKirbyHats=incoming.get('hats')==='all';kirbymode.checked=includeKirbyHats;
-pendingBatch=['gif','png','all'].includes(incoming.get('batch'))?incoming.get('batch'):null;
+pendingBatch=['gif','png','all','single-gif','single-png'].includes(incoming.get('batch'))?incoming.get('batch'):null;
 // Consume this one-time handoff so refresh/reopen cannot replay old angles.
 if(location.hash&&typeof history!=='undefined')history.replaceState(null,'',location.pathname+location.search);
 if(characters.some(c=>c.slug===incoming.get('character'))){character.value=incoming.get('character');colors();actions()}

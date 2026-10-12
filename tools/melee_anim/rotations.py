@@ -118,7 +118,7 @@ class RotationCache:
             digest.update(hashlib.sha256(path.read_bytes()).digest())
         return digest.hexdigest(), settings, model, companion if companion.is_file() else None
 
-    def get(self, clip, angles, sync=False, power='none', center=False):
+    def get(self, clip, angles, sync=False, power='none', center=False, progress=None):
         angles = camera_angles(*angles)
         from .kirby_powers import validate_power
         validate_power(clip['character'],power)
@@ -168,8 +168,10 @@ class RotationCache:
                     timeline.write_text(json.dumps(settings))
                     command += ['--samples', str(timeline)]
                 with (folder/'render.log').open('w') as log:
-                    result = subprocess.run(command, cwd=self.repo, stdout=log, stderr=subprocess.STDOUT,
-                                            timeout=600, env={**os.environ, 'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1'})
+                    from .export_progress import render_progress
+                    with render_progress(folder/'render.log',len(settings['source_times']),progress):
+                        result = subprocess.run(command, cwd=self.repo, stdout=log, stderr=subprocess.STDOUT,
+                                                timeout=600, env={**os.environ, 'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1'})
                 if result.returncode:
                     raise RuntimeError(f'Camera render failed; see {folder / "render.log"}')
                 manifest = json.loads((folder/'preview-manifest.json').read_text())

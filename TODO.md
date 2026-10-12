@@ -1,3 +1,11 @@
+Download progress (2026-10-12; investigation section59):
+
+- [x] Add bounded per-export progress snapshots and a nonblocking polling route, retaining the existing preparation API and request limits.
+- [x] Report actual render/resize/quantize/encode frame counts, animation/file readiness and ZIP packing; count cached outputs honestly.
+- [x] Add accessible progress/count display to all five download buttons, sharing the duplicate-request lock and preserving selections/handoffs.
+- [x] Pass199 Python tests and Node controls, including stale-poll/error cleanup and unchanged GIF bytes.
+- [x] Regenerate player, restart the verified local service and pass real resized/color/cold/cached/error download checks; service session20971, port8765.
+
 All-pose lighting (2026-10-12; investigation section58):
 
 - [x] Compare original gameplay fallback/stage descriptors with results; add a reusable source inspection tool and document stage selection/override/animation limits.

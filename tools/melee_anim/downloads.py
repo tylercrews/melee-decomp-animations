@@ -33,7 +33,7 @@ def resize_png(data, size):
         return out.getvalue()
 
 
-def resize_gif(data, size, preserve_frames=False):
+def resize_gif(data, size, preserve_frames=False, progress=None):
     """Preserve each decoded frame's delay and authored GIF loop metadata."""
     if size not in SIZES:
         raise ValueError('Unsupported download size')
@@ -45,11 +45,13 @@ def resize_gif(data, size, preserve_frames=False):
             source.seek(i)
             durations.append(source.info.get('duration', 20))
             images.append(source.convert('RGBA').resize((size, size), Image.Resampling.LANCZOS))
+            if progress:progress('Resizing frames',i+1,source.n_frames)
     from .gif_export import encode_frames, quantize_rgba
-    return encode_frames(quantize_rgba(images,palette),durations,looping)
+    frames = quantize_rgba(images,palette,**({'progress':progress} if progress else {}))
+    return encode_frames(frames,durations,looping,**({'progress':progress} if progress else {}))
 
 
-def cycle_gif(root, clip, size, cycle=None):
+def cycle_gif(root, clip, size, cycle=None, progress=None):
     """Encode the chosen PNG interval at the original FPS, without endpoint duplication."""
     cycle = clip['minimum_cycle'] if cycle is None else cycle
     with Image.open(root/clip['gif']) as source:
@@ -61,9 +63,10 @@ def cycle_gif(root, clip, size, cycle=None):
             if image.size != (size, size):
                 image = image.resize((size, size), Image.Resampling.LANCZOS)
             images.append(image)
+            if progress:progress('Resizing frames',len(images),cycle['length'])
     from .gif_export import encode_frames, quantize_rgba
-    frames = quantize_rgba(images,palette)
-    return encode_frames(frames,[1000//clip['fps']]*len(frames),0)
+    frames = quantize_rgba(images,palette,**({'progress':progress} if progress else {}))
+    return encode_frames(frames,[1000//clip['fps']]*len(frames),0,**({'progress':progress} if progress else {}))
 
 
 class DownloadCatalog:
@@ -114,7 +117,7 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
-    def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off', electric='on'):
+    def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off', electric='on', progress=None):
         if size is None:
             selected=next((c for c in self.clips if c['character']==character and c['action_key']==action),{})
             size=native_size(action,selected.get('animation_type'))
@@ -160,12 +163,27 @@ class DownloadCatalog:
             length = len(c['sync_cycle']['frames']) if cycle == 'sync' else short['length'] if short else c.get('frame_count',len(c['frames']))
             if kind == 'png' and not 0 <= frame < length:
                 raise ValueError('Frame index is outside this animation')
+        units = len(jobs)*2 + (scope != 'costume')
+        def notify(phase,completed,files,work,done=0,count=0,label='',unit='frames'):
+            if progress:
+                progress(dict(phase=phase,completed=completed,total=len(jobs),files_completed=files,
+                              percent=100*work/units,frames_done=done,frames_total=count,label=label,unit=unit))
+        notify('Preparing animations',0,0,0)
         prepared=[];bases={}
-        for c,variant in jobs:
+        for index,(c,variant) in enumerate(jobs):
+            label = f"{c.get('character_label',c['character'])} / {c.get('costume_label',c['costume_id'])}"
+            if variant != 'none':label += f' / Kirby {variant}'
+            notify('Preparing animation',index,0,index,label=label)
+            def base_progress(stage,done,count):
+                notify(stage,index,0,index+.45*done/max(1,count),done,count,label)
+            def view_progress(stage,done,count):
+                notify(stage,index,0,index+.45+.45*done/max(1,count),done,count,label)
             identity=(c['character'],c['action_key'],c['costume_id'])
-            if identity not in bases:bases[identity]=self.attacks.get(c,effects=effects=='on',**({'electric':False} if electric=='off' and is_judge9(c['character'],c['action_key']) else {}))
+            if identity not in bases:bases[identity]=self.attacks.get(c,effects=effects=='on',**({'electric':False} if electric=='off' and is_judge9(c['character'],c['action_key']) else {}),**({'progress':base_progress} if progress else {}))
             base=bases[identity]
-            prepared.append(self.rotations.get(base,angles,sync=cycle=='sync',power=variant,center=centered))
+            notify('Preparing view',index,0,index+.45,label=label)
+            prepared.append(self.rotations.get(base,angles,sync=cycle=='sync',power=variant,center=centered,**({'progress':view_progress} if progress else {})))
+            notify('Animations ready',index+1,0,index+1,label=label)
             if len(jobs)>1:time.sleep(.005)
         clips=prepared
         if cycle == 'sync':
@@ -181,7 +199,12 @@ class DownloadCatalog:
         if kind == 'png' and any(not 0 <= frame < (selected_cycle(c)['length'] if selected_cycle(c) else len(c['frames'])) for c in clips):
             raise ValueError('Frame index is outside this animation')
         entries = []
-        for clip in clips:
+        for index,clip in enumerate(clips):
+            label = f"{clip.get('character_label',clip['character'])} / {clip.get('costume_label',clip['costume_id'])}"
+            notify('Preparing file',len(jobs),index,len(jobs)+index,label=label)
+            def file_progress(stage,done,count):
+                offset,weight={'Resizing frames':(0,.5),'Quantizing frames':(.5,.3),'Encoding frames':(.8,.2)}[stage]
+                notify(stage,len(jobs),index,len(jobs)+index+offset+weight*done/max(1,count),done,count,label)
             short = selected_cycle(clip)
             suffix = '-dirty-loop' if short and short.get('dirty') else '-minimum-cycle'
             marked_name = clip['download_name'].replace('.gif', suffix+'.gif') if short else clip['download_name']
@@ -207,29 +230,32 @@ class DownloadCatalog:
                     with Image.open(BytesIO(data)) as original:
                         same_size = original.size == (size, size)
                     if short and kind == 'gif':
-                        resized = cycle_gif(self.root, clip, size, short)
+                        resized = cycle_gif(self.root, clip, size, short,**({'progress':file_progress} if progress else {}))
                     elif same_size:
                         resized = data
                     elif kind == 'gif':
-                        resized = resize_gif(data, size, preserve_frames=cycle == 'sync')
+                        resized = resize_gif(data, size, preserve_frames=cycle == 'sync',**({'progress':file_progress} if progress else {}))
                     else:
                         resized = resize_png(data, size)
                     temporary = target.with_suffix(target.suffix+'.tmp')
                     temporary.write_bytes(resized)
                     temporary.replace(target)
             entries.append((name, target, key))
+            notify('Files ready',len(jobs),index+1,len(jobs)+index+1,label=label)
         if scope == 'costume':
             name, target, _ = entries[0]
             return target, name, 'image/gif' if kind == 'gif' else 'image/png'
         bundle_key = hashlib.sha256(repr([(n, k) for n, _, k in entries]).encode()).hexdigest()
         if len({n for n,_,_ in entries})!=len(entries):raise ValueError('Batch has duplicate export filenames')
         bundle = self.cache/f'{bundle_key}.zip'
+        notify('Packing ZIP',len(jobs),len(jobs),len(jobs)*2,unit='files')
         with self.artifact_lock:
             if not bundle.is_file():
                 temporary = bundle.with_suffix('.zip.tmp')
                 with ZipFile(temporary, 'w', compression=ZIP_STORED) as archive:
-                    for name, target, _ in entries:
+                    for index,(name, target, _) in enumerate(entries,1):
                         archive.write(target, name)
+                        notify('Packing ZIP',len(jobs),len(jobs),len(jobs)*2+index/len(entries),index,len(entries),unit='files')
                 temporary.replace(bundle)
         name = 'melee-all-characters-'+slug(batch_label) if scope == 'all' else f'{character}-{action.replace("_", "-")}'
         if scope == 'all' and cycle == 'sync':
@@ -246,4 +272,5 @@ class DownloadCatalog:
         if cycle == 'sync':
             name += '-clapping-sync'
         name = marked_angle(name+'.zip', angles)[:-4]
+        notify('Files ready',len(jobs),len(jobs),units)
         return bundle, f'{name}-{size}px.zip', 'application/zip'

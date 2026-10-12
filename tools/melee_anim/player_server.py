@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit, quote
 
 from .downloads import DownloadCatalog, SIZES
 from .render_settings import MASTER_SIZE,RESULTS_SIZE
+from .export_progress import ProgressRegistry
 
 
 def make_server(root, port=8765, catalog=None):
@@ -21,6 +22,7 @@ def make_server(root, port=8765, catalog=None):
     # Catalog render/artifact locks protect each clip; long batches yield.
     # Bound waiting render/download requests as well as active work.
     slots = threading.BoundedSemaphore(4)
+    progress_jobs = ProgressRegistry()
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -31,6 +33,26 @@ def make_server(root, port=8765, catalog=None):
 
         def do_GET(self):
             url = urlsplit(self.path)
+            if url.path == '/export-progress':
+                try:
+                    query = parse_qs(url.query,strict_parsing=True)
+                    if set(query) != {'id'} or len(query['id']) != 1:raise ValueError('Invalid progress query')
+                    state = progress_jobs.get(query['id'][0])
+                    if state is None:
+                        self.send_error(404,'Unknown or expired export')
+                        return
+                except ValueError as error:
+                    self.send_error(400,str(error))
+                    return
+                data = json.dumps(state).encode()
+                self.send_response(200)
+                self.send_header('Content-Type','application/json')
+                self.send_header('Content-Length',str(len(data)))
+                self.send_header('Cache-Control','no-store')
+                self.end_headers()
+                try:self.wfile.write(data)
+                except (BrokenPipeError,ConnectionResetError):pass
+                return
             if url.path == '/_health':
                 data = json.dumps({'service': 'melee-animation-downloads', 'sizes': SIZES,
                                    'master_size':MASTER_SIZE,
@@ -48,14 +70,17 @@ def make_server(root, port=8765, catalog=None):
                     self.send_error(403)
                     return
                 return super().do_GET()
+            progress_id = None
             try:
                 values = parse_qs(url.query, strict_parsing=True)
                 allowed = {'character', 'action', 'costume', 'cycle', 'pitch', 'yaw', 'roll', 'effects', 'power', 'center', 'electric'}
                 if url.path in ('/export','/prepare-export'):
                     allowed |= {'size', 'kind', 'scope', 'frame', 'view','hats'}
+                if url.path == '/prepare-export':allowed.add('progress')
                 if set(values)-allowed or any(len(v) != 1 for v in values.values()):
                     raise ValueError('Unknown or repeated download option')
                 options = {k: v[0] for k, v in values.items()}
+                requested_progress = options.pop('progress',None)
                 view = options.pop('view', '0')
                 if view not in ('0', '1') or view == '1' and (options.get('kind', 'gif') != 'gif' or options.get('scope', 'costume') != 'costume'):
                     raise ValueError('Inline viewing requires one GIF')
@@ -74,15 +99,24 @@ def make_server(root, port=8765, catalog=None):
                     if url.path == '/rotation':
                         data = json.dumps(catalog.preview(**options)).encode()
                     else:
-                        target, filename, mime = catalog.export(**options)
+                        callback = None
+                        if requested_progress is not None:
+                            callback = progress_jobs.start(requested_progress)
+                            progress_id = requested_progress
+                        target, filename, mime = catalog.export(**options,**({'progress':callback} if callback else {}))
+                        if progress_id:progress_jobs.finish(progress_id)
                         if url.path=='/prepare-export':
-                            data=json.dumps({'url':'/'+quote(target.resolve().relative_to(root).as_posix()),'filename':filename}).encode()
+                            ready = {'url':'/'+quote(target.resolve().relative_to(root).as_posix()),'filename':filename}
+                            if progress_id:ready['progress']=progress_jobs.get(progress_id)
+                            data=json.dumps(ready).encode()
                 finally:
                     slots.release()
             except (ValueError, TypeError) as error:
+                if progress_id:progress_jobs.finish(progress_id,str(error))
                 self.send_error(400, str(error))
                 return
             except Exception as error:
+                if progress_id:progress_jobs.finish(progress_id,'Export failed; see the player service log')
                 self.log_error('Export failed: %s', error)
                 self.send_error(500, 'Export failed; see the player service log')
                 return

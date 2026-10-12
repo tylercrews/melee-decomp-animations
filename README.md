@@ -15,6 +15,8 @@ Turn Super Smash Bros. Melee animations into transparent GIFs and PNGs. This Win
 - Kirby with any supported copy hat or replacement body, in each of his six colors.
 - Views rotated on the X, Y and Z axes, with the same angle in your downloads.
 
+Downloads show a progress bar with animation/file counts and frame counts while rendering or preparing GIFs. Once preparation reaches100%, your browser saves the finished file.
+
 Animations share the game's results-screen light settings, so material highlights stay consistent across animation types. Materials designed to be unlit retain that appearance. Gameplay lighting varies by stage.
 
 The roster also includes Giga Bowser, both wireframes, Master Hand, Crazy Hand and Sandbag. Selected attacks include held items, character props and special effects. Multipart moves have combined playback presets, with their individual phases hidden by default. Lighting, effects and some runtime behavior remain approximate. **MP4 export is still future work.**

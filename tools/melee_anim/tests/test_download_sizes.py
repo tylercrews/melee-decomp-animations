@@ -66,6 +66,20 @@ class DownloadSizeTests(unittest.TestCase):
         with Image.open(BytesIO(resize_gif(out.getvalue(), 128))) as im:
             self.assertNotIn('loop', im.info)
 
+    def test_batch_progress_counts_cached_and_converted_files(self):
+        events=[]
+        opts=dict(character='synthetic',action='taunt_source',size=128,kind='gif',scope='colors')
+        target,_,_=self.catalog.export(**opts,progress=events.append)
+        self.assertTrue(target.is_file())
+        self.assertEqual((events[-1]['total'],events[-1]['completed'],events[-1]['files_completed']),(2,2,2))
+        self.assertTrue(any(e['phase']=='Resizing frames' and e['frames_total']==3 for e in events))
+        self.assertEqual([e['percent'] for e in events],sorted(e['percent'] for e in events))
+        events.clear()
+        cached,_,_=self.catalog.export(**opts,progress=events.append)
+        self.assertEqual(cached,target)
+        self.assertFalse(any(e['phase']=='Resizing frames' for e in events))
+        self.assertEqual(events[-1]['files_completed'],2)
+
     def test_all_color_stills_keep_the_exact_index_and_changed_source_invalidates_cache(self):
         options = dict(character='synthetic', action='taunt_source', size=512, kind='png', scope='colors', frame=1)
         path, name, mime = self.catalog.export(**options)

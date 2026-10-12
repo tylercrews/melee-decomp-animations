@@ -19,7 +19,7 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['downloadprogress','downloadbar','downloadcount','electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -280,6 +280,42 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   servedElements.costume.value='0';servedElements.costume.onchange();
   requests.splice(before);
   console.log('Batch spinner, shared duplicate lock, selection snapshot, ready URL and error recovery: PASS');
+  }
+  {
+  const progressElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
+  const pending=[],saved=[],timers=new Map();let timerId=0;
+  const progressContext=vm.createContext({document:{getElementById:id=>progressElements[id],body:{append(){}},createElement:()=>({click(){saved.push({href:this.href,name:this.download})},remove(){}})},
+    location:{protocol:'http:',hash:''},URLSearchParams,performance:context.performance,Image:context.Image,requestAnimationFrame(){},
+    setTimeout(callback){timers.set(++timerId,callback);return timerId},clearTimeout(id){timers.delete(id)},
+    fetch:url=>new Promise(resolve=>pending.push({url,resolve}))});
+  vm.runInContext(script,progressContext);
+  progressElements.downloadsize.value='512';progressElements.downloadsize.onchange();
+  const originalName=progressElements.gif.download;
+  const saving=progressElements.gif.onclick({preventDefault(){}});
+  assert.equal(pending.length,1);assert.match(pending[0].url,/prepare-export.*progress=/);
+  assert.equal(progressElements.downloadprogress.hidden,false);
+  for(const id of ['gif','still','animationzip','framezip','allzip'])assert.equal(progressElements[id].ariaDisabled,'true');
+  await progressElements.still.onclick({preventDefault(){}});assert.equal(pending.length,1);
+  let tick=timers.entries().next().value;timers.delete(tick[0]);const polling=tick[1]();
+  assert.match(pending[1].url,/export-progress\?id=/);
+  pending[1].resolve({ok:true,json:async()=>({percent:23,total:5,completed:2,files_completed:0,phase:'Rendering frames',frames_done:40,frames_total:101,unit:'frames',label:'Mario / Blue'})});
+  await polling;
+  assert.equal(progressElements.downloadbar.value,23);assert.match(progressElements.downloadcount.textContent,/2\/5/);
+  assert.match(progressElements.downloadstatus.textContent,/40\/101 frames/);
+  tick=timers.entries().next().value;timers.delete(tick[0]);const latePoll=tick[1]();
+  const stale=pending[2];
+  pending[0].resolve({ok:true,json:async()=>({url:'/downloads/ready.gif',progress:{percent:100,total:5,completed:5,files_completed:5,phase:'Download ready'}})});
+  await saving;
+  assert.equal(progressElements.downloadbar.value,100);assert.match(progressElements.downloadcount.textContent,/5\/5/);
+  assert.equal(saved[0].name,originalName);assert.equal(timers.size,0);
+  const next=progressElements.gif.onclick({preventDefault(){}});
+  assert.equal(progressElements.downloadbar.value,0);
+  stale.resolve({ok:true,json:async()=>({percent:80,total:5,completed:4,files_completed:3,phase:'Old request'})});await latePoll;
+  assert.equal(progressElements.downloadbar.value,0,'late polling cannot overwrite a new download');
+  pending.at(-1).resolve({ok:false,status:500});await next;
+  assert.equal(progressElements.gif.ariaDisabled,'false');assert.equal(timers.size,0);
+  assert.match(progressElements.downloadstatus.textContent,/Preparation failed/);
+  console.log('Single/batch download progress, frame counts, shared lock, completion, stale polls and error cleanup: PASS');
   }
   for(const id of ['pitch','yaw','roll','applyangle','resetangle'])assert.notEqual(elements[id].disabled,true,'local-file rotation controls must remain usable');
   elements.character.value='mario';elements.character.onchange();elements.action.value='victory3_source';elements.action.onchange();

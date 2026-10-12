@@ -4,7 +4,7 @@ from PIL import Image, GifImagePlugin
 import numpy as np
 
 
-def quantize_rgba(images, palette=None):
+def quantize_rgba(images, palette=None, progress=None):
     """Reserve GIF index 0 for transparency; opaque black stays visible.
 
     PNG retains partial alpha. GIF uses alpha >=128, without a gray matte or
@@ -33,10 +33,11 @@ def quantize_rgba(images, palette=None):
         frame.putpalette([0,0,0]+colors)
         frame.info.update(transparency=0,background=0)
         frames.append(frame)
+        if progress:progress('Quantizing frames',len(frames),len(images))
     return frames
 
 
-def encode_frames(frames, durations, loop=None):
+def encode_frames(frames, durations, loop=None, progress=None):
     """Write every palette frame, bypassing Pillow's adjacent-frame merging.
 
     Frames must share a palette. getheader/getdata are Pillow's exposed legacy
@@ -61,12 +62,13 @@ def encode_frames(frames, durations, loop=None):
     out = BytesIO()
     for block in blocks:
         out.write(block)
-    for frame, duration in zip(frames, durations):
+    for index, (frame, duration) in enumerate(zip(frames, durations),1):
         settings = dict(duration=duration, disposal=2,include_color_table=False)
         if transparency is not None:
             settings['transparency'] = transparency
         for block in GifImagePlugin.getdata(frame.copy(), **settings):
             out.write(block)
+        if progress:progress('Encoding frames',index,len(frames))
     out.write(b';')
     return out.getvalue()
 

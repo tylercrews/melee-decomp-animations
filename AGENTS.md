@@ -1,5 +1,15 @@
 # Guidance for future agents
 
+## Latest: download preparation progress (2026-10-12)
+
+All five download buttons (single GIF/PNG and color/matching ZIPs) share the existing busy lock/spinner plus a progress bar. Show animations ready/completed count and files ready count, with actual active frame counts during rendering, resizing, quantizing and encoding. Cached animations/files count as ready, not as newly rendered. The bar measures preparation work, not estimated elapsed time or browser transfer bytes; completion says the browser is saving the file. Preserve click-time URLs/filenames and every costume/power/angle/cycle/effect/size/paused-frame setting.
+
+`/prepare-export` accepts an optional random `progress` ID; `/export-progress?id=...` exposes locked snapshots without consuming renderer request slots. Preparation remains compatible with clients omitting the ID. Final response includes progress so fast/cached exports still show totals. ProgressRegistry retains at most64 jobs, expires completed/error records after600s and protects active/duplicate IDs. Ordinary/rotation render caches optionally monitor fresh renderer stdout (reported frame counts, not preexisting frame files). GIF resizing/quantizing/encoding and ZIP packing report actual completed work. Callbacks do not change image/GIF bytes or cache selection.
+
+Poll every500ms after an initial250ms, stop/clear timers on success/failure and ignore late responses. Poll failures do not interrupt the actual export. Source file handoff supports UI-only single-gif/single-png markers as well as existing batch kinds; never forward these or progress IDs into render options. Native static downloads retain HEAD checks. No model/master/bundle rerender is required; regenerate player HTML and restart the service after these server changes.
+
+199 Python tests and Node controls pass. Live tests passed a real Samus five-color1024-to512 GIF conversion/ZIP, cached reuse, cold69-frame ordinary rendering, exact128 PNG output and error progress. Node covers single/batch locking, counts, completion, stale polls and error cleanup. QA stays ignored `build/melee_anim/progress_qa`; served HTML matches regenerated output. Two stale listeners were verified as this repo's player and restarted; current task-owned service: exec session20971, port8765. See investigation section59.
+
 ## Latest: one source lighting preset for every animation (2026-10-12)
 
 The user requested the improved lighting for ALL poses, superseding section57's results-only scope. Every actual preview CLI job now loads the original results rig, including taunts, ordinary/combined attacks, movement, centered hops, sleep/dodges, Knockdown, extra fighters and Kirby appearances. Preserve original unlit G&W/visor/prop/effect behavior. Do not reintroduce the matte fallback for ordinary UI/export actions. `render_frame` retains its synthetic/legacy no-rig fallback for isolated tests; the real CLI always supplies the rig.
