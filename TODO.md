@@ -1,3 +1,14 @@
+Latest completed work (2026-10-11; investigation section 49):
+
+- [x] Movement: all playable forms/costumes have original sleep start, sleeping loop and wake-up clips, plus spot dodge and both ground rolls.
+- [x] Add Yoshi-only egg pose/roll visibility and Samus's source-timed morph-ball transition; exclude general shields and air dodge.
+- [x] Evaluate original costume-specific eye-image FObjs and timed script requests for sleep, Rest and sleeping victory poses; preserve entrance state for victory waits.
+- [x] Rebuild Pikachu/Pichu/Jigglypuff results/taunts in all costumes, then refresh cycle/sync assets and download bundles.
+- [x] Add batch spinner/shared duplicate lock, click-time selection snapshot, error recovery and cached artifact preparation; preserve exact file-to-HTTP handoff.
+- [x] Audit costume names and share the complete color-label helper across selectors/downloads; remove generic labels for supplied alternate colors.
+- [x] Validate 166 synthetic tests, Node controls and 175 full movement clips / 7,313 frames; exercise real paused/GIF/all-color exports.
+- [ ] Compare sleeping eye timings and dodge/egg assembly against original-game capture; extend remaining texture/material/runtime callbacks only with source evidence.
+
 # Ordered implementation checklist
 
 Updated 2026-10-11 after Tech/ground-motion playback and optional core impact effects. There are also 861 on-demand Tech costume choices. All 26 selectable character entries / 123 actual costumes have clapping, standard taunt, three victory entrances, and three primary wait clips: 984 GIFs and 81,369 PNG masters. Production fidelity and MP4 remain future work. See `AGENTS.md`'s current handoff for the resume order.

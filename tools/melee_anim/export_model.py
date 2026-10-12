@@ -342,6 +342,10 @@ def export_fighter(files_root: Path, output_dir: Path, kind=0, costume_id=0, dol
             image, palette = ar.pointer(tex + 76), ar.pointer(tex + 80)
             animation = animations.get((material["offset"], descriptor["id"]))
             if animation is not None:
+                from .ground_effects import aobj_tracks
+                descriptor['animation_tracks']=[{'channel':t.channel,'startframe':t.startframe,
+                    'frac_value':t.frac_value,'frac_slope':t.frac_slope,'data':t.data.hex()}
+                    for t in aobj_tracks(ar, ar.pointer(animation+8), 0) if t.channel==1]
                 values = aobj_frame0(ar, ar.pointer(animation + 8))
                 table, palette_table = ar.pointer(animation + 12), ar.pointer(animation + 16)
                 nimages, npalettes = ar.u16(animation + 20), ar.u16(animation + 22)

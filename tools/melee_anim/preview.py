@@ -301,6 +301,9 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
         aid={"results-clap":9,"victory1":0,"victory2":2,"victory3":5}[action]
         if section=="wait" and action.startswith("victory"):aid+=1
         motion=table["motions"][aid]
+        if section=='wait' and action.startswith('victory'):
+            entrance=table['motions'][aid-1]
+            motion={**motion,'texture_initial_scripts':[(entrance.get('script',{}),entrance['frames'])]}
         outer=Archive((files/table["results_archive"]).read_bytes())
         base,length=outer.public_extent(table["motion_file_symbol"])
         data=outer.data[base:base+length]
@@ -312,6 +315,10 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
     if action.startswith('movement-') and actor.get('movement'):
         motion={**motion,'jump_actor':actor}
         metadata={**metadata,'frames':actor['render_duration']}
+    if action.startswith('movement-') and actor.get('visibility_override'):
+        motion={**motion,'visibility_override':actor['visibility_override']}
+    if action.startswith('movement-') and actor.get('texture_initial_scripts'):
+        motion={**motion,'texture_initial_scripts':actor['texture_initial_scripts']}
     if action.startswith(('attack-','tech-')) and actor.get('sequence'):
         motion={**motion,'sequence_actor':actor}
         metadata={**metadata,'frames':actor['render_duration']}
@@ -430,17 +437,25 @@ def main():
         parser.error(f"Output has extra frame files; choose a fresh output directory: {sorted(stale)[:5]}")
     textures = {t["image_file"]: np.asarray(Image.open(model_folder/t["image_file"]).convert("RGBA"))
                 for m in model["materials"] for t in m["textures"] if t.get("image_file")}
+    from .fighter_textures import FighterTextures
+    face=FighterTextures(model,motion,model_folder,textures,sequence=sequence_scene)
+    companion_face=None
     from .roster import visible_drawables
+    movement_visibility=[]
+    if args.action in ('movement-41','movement-42','movement-43') or (model['fighter_kind']==24 and args.action=='movement-207'):
+        from .movement import movement_visibility_timeline
+        movement_visibility=movement_visibility_timeline(model,motion)
     states=model.get("visibility",{}).get("defaults")
     if states is not None and not sequence_scene:
         states=states.copy()
+        for group,value in motion.get('visibility_override',{}).items():states[int(group)]=value
         for command in motion.get("script",{}).get("commands",[]):
             if command["opcode"] in (1,2):break
             if "visibility_group" in command:
                 i=command["visibility_group"]
                 if 0<=i<len(states):states[i]=command["visibility_value"]
         visible=visible_drawables(model,states)
-        model["meshes"]=[m for m in model["meshes"] if m["drawable_index"] in visible]
+        if not movement_visibility:model["meshes"]=[m for m in model["meshes"] if m["drawable_index"] in visible]
     if hat:
         from .kirby_powers import attach_geometry
         visible=visible_drawables(hat)
@@ -470,6 +485,7 @@ def main():
                     old=texture["image_file"];new="companion/"+old
                     textures[new]=np.asarray(Image.open(args.companion.parent/old).convert("RGBA"));texture["image_file"]=new
         for mesh in companion["meshes"]:mesh["material_index"]+=offset
+        companion_face=FighterTextures(companion,cm,args.companion.parent,textures,'companion/',companion_sequence)
         model["materials"].extend(companion["materials"])
     from .held_items import HeldItem, hold_joint, item_for_motion
     specification=motion.get('character_prop') or item_for_motion(args.action,model['fighter_kind'])
@@ -535,6 +551,10 @@ def main():
         posed=[deform(mesh, matrices, model["bones"]) for mesh in model["meshes"]]
         shown = joint_visibility(model["bones"], pose_tracks, pose_time)
         mask = [shown[mesh["owner_joint_index"]] for mesh in model["meshes"]]
+        if movement_visibility:
+            state=next(state for time,state in reversed(movement_visibility) if time<=frame)
+            visible=visible_drawables(model,state)
+            mask=[active and mesh['drawable_index'] in visible for active,mesh in zip(mask,model['meshes'])]
         if sequence_scene:mask=[active and mesh['drawable_index'] in phase_visible[phase_id] for active,mesh in zip(mask,model['meshes'])]
         if hat:
             extra=attach_geometry(hat_bind,matrices[6],hat_world[0])
@@ -612,7 +632,7 @@ def main():
         emitted=sequence_props.emission_geometry(view)
         if companion_sequence_props:emitted.extend(p+np.array([2.8,0,0]) for p in companion_sequence_props.emission_geometry(view))
         if emitted:cloud=np.concatenate([cloud]+emitted)
-    elif knockdown:
+    elif knockdown or movement_visibility:
         fit_samples = [evaluate_pose(t) for t in (fit_times or source_times)]
         cloud = np.concatenate([p for frame, mask in fit_samples for (p,_),shown in zip(frame,mask) if shown])
     else:
@@ -661,6 +681,8 @@ def main():
         print(f"Offscreen raster: {raster.renderer}",flush=True)
     started = time.monotonic()
     for i, pose in enumerate(poses):
+        face.apply(source_times[i])
+        if companion_face:companion_face.apply(source_times[i])
         drawn = [p if shown else (None, None) for p, shown in zip(pose, visibility[i])]
         frame_center=center+follow_center(pose,visibility[i]) if center_jump else center
         image = (raster.render if raster else render_frame)(model, drawn, textures, view, args.size, args.size, frame_center, scale, (34, 38, 46, 0))
@@ -736,6 +758,9 @@ def main():
             'body_archive_sha256':hashlib.sha256(power_info['body'].read_bytes()).hexdigest() if power_info['body'] else None,
             'attachment_part':6 if hat else None,'reserved_part_mask':power_info['mask'],
             'limitations':['Hat dynamics remain at bind pose; copied projectiles, items and complete runtime scripts are not executed']}
+    if motion.get('visibility_override'):
+        manifest['visibility_override']=motion['visibility_override']
+    if movement_visibility:manifest['movement_visibility_timeline']=movement_visibility
     if jump_scenes:
         manifest['movement_scenario']=jump_scenes[jump_mode].provenance()
         manifest['center_jump_enabled']=center_jump
@@ -753,7 +778,11 @@ def main():
         manifest['output_mode'] = 'clapping-sync alteration'
         manifest['uniform_gif_ticks'] = True
         manifest['companion_sha256'] = hashlib.sha256(args.companion.read_bytes()).hexdigest() if args.companion else None
-    (args.output/"preview-manifest.json").write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")
+    manifest['fighter_texture_commands']='source opcode 40, frozen TObj image FObjs; costume-specific mapping'
+    manifest_path=args.output/'preview-manifest.json'
+    temporary=manifest_path.with_suffix('.json.tmp')
+    temporary.write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")
+    temporary.replace(manifest_path)
     print(f"Preview: {args.output/'preview.gif'}", flush=True)
 
 

@@ -44,7 +44,7 @@ def item_for_motion(action, kind):
 
 
 def script_events(script, duration):
-    """Bounded waits/calls/loops; collect only item-related commands."""
+    """Bounded waits/calls/loops; collect supported item/model/texture commands."""
     blocks=[script]+script.get('reachable_blocks',[])
     commands={}
     for block in blocks:
@@ -70,7 +70,7 @@ def script_events(script, duration):
             if not returns:break
             next_pc=returns.pop()
         elif op==7:next_pc=cmd.get('target')
-        elif op in (19,42):events.append((time,cmd))
+        elif op in (19,31,40,42):events.append((time,cmd))
         pc=next_pc
     else:raise FormatError('Held-item script timing exceeds bounded commands')
     return events

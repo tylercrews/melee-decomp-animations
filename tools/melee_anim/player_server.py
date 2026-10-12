@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 import shutil
 import threading
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, quote
 
 from .downloads import DownloadCatalog, SIZES
 
@@ -40,7 +40,7 @@ def make_server(root, port=8765, catalog=None):
                 self.end_headers()
                 self.wfile.write(data)
                 return
-            if url.path not in ('/export', '/rotation'):
+            if url.path not in ('/export', '/prepare-export', '/rotation'):
                 target = Path(self.translate_path(self.path)).resolve()
                 if not target.is_relative_to(root):
                     self.send_error(403)
@@ -49,7 +49,7 @@ def make_server(root, port=8765, catalog=None):
             try:
                 values = parse_qs(url.query, strict_parsing=True)
                 allowed = {'character', 'action', 'costume', 'cycle', 'pitch', 'yaw', 'roll', 'effects', 'power', 'center'}
-                if url.path == '/export':
+                if url.path in ('/export','/prepare-export'):
                     allowed |= {'size', 'kind', 'scope', 'frame', 'view'}
                 if set(values)-allowed or any(len(v) != 1 for v in values.values()):
                     raise ValueError('Unknown or repeated download option')
@@ -74,6 +74,8 @@ def make_server(root, port=8765, catalog=None):
                             data = json.dumps(catalog.preview(**options)).encode()
                         else:
                             target, filename, mime = catalog.export(**options)
+                            if url.path=='/prepare-export':
+                                data=json.dumps({'url':'/'+quote(target.resolve().relative_to(root).as_posix()),'filename':filename}).encode()
                 finally:
                     slots.release()
             except (ValueError, TypeError) as error:
@@ -83,7 +85,7 @@ def make_server(root, port=8765, catalog=None):
                 self.log_error('Export failed: %s', error)
                 self.send_error(500, 'Export failed; see the player service log')
                 return
-            if url.path == '/rotation':
+            if url.path in ('/rotation','/prepare-export'):
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(data)))

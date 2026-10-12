@@ -378,7 +378,7 @@ def inspect(files: Path, dol_path: Path, symbols_path: Path,
                 metadata, tracks = read_figatree(packed, motion["symbol"])
                 entries.append({**motion, **metadata,
                                 "effective_loop": metadata["tree_loop"] or motion["motion_loop"],
-                                "script": script_summary(fighter, motion["script_offset"], script_sizes),
+                                "script": script_graph_summary(fighter, motion["script_offset"], script_sizes),
                                 "endpoint_check": endpoint_report(tracks, metadata["frames"])})
             results.append({"fighter_kind": kind, "fighter_root": root,
                             "fighter_archive": dat_name, "results_archive": path.name,

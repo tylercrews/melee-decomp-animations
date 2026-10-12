@@ -15,7 +15,6 @@ import re
 from zipfile import BadZipFile, ZipFile, ZIP_STORED
 from .catalog import CHARACTERS
 
-COSTUMES = {0: "Red (default)", 1: "Yellow", 2: "Black", 3: "Blue", 4: "Green"}
 ACTIONS = [("results-clap", "source", "Clapping"),
            ("victory1", "source", "Victory 1"), ("victory1", "wait", "Victory 1 loop"),
            ("victory2", "source", "Victory 2"), ("victory2", "wait", "Victory 2 loop"),
@@ -32,6 +31,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 .controls,.downloads{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:20px 0}
 .controls label{display:flex;align-items:center;gap:8px;min-width:0;max-width:100%}.controls select{min-width:0;max-width:100%}.download{display:inline-block;text-decoration:none}
 .download.primary{background:#235da8;border-color:#3878cb}.download:hover{filter:brightness(1.15)}
+.download[aria-disabled="true"]{opacity:.65;cursor:wait}.download.busy::before{content:"";display:inline-block;width:1em;height:1em;margin-right:8px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 .stage{background:transparent;border:1px solid #354151;border-radius:12px;display:flex;justify-content:center;min-height:400px;align-items:center}
 .framewrap{position:relative;width:min(100%,512px)}#saveimage{position:absolute;inset:0;width:100%;height:100%;opacity:0}
 #frame{width:min(100%,512px);height:auto}.timeline{display:flex;gap:12px;align-items:center;margin:20px 0}
@@ -61,7 +61,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <small id="cyclehint"></small></fieldset>
 <div id="jumpcontrols" class="controls" hidden><label><input id="centerjump" type="checkbox" autocomplete="off"> Keep character centered</label>
 <small>The camera follows the character at a fixed zoom. Applies to previews and GIF/PNG downloads.</small></div>
-<p id="movementhint" hidden>Standing includes the normal idle loop; alternate idles vary by character. Walking, running and dashing preview the original motion in place. Full/short hops use neutral jump squat, flight and landing with source movement attributes and shared framing; stage physics and movement effects are not simulated.</p>
+<p id="movementhint" hidden>Standing includes the normal idle loop; alternate idles vary by character. Walking, running and dashing preview the original motion in place. Rolls and spot dodge use their original motion clips; forward/backward are relative to facing. Yoshi rolls in his egg and spot dodges outside it; his egg pose is also available. Full/short hops use neutral jump squat, flight and landing with source movement attributes and shared framing; stage physics and movement effects are not simulated.</p>
 <p id="sequencehint" hidden></p>
 <p id="effecthint" hidden></p>
 <p id="itemhint" hidden></p>
@@ -89,6 +89,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <a class="download" id="still" hidden download>Download paused frame PNG</a>
 <a class="download" id="framezip" hidden download>Download paused frame in all colors</a>
 <a id="open" target="_blank" rel="noopener">Open GIF</a></div>
+<small id="downloadstatus" role="status" aria-live="polite"></small>
 <small>Repeat preview does not alter the saved GIF. Victory loops are the separate authored wait animations. If a browser opens a local file instead of downloading it, use Save link as.</small>
 <p id="servicehint" hidden>For attacks, viewing angles, or resized downloads, open the <a href="http://127.0.0.1:8765/player.html">local download player</a>.
 If it is closed, start it from the repository with <code>python -m tools.melee_anim.player_server</code>.</p>
@@ -144,9 +145,8 @@ function previewUnavailable(){return rotationBusy||rotationFailed}
 function updateRotationState(){frame.hidden=previewUnavailable();saveimage.hidden=previewUnavailable();play.disabled=previewUnavailable();scrub.disabled=previewUnavailable();
 document.getElementById('downloadpanel').hidden=previewUnavailable()}
 async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
-if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();return}
-if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show'});
-location.href=`${exportBase}/player.html#${query}`;return}
+if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();runPendingBatch();return}
+if(location.protocol!=='http:'){location.href=playerHandoff();return}
 rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
 updateRotationState();
 try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
@@ -158,7 +158,7 @@ let result=await response.json();if(generation!==rotationGeneration)return;
 if(result.frames.length!==frameCount())throw Error('Rendered frame count differs from this animation.');
 rotated=result;rotationBusy=false;last=performance.now();carry=0;
 rotationstatus.textContent=`Viewing angle: X ${angles[0]}°, Y ${angles[1]}°, Z ${angles[2]}°. Preview and downloads use this angle.`;
-result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotationState();show();
+result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotationState();show();runPendingBatch();
 }catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
 rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
 applyangle.onclick=()=>{angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
@@ -235,6 +235,22 @@ still.href=original?c.frames[index]:exportURL('png','costume');
 still.download=sizedName(angleName(effectName(markedName(c.download_name)).replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`)));
 framezip.href=original?`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`:exportURL('png','colors');
 framezip.download=sizedName(angleName(effectName(markedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`))))}
+let batchBusy=false,pendingBatch=null;
+const batchButtons=[archive,framezip,allzip];
+function playerHandoff(batch=null){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show'});if(batch)query.set('batch',batch);return `${exportBase}/player.html#${query}`}
+function runPendingBatch(){if(location.protocol!=='http:'||!pendingBatch)return;const button={gif:archive,png:framezip,all:allzip}[pendingBatch];pendingBatch=null;if(button&&!button.hidden)batchDownload({preventDefault(){}},button)}
+function batchState(busy,active){batchBusy=busy;for(const button of batchButtons){button.ariaDisabled=String(busy);button.ariaBusy=String(busy&&button===active);button.tabIndex=busy?-1:0;button.className=(button.className||'download').replace(/\s*busy\b/g,'')+(busy&&button===active?' busy':'')}}
+async function batchDownload(event,button){event.preventDefault();if(batchBusy)return;
+const href=button.href,filename=button.download,status=document.getElementById('downloadstatus');
+batchState(true,button);status.textContent='Preparing download… Please wait.';
+try{let ready=href;
+if(location.protocol!=='http:'&&href.includes('/export?')){location.href=playerHandoff(button===framezip?'png':button===allzip?'all':'gif');return}
+if(href.includes('/export?')){const response=await fetch(href.replace('/export?','/prepare-export?'));if(!response.ok)throw Error(`Preparation failed (${response.status}). Try again.`);const result=await response.json();ready=exportBase+result.url}
+else if(location.protocol==='http:'){const response=await fetch(href,{method:'HEAD'});if(!response.ok)throw Error(`Download unavailable (${response.status}).`)}
+const link=document.createElement('a');link.href=ready;link.download=filename;document.body.append(link);link.click();link.remove();status.textContent='Download ready. Your browser is saving the file.';
+}catch(error){status.textContent=`${error.message} Open the local download player if it is not running.`}
+finally{batchState(false,button)}}
+for(const button of batchButtons)button.onclick=event=>batchDownload(event,button);
 function show(){if(current<0||previewUnavailable())return;let c=clips[current];let src=framePath();if(lastImage!==src){frame.src=src;lastImage=src}scrub.value=index;
 updateDownloads();
 still.hidden=playing;framezip.hidden=playing;
@@ -275,6 +291,7 @@ function tick(now){if(current>=0&&playing&&!previewUnavailable()){let c=clips[cu
 while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.checked)index=0;else{playing=false;play.textContent='Play';break}}show()}
 last=now;requestAnimationFrame(tick)}
 function restoreSelection(){let incoming=new URLSearchParams((location.hash||'').slice(1));
+pendingBatch=['gif','png','all'].includes(incoming.get('batch'))?incoming.get('batch'):null;
 // Consume this one-time handoff so refresh/reopen cannot replay old angles.
 if(location.hash&&typeof history!=='undefined')history.replaceState(null,'',location.pathname+location.search);
 if(characters.some(c=>c.slug===incoming.get('character'))){character.value=incoming.get('character');colors();actions()}
@@ -372,9 +389,9 @@ def collect_clips(root, include_attacks=True):
         expected = {f"frame_{i:04d}.png" for i in range(len(times))}
         if not times or expected != {p.name for p in path.parent.glob("frame_*.png")} or not (path.parent/"preview.gif").is_file():
             raise ValueError(f"Incomplete or stale preview files: {path}")
-        suffix=Path(manifest.get("source_model_archive","PlMrNr.dat")).stem[4:]
-        color=COSTUMES[costume_id] if slug=='mario' else {'Nr':'Default','Re':'Red','Bu':'Blue','Gr':'Green','Bk':'Black','Wh':'White','Ye':'Yellow','Or':'Orange','Aq':'Aqua','Pi':'Pink'}.get(suffix,f'Costume {costume_id+1}')
-        if slug=='game-and-watch':color=('Black','Red','Blue','Green')[costume_id]
+        from .roster import color_label
+        color=color_label({'file':manifest.get('source_model_archive','PlMrNr.dat'),'costume_id':costume_id},
+                          24 if slug=='game-and-watch' else 0 if slug=='mario' else None)
         filename = f"{slug}-{key.replace('_','-')}-costume-{costume_id:02d}-{color.split()[0].lower()}.gif"
         clips.append({"character":slug,"character_label":name,"action_key": key, "costume_id": costume_id, "costume_label": color,
                       "fps": manifest["fps"], "period": manifest["source_period_frames"],

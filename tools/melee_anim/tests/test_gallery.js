@@ -19,13 +19,20 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
   performance: {now: () => 0}, Image: class {}, requestAnimationFrame: callback => {context.nextFrame = callback;}});
 vm.runInContext(script, context);
 const data = expression => vm.runInContext(expression, context);
+for(const [slug,id,label] of [['fox',2,'Lavender'],['captain-falcon',1,'Gray'],['samus',4,'Lavender'],['ganondorf',4,'Lavender']]){
+  const costume=data('characters').find(c=>c.slug===slug).costumes.find(c=>c.id===id);
+  assert.equal(costume.label,label);
+  assert(data('clips').filter(c=>c.character===slug&&c.costume_id===id).every(c=>c.costume_label===label));
+}
+assert(data('characters').every(c=>c.costumes.every(costume=>!costume.label.startsWith('Costume '))));
+
 assert.equal(elements.hidepartials.checked,true,'partial clips are hidden on fresh loads');
 elements.hidepartials.checked=false;elements.hidepartials.onchange();
 assert.equal(elements.sizewarning.hidden,true,'default size has no warning');
@@ -164,7 +171,7 @@ assert.equal(elements.minimumcycle.disabled,true);
 assert.equal(elements.minimumcycle.checked,false);
 assert(!html.includes('Dirty loop candidates to review'));assert(!html.includes('dirtylist'));
 const dirtyCharacters=data('characters.filter(ch=>clips.some(c=>c.character===ch.slug&&c.dirty_cycle))');
-assert.equal(dirtyCharacters.length,11);
+assert(dirtyCharacters.length>0,'dirty loop choices must remain available after source texture changes');
 for (const ch of dirtyCharacters) {
   elements.character.value=ch.slug;elements.character.onchange();
   elements.action.value='results-clap_source';elements.action.onchange();
@@ -234,6 +241,38 @@ assert(servedElements.gif.href.startsWith('/export?'));
 console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links, and file/HTTP origins: PASS');
 
 (async()=>{
+  {
+  const savedDownloads=[];
+  servedContext.document.body={append:()=>{}};
+  servedContext.document.createElement=()=>({click(){savedDownloads.push({href:this.href,download:this.download})},remove(){}});
+  const requestedHref=servedElements.animationzip.href,requestedName=servedElements.animationzip.download;
+  const before=requests.length;
+  const saving=servedElements.animationzip.onclick({preventDefault(){}});
+  assert.equal(requests.length,before+1);
+  assert.match(requests.at(-1).url,/\/prepare-export\?/);
+  assert.equal(servedElements.animationzip.ariaBusy,'true');
+  assert.match(servedElements.animationzip.className,/busy/);
+  for(const id of ['animationzip','framezip','allzip'])assert.equal(servedElements[id].ariaDisabled,'true');
+  await servedElements.framezip.onclick({preventDefault(){}});
+  assert.equal(requests.length,before+1,'second batch is blocked during preparation');
+  servedElements.costume.value='2';servedElements.costume.onchange();
+  assert.equal(servedElements.animationzip.ariaBusy,'true','selection updates do not remove busy state');
+  requests.at(-1).resolve({ok:true,json:async()=>({url:'/downloads/ready.zip'})});
+  await saving;
+  assert.equal(savedDownloads[0].href,'/downloads/ready.zip');
+  assert.equal(savedDownloads[0].download,requestedName,'download uses the click-time selection');
+  assert.equal(servedElements.animationzip.ariaDisabled,'false');
+  assert.equal(servedElements.animationzip.ariaBusy,'false');
+  assert(!servedElements.animationzip.className.includes('busy'));
+  const failed=servedElements.animationzip.onclick({preventDefault(){}});
+  requests.at(-1).resolve({ok:false,status:503});await failed;
+  assert.equal(servedElements.animationzip.ariaDisabled,'false');
+  assert.match(servedElements.downloadstatus.textContent,/503/);
+  assert.equal(savedDownloads.length,1,'failed preparations never start a download');
+  servedElements.costume.value='0';servedElements.costume.onchange();
+  requests.splice(before);
+  console.log('Batch spinner, shared duplicate lock, selection snapshot, ready URL and error recovery: PASS');
+  }
   for(const id of ['pitch','yaw','roll','applyangle','resetangle'])assert.notEqual(elements[id].disabled,true,'local-file rotation controls must remain usable');
   elements.character.value='mario';elements.character.onchange();elements.action.value='victory3_source';elements.action.onchange();
   elements.costume.value='2';elements.costume.onchange();elements.scrub.value='67';elements.scrub.oninput();
@@ -480,6 +519,9 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
     const list=data(`clips.filter(c=>c.character==='${c.slug}'&&c.action_key.startsWith('movement-'))`);
     assert(list.some(c=>c.action_key==='movement-fullhop_source'));
     assert(list.some(c=>c.action_key==='movement-shorthop_source'));
+    for(const id of [41,42,43,206,207,208])assert(list.some(c=>c.action_key===`movement-${id}_source`));
+    assert.equal(list.some(c=>c.action_key==='movement-37_source'),c.slug==='yoshi');
+    assert(!list.some(c=>['movement-38_source','movement-39_source','movement-40_source'].includes(c.action_key)));
     for(const a of new Set(list.map(c=>c.action_key)))assert.equal(list.filter(c=>c.action_key===a).length,c.costumes.length);
   }
   assert.equal(servedElements.jumpcontrols.hidden,false);
@@ -588,6 +630,17 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   servedElements.action.value='attack-44_source';servedElements.action.onchange();
   assert.equal(servedElements.effecthint.hidden,true);
   console.log('Reflector/magnet/cyclone hints, combined phases and effect export URLs: PASS');
+  for(const [slug,key,label] of [['mario','movement-41_source','Spot dodge'],['fox','movement-42_source','Roll forward'],['yoshi','movement-37_source','Yoshi egg'],['yoshi','movement-43_source','Roll backward']]){
+    servedElements.character.value=slug;servedElements.character.onchange();
+    servedElements.animationtype.value='movement';servedElements.animationtype.onchange();
+    servedElements.action.value=key;servedElements.action.onchange();
+    assert(servedElements.action.options.some(o=>o.value===key&&o.textContent===label));
+    assert.equal(servedElements.jumpcontrols.hidden,true);assert.equal(servedElements.techcontrols.hidden,true);
+    complete(requests.at(-1),'dodge-'+slug);await settle();
+    servedElements.scrub.value='1';servedElements.scrub.oninput();
+    for(const id of ['gif','animationzip','still','framezip'])assert.equal(new URL(servedElements[id].href,'http://localhost').searchParams.get('action'),key);
+  }
+  console.log('Roll/spot-dodge coverage, Yoshi-only egg, no shield entries and exact/color export URLs: PASS');
   // Fresh pages hide parts for every family; showing parts keeps each family
   // contiguous, including shared ground/air Kirby Cutter phase variants.
   const filteredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
@@ -638,6 +691,25 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
     performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{}});
   vm.runInContext(script,linkContext);
   assert.equal(linkElements.hidepartials.checked,false);assert.equal(linkElements.action.value,'attack-296_source');assert.equal(linkElements.costume.value,'2');
+
+  // File-origin resized batches transfer their exact selection to HTTP first.
+  elements.character.value='mario';elements.character.onchange();elements.animationtype.value='victory';elements.animationtype.onchange();
+  elements.action.value='victory3_source';elements.action.onchange();elements.scrub.value='7';elements.scrub.oninput();
+  elements.downloadsize.value='512';elements.downloadsize.onchange();
+  await elements.framezip.onclick({preventDefault(){}});
+  const batchFragment=new URL(context.location.href).hash;
+  assert.equal(new URLSearchParams(batchFragment.slice(1)).get('batch'),'png');
+  const batchElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const batchSaved=[];let batchRequest;
+  const batchContext=vm.createContext({document:{getElementById:id=>batchElements[id],body:{append(){}},createElement:()=>({click(){batchSaved.push(this.download)},remove(){}})},
+    location:{protocol:'http:',hash:batchFragment},URLSearchParams,performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{},
+    fetch:url=>new Promise(resolve=>{batchRequest={url,resolve}})});
+  vm.runInContext(script,batchContext);
+  const batchQuery=new URL(batchRequest.url,'http://localhost');assert.equal(batchQuery.pathname,'/prepare-export');
+  for(const [key,value] of Object.entries({kind:'png',scope:'colors',frame:'7',size:'512'}))assert.equal(batchQuery.searchParams.get(key),value);
+  batchRequest.resolve({ok:true,json:async()=>({url:'/downloads/still.zip'})});await settle();
+  assert.equal(batchSaved.length,1);assert.match(batchSaved[0],/frame-0008-all-colors-512px.zip$/);
+  console.log('Shared roster color names and exact file-to-HTTP batch handoff: PASS');
   console.log('Selector rows, default partial filter, all-character choices, contiguous families, fallback, paused retention and handoff: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');

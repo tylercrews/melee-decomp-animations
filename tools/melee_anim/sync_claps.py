@@ -150,7 +150,8 @@ def attach_sync(root, clips):
         manifest_path = folder/'preview-manifest.json'
         if not manifest_path.is_file():
             continue
-        manifest = json.loads(manifest_path.read_text())
+        try:manifest = json.loads(manifest_path.read_text())
+        except (ValueError,OSError):continue
         frames = [folder/f'frame_{i:04d}.png' for i in range(FRAME_COUNT)]
         if (manifest.get('sync_plan') != plan or not manifest.get('uniform_gif_ticks') or not (folder/'preview.gif').is_file() or
                 not all(p.is_file() for p in frames)):
@@ -188,7 +189,8 @@ def main():
             companion = model.parent/'companion/model.json'
             companion_hash = hashlib.sha256(companion.read_bytes()).hexdigest() if companion.is_file() else None
             if args.resume and old.is_file():
-                data = json.loads(old.read_text())
+                try:data = json.loads(old.read_text())
+                except (ValueError,OSError):data={}
                 if (data.get('sync_plan') == plan and data.get('uniform_gif_ticks') and data.get('transparent_background') is True and data.get('model_sha256') == fingerprint and
                         data.get('companion_sha256') == companion_hash and (folder/'preview.gif').is_file() and
                         {p.name for p in folder.glob('frame_*.png')} == {f'frame_{i:04d}.png' for i in range(FRAME_COUNT)}):

@@ -23,6 +23,7 @@ def primary(slug, files=Path("orig/GALE01/files")):
 def color_label(costume, kind):
     if kind==24:return ("Black","Red","Blue","Green")[costume["costume_id"]]
     suffix=Path(costume["file"]).stem[4:]
+    if kind==0 and suffix=='Nr':return 'Red (default)'
     colors={"Nr":"Default","Re":"Red","Bu":"Blue","Gr":"Green","Bk":"Black","Wh":"White",
             "Ye":"Yellow","Or":"Orange","Aq":"Aqua","La":"Lavender","Pi":"Pink","Gy":"Gray"}
     return colors.get(suffix,f"Costume {costume['costume_id']+1} ({suffix})")

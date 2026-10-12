@@ -22,7 +22,7 @@ from .hsd import Archive, Dol, load_symbols, read_global
 from .inspect_motions import motion_entries, read_exact_motion, script_graph_summary
 from .motions import read_figatree
 from .techs import TECH_LABELS, tech_label
-from .movement import JUMP_PHASE_IDS, movement_label, read_jump_parameters, jump_duration
+from .movement import JUMP_PHASE_IDS, movement_label, movement_visibility, read_jump_parameters, jump_duration
 
 
 CATALOG = 'attack-catalog.json'
@@ -131,7 +131,7 @@ def build_attack_catalog(repo, report):
             if kind == 13 and name in ('Special','SpecialAir'):
                 semantic = 'SpecialSSmash' if name == 'Special' else 'SpecialAirSSmash'
             recovery = tech_label(semantic)
-            locomotion=movement_label(motion['animation_id'],name)
+            locomotion=movement_label(motion['animation_id'],name,kind)
             chosen = (locomotion,'Movement') if locomotion else (recovery[0], 'Ground recovery') if recovery else attack_label(semantic)
             if chosen is None:
                 chosen = attack_label(name)
@@ -175,11 +175,20 @@ def build_attack_catalog(repo, report):
                 if metadata['type'] not in (0,1) or set(metadata['channels'])-{1,2,3,5,6,7,8,9,10,11,12}:
                     reason = 'This clip needs additional animation channel support'; break
                 actors.append({'fighter_kind':member_kind, 'source_fighter_kind':source_kind,
+                               'visibility_override':movement_visibility(member_kind,aid) if category=='movement' else None,
                                'character_prop':special,
                                'character_effects':effects,
                                'animation_file':table['animation_file'], 'clip':{**selected, **metadata,
                                'effective_loop':metadata['tree_loop'] or selected['motion_loop'],
                                'script':script_graph_summary(archive, selected['script_offset'], sizes)}})
+                if category=='movement' and aid in (207,208):
+                    initial=[]
+                    for previous in range(206,aid):
+                        earlier=member_motions[previous]
+                        if not earlier['size']:continue
+                        meta,_=read_figatree(read_exact_motion(regions[source_kind],earlier,table['animation_file']),earlier['symbol'])
+                        initial.append((script_graph_summary(archive,earlier['script_offset'],sizes),meta['frames']))
+                    actors[-1]['texture_initial_scripts']=initial
             prefix='other' if category in ('taunt','hit') else category
             loop_duration={}
             if reason is None and effects and actors[0]['clip']['effective_loop']:

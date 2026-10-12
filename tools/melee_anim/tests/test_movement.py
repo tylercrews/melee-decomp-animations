@@ -1,7 +1,7 @@
 """Synthetic movement/trajectory checks; original game data stays out of tests."""
 import unittest
 import numpy as np
-from tools.melee_anim.movement import movement_label, flight_heights, JumpScene, jump_duration, centered_jump_setting
+from tools.melee_anim.movement import movement_label, movement_visibility, movement_visibility_timeline, flight_heights, JumpScene, jump_duration, centered_jump_setting
 from tools.melee_anim.preview import projected_pose_center, camera_basis, fit_knockdown_camera
 
 
@@ -42,6 +42,29 @@ class MovementTests(unittest.TestCase):
         self.assertEqual(short[-1],0)
         for args in ((0,.5,1),(1,0,1),(1,.5,float('nan'))):
             with self.assertRaises(ValueError):flight_heights(*args)
+
+    def test_ground_dodges_and_yoshi_egg_use_distinct_source_visibility(self):
+        self.assertEqual(movement_label(41,'EscapeN'),'Spot dodge')
+        self.assertEqual(movement_label(42,'EscapeF'),'Roll forward')
+        self.assertEqual(movement_label(43,'EscapeB'),'Roll backward')
+        self.assertEqual(movement_label(37,'GuardOn',14),'Yoshi egg')
+        for aid in (37,38,39,40):self.assertIsNone(movement_label(aid,'Guard',0))
+        self.assertIsNone(movement_label(44,'EscapeAir'))
+        self.assertEqual(movement_visibility(14,42),{0:1})
+        self.assertEqual(movement_visibility(14,43),{0:1})
+        self.assertEqual(movement_visibility(14,37),{0:1})
+        self.assertIsNone(movement_visibility(14,41))
+        self.assertIsNone(movement_visibility(0,42))
+
+    def test_sleep_ids_and_source_timed_ball_visibility(self):
+        for aid in (206,207,208):self.assertTrue(movement_label(aid,'FuraSleep').startswith('Sleep'))
+        script={'commands':[
+            {'offset':0,'opcode':1,'first_word':'0x04000004','timer_ticks':4},
+            {'offset':4,'opcode':31,'first_word':'0x7c000002','visibility_group':0,'visibility_value':2},
+            {'offset':8,'opcode':2,'first_word':'0x0800001f','timer_ticks':31},
+            {'offset':12,'opcode':31,'first_word':'0x7c000000','visibility_group':0,'visibility_value':0}]}
+        self.assertEqual(movement_visibility_timeline({'visibility':{'defaults':[0,1]}},{'frames':35,'script':script}),
+                         [(0,[0,1]),(4,[2,1]),(31,[0,1])])
 
     def test_phase_boundaries_fall_loop_and_fractional_height(self):
         scene=JumpScene.__new__(JumpScene)
