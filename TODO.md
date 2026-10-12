@@ -1,3 +1,11 @@
+Sleep-bubble effect completed (2026-10-11; investigation section 50):
+
+- [x] Inspect original sleeping-victory gfx416 spawns and common particle/sprite data.
+- [x] Render original bubble growth, drift, colors and fade in every Pikachu/Jigglypuff Victory3 costume; carry surviving entrance particles into waits.
+- [x] Include bubbles in transparent GIF/PNG, rotated views, paused frames, every size and all-color ZIPs; repackage existing bundles.
+- [x] Validate 169 Python tests / Node controls, 18 full clips / 1,979 frames and 12 live export checks.
+- [ ] Compare bubble depth, exact RNG and game-tick scheduling against original gameplay capture before claiming runtime fidelity or seamless effect loops.
+
 Latest completed work (2026-10-11; investigation section 49):
 
 - [x] Movement: all playable forms/costumes have original sleep start, sleeping loop and wake-up clips, plus spot dodge and both ground rolls.

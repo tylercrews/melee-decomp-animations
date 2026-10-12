@@ -709,6 +709,13 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   for(const [key,value] of Object.entries({kind:'png',scope:'colors',frame:'7',size:'512'}))assert.equal(batchQuery.searchParams.get(key),value);
   batchRequest.resolve({ok:true,json:async()=>({url:'/downloads/still.zip'})});await settle();
   assert.equal(batchSaved.length,1);assert.match(batchSaved[0],/frame-0008-all-colors-512px.zip$/);
+
+  assert.equal(data('clips.filter(c=>c.sleep_bubbles).length'),18);
+  elements.character.value='pikachu';elements.character.onchange();elements.animationtype.value='victory';elements.animationtype.onchange();
+  elements.action.value='victory3_source';elements.action.onchange();
+  assert.equal(elements.effecthint.hidden,false);assert.match(elements.effecthint.textContent,/Sleep bubbles/);
+  elements.action.value='victory3_wait';elements.action.onchange();assert.match(elements.effecthint.textContent,/fading bubbles/);
+  elements.action.value='victory1_source';elements.action.onchange();assert.equal(elements.effecthint.hidden,true);
   console.log('Shared roster color names and exact file-to-HTTP batch handoff: PASS');
   console.log('Selector rows, default partial filter, all-character choices, contiguous families, fallback, paused retention and handoff: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');

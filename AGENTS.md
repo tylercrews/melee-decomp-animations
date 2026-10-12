@@ -8,6 +8,14 @@ The first targets are the three victory animations and loser clapping animations
 
 The user explicitly clarified that **every color means every actual costume variant available to each character**, whose count varies. Record the selected action for all those variants. Do not use a universal costume count, arbitrary tinting, or distinct archive filenames as the definition of a costume. Python is the user's most comfortable language; keep the ordinary workflow understandable in Python.
 
+## Latest handoff: sleeping victory bubbles (2026-10-11)
+
+SleepBubbles reads original common particle gfx416 from EfCoData.dat: version-0x42 relative-offset command/texture banks, emitter416, IA8 texture group34, original size/color/fade program and tornado drift. This is a focused bounded decoder, not a full particle VM. Original spawn origins are world snapshots from raw joint plus transformed local offset; never keep a released bubble attached to the moving head. Preserve source ticks, original sprite/colors, 60-tick life, deterministic seed416 and camera-facing cards; include full bubble geometry in framing and hash EfCoData in rotated caches.
+
+Only Pikachu and Jigglypuff results Victory3 entrances contain this gfx: Pika ticks77/81/85, raw19 offset(0,1.5625,4.6875); Puff ticks12/16/20 and63/67/71, raw13 offset(0,0,7.03125). Waits do not emit new bubbles. Standalone waits carry surviving entrance particles; GIF replay repeats that fading tail (not a seamless steady-state bubble loop), explained in the UI. No invented continuous emissions or bubbles for other results/Rest/Movement clips. Foreground depth, fractional sampling and seeded azimuth are approximate; game-reference validation remains open.
+
+Rebuilt18 original entrance/wait clips in all nine actual costumes, refreshed all-color/paused/aggregate bundles and player. 169 Python tests / Node controls pass, 1,979 frames validated and12 live exact/rotated/all-color/size exports checked. See investigation section50. Current task-owned service session25406 on port8765 supersedes prior sessions. No new dependency; keep original/generated assets/QA ignored.
+
 ## Latest handoff: sleep, dodges, batch downloads and color labels (2026-10-11)
 
 Movement adds ordinary IDs 41/42/43 for spot dodge/forward/backward rolls and 206/207/208 for sleep start/loop/end. Every playable form and actual costume is available; wireframes/Giga have source sleep slots too. Hands/Sandbag have no sleep slots. Yoshi alone adds 37 as an egg pose; rolls use egg visibility group 0 option 1, spot dodge uses his normal body. No general shields/air dodge. Source opcode 31 drives timed dodge visibility, including Samus's normal-to-ball-to-normal transition and Game & Watch sleeping Z symbols; retain alternate meshes and fit visible geometry.

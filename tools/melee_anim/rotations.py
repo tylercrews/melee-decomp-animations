@@ -91,6 +91,8 @@ class RotationCache:
             else:
                 table = next(t for t in report['results'] if t['fighter_kind'] == data['fighter_kind'])
                 archive = table['results_archive']
+                if action=='victory3' and data['fighter_kind'] in (12,15):
+                    paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
             paths.append(self.repo/'orig/GALE01/files'/archive)
         # Include evaluators, texture codecs and the renderer, not merely models.
         paths.extend(Path(__file__).parent.glob('*.py'))

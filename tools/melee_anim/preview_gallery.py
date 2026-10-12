@@ -201,8 +201,9 @@ function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle
 document.getElementById('movementhint').hidden=!c.action_key.startsWith('movement-');
 document.getElementById('sequencehint').hidden=!c.sequence;
 document.getElementById('sequencehint').textContent=c.sequence?`Combined sequence: ${c.sequence.policy} Uncheck Hide partial animations to see the individual phases. Repeat Preview repeats the entire sequence.`:'';
-document.getElementById('effecthint').hidden=!c.character_effects?.length;
+document.getElementById('effecthint').hidden=!c.character_effects?.length&&!c.sleep_bubbles;
 document.getElementById('effecthint').textContent=c.character_effects?.length?`${[...new Set(c.character_effects.map(e=>e.name))].join(', ')} effects are included in the preview and GIF/PNG downloads. Extra particles and collision responses are not included yet.`:'';
+if(c.sleep_bubbles)document.getElementById('effecthint').textContent=c.sleep_bubbles.entrance_time_offset?'Sleep bubbles are included. The wait loop replays the fading bubbles left from the victory entrance.':'Sleep bubbles follow the original victory timing and are included in GIF/PNG downloads.';
 document.getElementById('itemhint').hidden=!c.held_item;
 document.getElementById('itemhint').textContent=c.held_item?`${c.held_item.name} is included in the preview and GIF/PNG downloads. ${c.held_item.charged_preset?'Needles use a six-needle charged preset. ':''}${c.held_item.behavior==='needle-release'?'Needles follow a deterministic free-flight path and leave the image; collisions are not simulated.':'Projectile and collision effects are not simulated.'}`:'';
 jumpcontrols.hidden=!isHop();centerjump.checked=centerJumpEnabled;
@@ -396,6 +397,7 @@ def collect_clips(root, include_attacks=True):
         clips.append({"character":slug,"character_label":name,"action_key": key, "costume_id": costume_id, "costume_label": color,
                       "fps": manifest["fps"], "period": manifest["source_period_frames"],
                       "authored_loop": manifest["authored_loop"], "symbol": manifest["source_symbol"],
+                      "sleep_bubbles":manifest.get('sleep_bubbles'),
                       "download_name": filename, "source_times": times, "gif": f"{relative}/preview.gif",
                       "frames": [f"{relative}/frame_{i:04d}.png" for i in range(len(times))]})
     from .cycles import attach_cycles

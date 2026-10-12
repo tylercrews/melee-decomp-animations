@@ -70,7 +70,7 @@ def script_events(script, duration):
             if not returns:break
             next_pc=returns.pop()
         elif op==7:next_pc=cmd.get('target')
-        elif op in (19,31,40,42):events.append((time,cmd))
+        elif op in (10,19,31,40,42):events.append((time,cmd))
         pc=next_pc
     else:raise FormatError('Held-item script timing exceeds bounded commands')
     return events

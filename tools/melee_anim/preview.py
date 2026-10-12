@@ -509,6 +509,13 @@ def main():
             companion_held_joint=hold_joint(args.files,table,companion,Path(__file__).resolve().parents[2],specification)
             add_item_materials(companion_held)
     view = camera_basis(args.yaw, args.pitch, args.roll)
+    bubbles=None
+    if args.action=='victory3' and model['fighter_kind'] in (12,15):
+        from .sleep_bubbles import SleepBubbles
+        entrance,emeta,etracks=load_clip(report,args.action,'source',args.files,model['fighter_kind'],args.attack_catalog)
+        bubbles=SleepBubbles(args.files,entrance,lambda tick:pose_matrices(model['bones'],etracks,tick,emeta['type'],
+            root_scale=model.get('runtime_root_scale'),root_rotation=runtime_root_rotation(model,args.action)),
+            emeta['frames'] if args.section=='wait' else 0)
     sequence_props=None;companion_sequence_props=None
     if sequence_scene:
         def matrices_at(scene,bones,tick,root_scale=None,root_rotation=None):
@@ -652,6 +659,9 @@ def main():
             if companion_fx:bounds.extend(companion_fx.bounds(tick,cfm,view))
         if bounds:cloud=np.concatenate([cloud]+bounds)
     effect = None
+    if bubbles:
+        bounds=bubbles.bounds(fit_times or source_times,view)
+        if bounds:cloud=np.concatenate([cloud]+bounds)
     flash = None
     anchors = [[-2.8,0,0],[2.8,0,0]] if companion else [[0,0,0]]
     if knockdown:
@@ -695,6 +705,7 @@ def main():
             fm,cfm=effect_matrices[(round(source_times[i],10),None)]
             image=character_fx.render(source_times[i],fm,view,args.size,frame_center,scale,image)
             if companion_fx:image=companion_fx.render(source_times[i],cfm,view,args.size,frame_center,scale,image)
+        if bubbles:image=bubbles.render(source_times[i],view,args.size,frame_center,scale,image)
         image.save(args.output/f"frame_{i:04d}.png")
         images.append(image.convert("RGBA"))
         if i == 0 or (i+1) % 20 == 0 or i == len(poses)-1:
@@ -736,6 +747,7 @@ def main():
                               'companion_hold_joint':companion_held_joint if companion_held else None}
         manifest['framing_policy']='whole-animation fighter and held-item geometry'
         if specification.get('behavior')=='needle-release':manifest['framing_policy']='stable fighter and emission-point fit; needles leave the image naturally'
+    if bubbles:manifest['sleep_bubbles']=bubbles.provenance()
     if character_fx:
         manifest['character_effects']=character_fx.provenance()
         manifest['fighter_loop_period_ticks']=motion.get('fighter_period')
