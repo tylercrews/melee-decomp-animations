@@ -1,5 +1,15 @@
 # Guidance for future agents
 
+## Current work: scoped batches, mixed native resolution and README (2026-10-12)
+
+The user corrected the local storage warning to **about 40 GB (FORTY GB)**. Treat this as an estimate, not a measured fixed size or a source-download size; additional 1024 masters, ZIP duplicates, hats and cached angles increase it. Root README.md is now the primary GitHub guide: the competing .github/README.md was moved to .github/UPSTREAM-DECOMPILATION.md, preserving its relative links. The user authorized a few actual generated samples and screenshots in docs/media for the README; this is a narrow exception to ignoring bulk game-derived output. Keep ISO/DAT/models/full sequences/caches/bundles and QA ignored.
+
+The native policy supersedes section52's universal512 policy: render_settings.native_size chooses **1024 for Victory Pose, Taunt and Clapping**, including sync/powers/rotations and extra-fighter taunts, **512 for other categories**. Cache/resume/coverage checks include size. UI stars/defaults the current type's native size, preserves explicit nonnative choices, shows upsizing only above that native size and retains the yellow2048 warning. Code is updated; the interrupted full results1024 rebuild is still running. Do not report completion until all984 masters,123 sync clips, bundles, generated player, Node controls and live exports are verified. Logs/helpers are ignored build/melee_anim/results1024_qa; prior player remained512 because finalization had not run. Restart the server after final packaging.
+
+Scoped Download All uses batch_exports semantic families, never character-specific numeric IDs: victories include all three entrances/waits, clapping/taunt stay within their type, attack families include ground/air with combined phases preferred where available. Independent/uncombined actions remain available. The exact checkbox **Kirby Mode - include all hats all colors** adds None+25 copy appearances in each of six actual Kirby colors to batch ZIPs; it does not change individual downloads. Counts:738 victories/123 claps,1638/273 with hats; neutral special564/1764. Node and live final validation remain required. Server batches yield between renders; shared render_lock protects individual renders, artifact_lock protects writes, and the server no longer locks out all previews for an entire large batch. 177 synthetic Python tests passed; full156-appearance live1024 coverage has not been certified.
+
+See investigation section53 and TODO's current checklist. Older handoffs below are historical where they conflict with this entry.
+
 ## Purpose and user requirements
 
 This is a fork of the Super Smash Bros. Melee decompilation used to build an animation asset generator. The intended program loads the game's assets using behavior documented in the decomp, plays selected character animations, and exports MP4, GIF, or both. Smooth looping is a priority where the original motion supports it.

@@ -402,3 +402,15 @@ Current reviewable output: `build/melee_anim/preview/player.html` with 984 chara
 
 [ ] want more sizes for the produced gifs - extra small (128), medium (512), large (1024)
 - [x] Add user-controlled X/Y/Z viewing angles around the 3D model; preview CLI and local player support pitch/yaw/roll, with matching GIF/PNG downloads.
+Current mixed-resolution / scoped-export / README work (2026-10-12; investigation section53):
+
+- [x] Implement semantic Download All families, grounded/aerial and combined preference, live counts and Kirby batch appearances/colors.
+- [x] Remove the whole-batch server lock while preserving individual render/artifact synchronization;177 Python tests pass.
+- [x] Implement1024 native Victory Pose/Taunt/Clapping and512 other categories across defaults, caches, resume checks and UI native/upsizing policy.
+- [ ] Finish all984 native1024 base clips and123 sync claps, retaining source cuts and42-frame sync schedules.
+- [ ] Regenerate native GIF/paused-still ZIPs and actual player.html; pass full coverage and Node controls.
+- [ ] Restart production service and verify selected/all-color defaults, native stars/notices, scoped batches and actual1024 PNG/GIF exports.
+- [x] Make root README primary by archiving .github/README.md; rewrite summary, Windows setup, size rationale and early **~40 GB** warning.
+- [ ] Finish curated generated samples and real UI screenshots in docs/media; verify local README links and document this limited tracked-media exception.
+- [ ] Update final verification/evidence and remaining batch/fidelity limits in all four handoff documents.
+
