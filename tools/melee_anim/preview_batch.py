@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 from .export_model import export_mario
+from .render_settings import MASTER_SIZE
 from .inspect_models import costume_catalog
 
 
@@ -53,7 +54,7 @@ def main():
     parser.add_argument("--action", choices=("results-clap", "victory1", "victory2", "victory3", "taunt", "all"), default="all")
     parser.add_argument("--costume", default="all", help="actual Mario costume ID or all")
     parser.add_argument("--section", choices=("source", "wait", "all"), default="all")
-    parser.add_argument("--size", type=int, help="override size; default keeps clap at 320 and other clips at 256")
+    parser.add_argument("--size", type=int, default=MASTER_SIZE, help="override native master size")
     parser.add_argument("--jobs", type=int, default=3, help="concurrent render processes")
     parser.add_argument("--resume", action="store_true", help="verify and reuse completed compatible previews")
     parser.add_argument("--files", type=Path, default=Path("orig/GALE01/files"))
@@ -79,7 +80,7 @@ def main():
         model_dir = Path("build/melee_anim/exported/mario") / f"costume_{costume:02d}"
         model, _ = export_mario(args.files, model_dir, costume)
         for action, section in choices:
-            size = args.size or (320 if action == "results-clap" else 256)
+            size = args.size
             folder = args.output / "mario" / f"costume_{costume:02d}" / f"{action}_{section}"
             if args.resume and completed_job(folder, model, action, section, size):
                 reused += 1

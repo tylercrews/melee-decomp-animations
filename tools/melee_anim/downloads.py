@@ -11,6 +11,7 @@ from zipfile import ZipFile, ZIP_STORED
 from PIL import Image
 from .preview_gallery import collect_clips
 from .rotations import RotationCache, camera_angles, marked_angle
+from .render_settings import MASTER_SIZE
 
 SIZES = (128, 256, 512, 1024, 2048)
 
@@ -102,7 +103,7 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
-    def export(self, *, character, action, costume=0, size=256, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off'):
+    def export(self, *, character, action, costume=0, size=MASTER_SIZE, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off'):
         from .movement import centered_jump_setting
         centered = centered_jump_setting(action,center)
         if centered and scope=='all':raise ValueError('Select one hop animation for centered exports')

@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from .render_settings import MASTER_SIZE
 import subprocess
 import sys
 
@@ -167,14 +168,22 @@ def main():
     parser.add_argument('--root', type=Path, default=Path('build/melee_anim/preview'))
     parser.add_argument('--jobs', type=int, default=6)
     parser.add_argument('--resume', action='store_true')
+    parser.add_argument('--preserve-timing', action='store_true',help='retain existing 42-frame source schedules after a resolution-only rebuild')
     args = parser.parse_args()
+    previous=json.loads((args.root/'clapping-sync.json').read_text())['characters'] if args.preserve_timing else {}
     if not 1 <= args.jobs <= 8:
         parser.error('jobs must be 1..8')
     clips = [c for c in collect_clips(args.root) if c['action_key'] == 'results-clap_source']
     plans, jobs = {}, []
     for slug in sorted({c['character'] for c in clips}):
         group = sorted([c for c in clips if c['character'] == slug], key=lambda c: c['costume_id'])
-        plan = plan_character(args.root, group)
+        if args.preserve_timing:
+            old=previous[slug]
+            manifests=[args.root/Path(c['gif']).parent/'preview-manifest.json' for c in group]
+            if any(json.loads(p.read_text())['sample_source_times']!=old['fit_source_times'] for p in manifests):
+                raise ValueError('Source timeline changed; regenerate the sync schedule')
+            plan={**old,'input_fingerprint':input_fingerprint(manifests)}
+        else:plan = plan_character(args.root, group)
         plans[slug] = plan
         print(f'{slug}: {plan["source_length"]} source samples; {plan["repeats"]} repeats; '
               f'{plan["hold_frames_per_cycle"]} held ticks; rate {plan["moving_rate"]:.3f}', flush=True)
@@ -191,7 +200,7 @@ def main():
             if args.resume and old.is_file():
                 try:data = json.loads(old.read_text())
                 except (ValueError,OSError):data={}
-                if (data.get('sync_plan') == plan and data.get('uniform_gif_ticks') and data.get('transparent_background') is True and data.get('model_sha256') == fingerprint and
+                if (data.get('size')==MASTER_SIZE and data.get('sync_plan') == plan and data.get('uniform_gif_ticks') and data.get('transparent_background') is True and data.get('model_sha256') == fingerprint and
                         data.get('companion_sha256') == companion_hash and (folder/'preview.gif').is_file() and
                         {p.name for p in folder.glob('frame_*.png')} == {f'frame_{i:04d}.png' for i in range(FRAME_COUNT)}):
                     continue
@@ -201,7 +210,7 @@ def main():
     def render(job):
         folder, model, companion, timeline = job
         command = [sys.executable, '-m', 'tools.melee_anim.preview', '--model', str(model), '--action', 'results-clap',
-                   '--output', str(folder), '--size', '256', '--backend', 'native', '--timeline', str(timeline)]
+                   '--output', str(folder), '--size', str(MASTER_SIZE), '--backend', 'native', '--timeline', str(timeline)]
         if companion:
             command += ['--companion', str(companion)]
         with (folder/'render.log').open('w') as log:

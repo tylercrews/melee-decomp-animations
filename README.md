@@ -87,7 +87,7 @@ GIFs and PNG stills have transparent backgrounds. The preview is clear, showing 
 
 Batch-download buttons show a spinner and temporarily block another batch while preparing the ZIP. The browser starts saving when it is ready. Costume names are consistent across animation types, including Lavender and Gray.
 
-Download sizes are Extra small (128), Small (256, default), Medium (512), Large (1024), and **⚠ X-Large (2048)**. Selecting X-Large shows a dark-yellow “Extremely large GIF files” warning beside the dropdown. Sizes above 256 enlarge existing renders rather than adding detail.
+Download sizes are Extra small (128), Small (256), **★ Medium (512, default/native render)**, Large (1024), and **⚠ X-Large (2048)**. Previews and PNG/GIF masters render at 512 × 512. Large and X-Large show an upsizing notice beside the dropdown: they enlarge the 512 render without adding detail. X-Large also shows the dark-yellow “Extremely large GIF files” warning.
 
 Pause or scrub to download a still. Clapping has exclusive full, minimum, dirty/jittery and 0.84-second sync modes. Adjust the viewing-angle sliders and click **Apply**; a new angle needs rendering and is then cached. **Reset** returns to the original view. The aggregate results/taunt GIF collection remains available for those types; attacks and techs use per-animation downloads so one click does not trigger thousands of renders.
 

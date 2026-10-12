@@ -18,6 +18,7 @@ import sys
 import threading
 
 from .catalog import ALL_CHARACTERS
+from .render_settings import MASTER_SIZE
 from .hsd import Archive, Dol, load_symbols, read_global
 from .inspect_motions import motion_entries, read_exact_motion, script_graph_summary
 from .motions import read_figatree
@@ -324,7 +325,7 @@ class AttackCache:
                 paths += [self.repo/'orig/GALE01/files'/p['animation_file'] for p in actor.get('sequence',{}).get('phases',[])]
                 paths += [source.parent/t['image_file'] for m in data['materials'] for t in m['textures'] if t.get('image_file')]
             paths += list(Path(__file__).parent.glob('*.py'))
-            digest = hashlib.sha256(b'attack-v1-256px-50fps-60ticks')
+            digest = hashlib.sha256(f'attack-v2-{MASTER_SIZE}px-50fps-60ticks'.encode())
             digest.update(repr((clip['character'],clip['costume_id'],action,effects)).encode())
             for path in sorted(set(paths)):
                 digest.update(str(path).encode()); digest.update(hashlib.sha256(path.read_bytes()).digest())
@@ -340,7 +341,7 @@ class AttackCache:
             if not ready:
                 folder.mkdir(parents=True,exist_ok=True)
                 command = [sys.executable,'-m','tools.melee_anim.preview','--model',str(model),'--action',action,
-                           '--attack-catalog',str(catalog),'--output',str(folder),'--size','256','--backend','native' if os.name=='nt' else 'python']
+                           '--attack-catalog',str(catalog),'--output',str(folder),'--size',str(MASTER_SIZE),'--backend','native' if os.name=='nt' else 'python']
                 if companion.is_file():
                     command += ['--companion',str(companion)]
                 if action.startswith('tech-'):

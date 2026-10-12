@@ -346,7 +346,8 @@ def main():
     parser.add_argument("--action", default="results-clap", help="results-clap, victory1/2/3, taunt, or cataloged attack-/tech-<animation ID>")
     parser.add_argument("--section", choices=("source", "wait"), default="source")
     parser.add_argument("--output", type=Path, default=Path("build/melee_anim/preview/mario_clap"))
-    parser.add_argument("--size", type=int, default=320)
+    from .render_settings import MASTER_SIZE
+    parser.add_argument("--size", type=int, default=MASTER_SIZE)
     parser.add_argument("--fps", type=int, default=50, choices=(25, 50))
     parser.add_argument("--ticks-per-second", type=float, default=60)
     parser.add_argument("--yaw", type=float, default=0)

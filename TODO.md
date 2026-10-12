@@ -1,3 +1,16 @@
+Native512 migration (2026-10-11; investigation section52):
+
+- [x] Share512 native resolution across previews, batches, action/rotation/power/centered/sync caches and default exports.
+- [x] Default/star the512 Medium option; explain1024/2048 upsizing beside the independent yellow2048 GIF warning.
+- [x] Include resolution in cache identity/resume validation; reject old native dimensions in packaging/coverage verification.
+- [x] Preserve source clapping cuts/sync schedules with validated fingerprint refreshes.
+- [x] Finish native512 base/sync rebuild and GIF/paused-frame bundles; verify coverage and restart the service.
+
+Resolution investigation (2026-10-11; section51):
+
+- [x] Measure true256/512/1024 rendering file sizes for a flat silhouette and textured character; inventory existing984 base PNG/GIF masters.
+- [ ] If requested, implement higher-resolution masters and supersampled/antialiased outlines, updating cache identities and preserving export transparency/timing. Current resize-only download behavior remains unchanged.
+
 Sleep-bubble effect completed (2026-10-11; investigation section 50):
 
 - [x] Inspect original sleeping-victory gfx416 spawns and common particle/sprite data.

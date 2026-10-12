@@ -7,11 +7,12 @@ from .catalog import CHARACTERS
 from .roster import roster
 from .export_model import export_fighter
 from .preview_batch import action_sections,completed_job
+from .render_settings import MASTER_SIZE
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--character',default='all');p.add_argument('--jobs',type=int,default=8)
-    p.add_argument('--resume',action='store_true');p.add_argument('--size',type=int,default=256)
+    p.add_argument('--resume',action='store_true');p.add_argument('--size',type=int,default=MASTER_SIZE)
     a=p.parse_args()
     if a.character != 'all' and a.character not in dict(CHARACTERS):p.error('unknown character slug')
     if not 1 <= a.jobs <= 8 or not 64 <= a.size <= 1024:p.error('jobs must be 1..8 and size 64..1024')

@@ -107,6 +107,7 @@ class RotationCacheTests(unittest.TestCase):
             first = self.cache.get(self.clip, (20, 45, 10))
             self.assertEqual(self.cache.get(self.clip, (20, 45, 10)), first)
             self.assertEqual(len(self.calls), 1)
+            self.assertEqual(self.calls[0][self.calls[0].index('--size')+1],'512')
             self.assertIn('--pitch', self.calls[0]); self.assertIn('--samples', self.calls[0])
             self.assertEqual(json.loads((self.root/Path(first['gif']).parent/'preview-manifest.json').read_text())['sample_source_times'], [0, 1, 2])
             (self.root/first['frames'][1]).write_bytes(b'corrupt')

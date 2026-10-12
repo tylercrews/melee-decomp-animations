@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+from .render_settings import MASTER_SIZE
 
 
 def camera_angles(pitch=0, yaw=0, roll=0):
@@ -29,7 +30,7 @@ def marked_angle(name, angles):
 class RotationCache:
     """One render subprocess at a time, bounded duration, content-based resume.
 
-    Always render 256px masters. Size downloads retain the existing resampling
+    Always render native master resolution. Downloads retain the resampling
     policy. Minimum/dirty intervals select these new full-clip masters; sync
     renders its exact fractional source-time plan separately.
     """
@@ -101,7 +102,7 @@ class RotationCache:
                     'ground_effects':manifest.get('ground_effects_enabled',False),
                     'source_times': selected['sample_source_times'], 'fps': selected['fps'],
                     'sync_plan': selected.get('sync_plan') if sync else None,
-                    'fit_source_times': manifest['sample_source_times'], 'size': 256,
+                    'fit_source_times': manifest['sample_source_times'], 'size': MASTER_SIZE,
                     'backend': 'native' if os.name == 'nt' else 'python',
                     'rotation_order': 'Ry(yaw) @ Rx(pitch) @ Rz(roll)',
                     'framing': 'per-costume whole-original-clip projected bounds'}
@@ -139,7 +140,7 @@ class RotationCache:
                 folder.mkdir(parents=True, exist_ok=True)
                 command = [sys.executable, '-m', 'tools.melee_anim.preview', '--model', str(model),
                            '--action', settings['action'], '--section', settings['section'],
-                           '--output', str(folder), '--size', '256', '--fps', str(settings['fps']),
+                           '--output', str(folder), '--size', str(MASTER_SIZE), '--fps', str(settings['fps']),
                            '--backend', settings['backend'], '--pitch', str(angles[0]),
                            '--yaw', str(angles[1]), '--roll', str(angles[2])]
                 if power!='none':command += ['--kirby-power',power]

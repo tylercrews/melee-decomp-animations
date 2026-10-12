@@ -8,6 +8,18 @@ The first targets are the three victory animations and loser clapping animations
 
 The user explicitly clarified that **every color means every actual costume variant available to each character**, whose count varies. Record the selected action for all those variants. Do not use a universal costume count, arbitrary tinting, or distinct archive filenames as the definition of a costume. Python is the user's most comfortable language; keep the ordinary workflow understandable in Python.
 
+## Latest policy: native512 masters (2026-10-11)
+
+The user approved512 as the default native render. MASTER_SIZE in render_settings.py is the shared Python constant for preview/pilot/roster/action/rotation/power/centered/sync/export defaults. Keep all five download sizes:128/256 downsample,512 native/default starred Medium,1024/2048 upscale. Show the upsizing notice only above512 beside the separate dark-yellow2048 GIF warning; sync notices on restoration/pageshow. The renderer's approximate outline and GIF binary alpha remain unchanged; no supersampling was added. This supersedes section51's recommendation-only status and historical256 master/default notes.
+
+Rebuild existing base results/taunts and sync PNG/GIF masters at512; lazy actions/angles/powers re-render under new cache hashes when requested. Action keys include master resolution; rotation settings include native size; sync resume requires size. --require-all packaging and verify_previews reject old native dimensions. Repackage GIF and paused-frame ZIPs after rebuilding, then restart the service. Keep all original/generated assets and old caches ignored; do not delete caches merely to migrate.
+
+Preserve existing clap timing/cuts for a resolution-only migration: cycles --preserve-intervals validates source endpoints/FPS/count/costume coverage and refreshes fingerprints; sync_claps --preserve-timing validates original timelines and retains42-frame source schedules. Fresh imports still perform normal analysis. No ISO extraction, new dependency or Blender install. See investigation section52 and ignored master512_qa. Final:984 native512 base clips /81,369 PNG frames plus123 sync clips; full coverage/bundle verifier,170 Python tests, Node controls and7 live export checks pass. Source sync schedules are unchanged. Task-owned service session44919 on port8765 supersedes earlier sessions; health reports master_size512 and the served player matches generated HTML.
+
+## Resolution benchmark only (2026-10-11)
+
+Investigation section51 records true256/512/1024 renders of G&W clapping and Mario Victory3. Measured compressed GIF ratios:512 about2.1?3x;1024 about5.1?9x. Raw RGBA memory/pixels4x/16x. Existing984 base PNG/GIF masters total2.656GB before bundles/caches; higher-resolution storage projections are estimates, not full-roster measurements. Current UI enlarges256px masters up to512; native binary coverage and pixel-expanded G&W outline contribute to jagged edges. No quality/resolution policy was changed;512 masters / optional1024 and supersampled outlines remain proposals. Evidence is ignored resolution_qa. Do not claim larger downloads currently render extra detail.
+
 ## Latest handoff: sleeping victory bubbles (2026-10-11)
 
 SleepBubbles reads original common particle gfx416 from EfCoData.dat: version-0x42 relative-offset command/texture banks, emitter416, IA8 texture group34, original size/color/fade program and tornado drift. This is a focused bounded decoder, not a full particle VM. Original spawn origins are world snapshots from raw joint plus transformed local offset; never keep a released bubble attached to the moving head. Preserve source ticks, original sprite/colors, 60-tick life, deterministic seed416 and camera-facing cards; include full bubble geometry in framing and hash EfCoData in rotated caches.
@@ -94,7 +106,7 @@ python -m tools.melee_anim.inspect_results_scene
 python -m tools.melee_anim.catalog
 python -m tools.melee_anim.export_model --costume 0
 python -m tools.melee_anim.preview_batch --action results-clap --costume all
-python -m tools.melee_anim.preview --action taunt --size 256 --output build/melee_anim/preview/mario/costume_00/taunt_source
+python -m tools.melee_anim.preview --action taunt --size 512 --output build/melee_anim/preview/mario/costume_00/taunt_source
 python -m tools.melee_anim.roster_batch --resume --jobs 8
 python -m tools.melee_anim.attacks
 python -m tools.melee_anim.cycles

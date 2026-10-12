@@ -14,6 +14,7 @@ from PIL import Image
 from .catalog import CHARACTERS
 from .preview_gallery import ACTIONS, collect_clips
 from .roster import roster
+from .render_settings import MASTER_SIZE
 
 
 def digest(data):
@@ -35,6 +36,7 @@ def verify(root):
         source = root/clip['gif']
         hashes[clip['download_name']] = digest(source.read_bytes())
         with Image.open(source) as im:
+            if im.size!=(MASTER_SIZE,MASTER_SIZE):raise ValueError(f'GIF is not native master resolution: {source}')
             if im.info.get('transparency') is None or im.convert('RGBA').getpixel((0,0))[3] != 0:
                 raise ValueError(f'GIF background is not transparent: {source}')
             looping = im.info.get('loop') == 0

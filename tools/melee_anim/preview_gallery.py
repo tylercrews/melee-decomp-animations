@@ -78,11 +78,12 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <small>Right-click the character to save its transparent GIF while playing or its transparent PNG while paused.</small>
 <div class="timeline"><input id="scrub" type="range" min="0" value="0" step="1" aria-label="Animation frame"><span id="time"></span></div>
 <div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
-<option value="128">Extra small (128 × 128)</option><option value="256" selected>Small (256 × 256)</option>
-<option value="512">Medium (512 × 512)</option><option value="1024">Large (1024 × 1024)</option>
+<option value="128">Extra small (128 × 128)</option><option value="256">Small (256 × 256)</option>
+<option value="512" selected>★ Medium (512 × 512, native render)</option><option value="1024">Large (1024 × 1024)</option>
 <option value="2048">⚠ X-Large (2048 × 2048)</option>
 </select></label><small id="sizewarning" role="status" aria-live="polite" hidden>Extremely large GIF files</small>
-<small>Medium, Large and X-Large enlarge the current renders.</small></div>
+<small id="upsizenotice" role="status" aria-live="polite" hidden>Upsized from the 512 × 512 render; no additional detail.</small>
+</div>
 <div class="downloads" id="downloadpanel"><a class="download primary" id="gif" download>Download GIF</a>
 <a class="download" id="animationzip" download>Download this animation in all colors</a>
 <a class="download" id="allzip" download="melee-all-characters-all-animations.zip" href="downloads/melee-all-characters-all-animations.zip">Download all GIFs</a>
@@ -125,7 +126,7 @@ downloadsize=document.getElementById('downloadsize'), allzip=document.getElement
 fullcycle=document.getElementById('fullcycle'), minimumcycle=document.getElementById('minimumcycle'),
 dirtycycle=document.getElementById('dirtycycle'), synccycle=document.getElementById('synccycle'),
 cyclehint=document.getElementById('cyclehint');
-downloadsize.value='256';
+downloadsize.value='512';
 animationtype.value='clapping';
 const preparedCount=clips.filter(c=>!c.lazy).length;
 const exportBase=location.protocol==='http:'?'':'http://127.0.0.1:8765';
@@ -168,7 +169,7 @@ resetangle.onclick=()=>{angles=[0,0,0];syncAngleInputs();loadRotation()};
 // returning through browser history. Explicit file-to-server handoffs still
 // keep their requested angles on the first visit.
 if(typeof addEventListener==='function')addEventListener('pageshow',event=>{
-if(event.persisted)resetangle.onclick();else syncAngleInputs()});
+updateSizeWarning();if(event.persisted)resetangle.onclick();else syncAngleInputs()});
 function checkMode(mode){[fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.checked=['full','minimum','dirty','sync'][i]===mode)}
 checkMode('full');
 characters.forEach(c=>{let o=document.createElement('option');o.value=c.slug;o.textContent=c.label;character.append(o)});
@@ -224,7 +225,7 @@ if(hasPower())query.set('power',powerSetting());
 if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
 if(hasAngle()){['pitch','yaw','roll'].forEach((key,i)=>query.set(key,String(angles[i])))}return `${exportBase}/export?${query}`}
 function updateDownloads(){if(current<0)return;let c=clips[current];let a=animations.find(a=>a.key===c.action_key&&a.character===c.character);
-let original=downloadsize.value==='256'&&!useMinimum()&&!hasAngle()&&!hasPower()&&!c.lazy;
+let original=downloadsize.value==='512'&&!useMinimum()&&!hasAngle()&&!hasPower()&&!c.lazy;
 gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(angleName(effectName(markedName(c.download_name))));
 open.href=original?c.gif:exportURL('gif','costume')+'&view=1';
 archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(angleName(effectName(markedName(a.download_name))));
@@ -279,7 +280,7 @@ character.onchange=()=>{colors();actions();select()};animationtype.onchange=()=>
 kirbypower.onchange=()=>{kirbyPower=kirbypower.value;loadRotation()};
 action.onchange=()=>{animationtype.value=typeForAction(action.value);actions();select()};costume.onchange=select;
 hidepartials.onchange=()=>{let old=action.value;partialsHidden=hidepartials.checked;actions();if(action.value!==old)select()};
-function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048'}
+function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048';document.getElementById('upsizenotice').hidden=!['1024','2048'].includes(downloadsize.value)}
 downloadsize.onchange=()=>{updateSizeWarning();show()};
 groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[current].ground_effect)loadRotation()};
 centerjump.onchange=()=>{centerJumpEnabled=centerjump.checked;if(isHop())loadRotation()};
@@ -396,6 +397,7 @@ def collect_clips(root, include_attacks=True):
         filename = f"{slug}-{key.replace('_','-')}-costume-{costume_id:02d}-{color.split()[0].lower()}.gif"
         clips.append({"character":slug,"character_label":name,"action_key": key, "costume_id": costume_id, "costume_label": color,
                       "fps": manifest["fps"], "period": manifest["source_period_frames"],
+                      "master_size":manifest['size'],
                       "authored_loop": manifest["authored_loop"], "symbol": manifest["source_symbol"],
                       "sleep_bubbles":manifest.get('sleep_bubbles'),
                       "download_name": filename, "source_times": times, "gif": f"{relative}/preview.gif",
@@ -455,6 +457,10 @@ def main():
     actual = {(c["character"],c["action_key"], c["costume_id"]) for c in clips}
     if args.require_all and expected != actual:
         parser.error(f"Missing animation/costume combinations: {sorted(expected-actual)}")
+    if args.require_all:
+        from .render_settings import MASTER_SIZE
+        if any(c['master_size']!=MASTER_SIZE for c in clips):
+            parser.error(f'Rebuild native {MASTER_SIZE}px masters with roster_batch --resume before packaging')
     downloads = args.root/"downloads"
     downloads.mkdir(parents=True,exist_ok=True)
     by_action = defaultdict(list)
