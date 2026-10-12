@@ -59,19 +59,23 @@ def combined_actions(actions, kind):
                 member = next(a for a in phase['actors'] if a['fighter_kind'] == original['fighter_kind'])
                 sequence.append({'name': phase['name'], 'animation_file': member['animation_file'],
                                  'clip': deepcopy(member['clip']), 'character_prop': deepcopy(member.get('character_prop')),
+                                 'character_effects':deepcopy(member.get('character_effects',[])),
                                  'duration_ticks': member['clip']['frames']})
             actor['sequence'] = {'phases': sequence, 'policy': policy}
             actor['clip']['effective_loop'] = False
             actor['character_prop'] = None
+            actor['character_effects'] = []
             actor['render_duration'] = sum(p['duration_ticks'] for p in sequence)
             actors.append(actor)
         duration = max(a['render_duration'] for a in actors)
         for actor in actors:
             actor['render_duration'] = duration
         props = [p['character_prop'] for p in actors[0]['sequence']['phases'] if p['character_prop']]
+        effects={e['name']:e for p in actors[0]['sequence']['phases'] for e in p.get('character_effects',[])}
         result.append({**first, 'key': first['key'].replace('_source', '-combined_source'),
                        'label': title, 'actors': actors, 'duration_ticks': duration,
                        'held_item': props[0] if props else None,
+                       'character_effects':list(effects.values()),
                        'sequence': {'phases': [p['name'] for p in actors[0]['sequence']['phases']], 'policy': policy}})
     return result
 

@@ -96,20 +96,26 @@ def rgba_triangles(size, positions, uvs, colors, triangles, pixels):
 
 
 class GroundEffect:
-    def __init__(self, files, kind):
+    def __init__(self, files, kind, descriptor=None):
         self.kind = kind
-        self.gfx_id, self.descriptor_id = EFFECT_IDS[kind]
-        path = Path(files)/'EfCoData.dat'
+        self.gfx_id, self.descriptor_id = (descriptor['gfx_id'],descriptor['descriptor_id']) if descriptor else EFFECT_IDS[kind]
+        path = Path(files)/(descriptor['source_archive'] if descriptor else 'EfCoData.dat')
         ar = Archive(path.read_bytes(),str(path))
-        desc = ar.public('effCommonDataTable')+8+20*self.descriptor_id
+        desc = ar.public(descriptor['table'] if descriptor else 'effCommonDataTable')+8+20*self.descriptor_id
         self.lifetime = ar.f32(desc)
         source = inspect_model(path,root_offset=ar.pointer(desc+4))
         self.archive_sha256 = source['archive_sha256']
         self.bones = source['joints']
         self.tracks = []
+        self.track_timing = {}
         self.particle_channels = []
+        def read_tracks(aobj,index):
+            tracks=aobj_tracks(ar,aobj,index)
+            if aobj is not None:
+                for track in tracks:self.track_timing[id(track)]=(ar.f32(aobj+4),bool(ar.u32(aobj)&0x20000000))
+            return tracks
         def joints(index, node):
-            for track in aobj_tracks(ar,ar.pointer(node+8),index):
+            for track in read_tracks(ar.pointer(node+8),index):
                 if track.channel == 40:
                     self.particle_channels.append(track)
                 elif track.channel not in (1,2,3,5,6,7,8,9,10,11,12):
@@ -118,6 +124,8 @@ class GroundEffect:
                     self.tracks.append(track)
         matched_tree(ar,self.bones,ar.pointer(desc+8),joints)
         self.material_tracks, self.tex_tracks = {}, {}
+        self.tex_images = {}
+        image_tables = {}
         def materials(index,node):
             dobjs = list(linked(ar,self.bones[index]['dobj'],4))
             anims = list(linked(ar,ar.pointer(node+8),0))
@@ -125,11 +133,12 @@ class GroundEffect:
                 raise FormatError('Effect material animation exceeds drawables')
             for dobj,anim in zip(dobjs,anims):
                 mat = ar.pointer(dobj+8)
-                self.material_tracks[mat] = aobj_tracks(ar,ar.pointer(anim+4),0)
+                self.material_tracks[mat] = read_tracks(ar.pointer(anim+4),0)
                 for ta in linked(ar,ar.pointer(anim+8),0):
-                    if ar.u16(ta+20) or ar.u16(ta+22):
+                    if ar.u16(ta+22) or ar.u16(ta+20) and descriptor is None:
                         raise FormatError('Effect image/palette swapping requires support')
-                    self.tex_tracks[(mat,ar.u32(ta+4))] = aobj_tracks(ar,ar.pointer(ta+8),0)
+                    if ar.u16(ta+20):image_tables[(mat,ar.u32(ta+4))]=(ar.pointer(ta+12),ar.u16(ta+20))
+                    self.tex_tracks[(mat,ar.u32(ta+4))] = read_tracks(ar.pointer(ta+8),0)
         matched_tree(ar,self.bones,ar.pointer(desc+12),materials)
         self.materials = {m['offset']:m for m in source['materials']}
         self.textures = {}
@@ -143,6 +152,16 @@ class GroundEffect:
                 palette = ar.read(ar.pointer(pal),ar.u16(pal+12)*2) if pal is not None else None
                 pixels = decode_image(ar.read(ar.pointer(image),image_size(w,h,fmt)),w,h,fmt,palette,ar.u32(pal+4) if pal is not None else 1)
                 self.textures[off] = np.frombuffer(pixels,dtype='uint8').reshape(h,w,4)
+                key=(mat['offset'],tex['id'])
+                if key in image_tables:
+                    table,count=image_tables[key]
+                    images=[]
+                    for index in range(count):
+                        image=ar.pointer(table+index*4)
+                        w,h,fmt=ar.u16(image+4),ar.u16(image+6),ar.u32(image+8)
+                        raw=decode_image(ar.read(ar.pointer(image),image_size(w,h,fmt)),w,h,fmt,palette,ar.u32(pal+4) if pal is not None else 1)
+                        images.append(np.frombuffer(raw,dtype='uint8').reshape(h,w,4))
+                    self.tex_images[key]=images
         self.meshes = []
         for poly in source['polygons']:
             if poly['mode']!='rigid_or_shared':
@@ -176,7 +195,11 @@ class GroundEffect:
             # retaining world center/animated scale. Exact GX billboards remain
             # a reference-comparison task.
             if self.bones[i]['flags']&0xE00:
-                matrix[:3,:3] = view@np.diag(np.linalg.norm(matrix[:3,:3],axis=0))
+                billboard=view
+                if getattr(self,'preserve_billboard_roll',False):
+                    angle=poses[i]['rotation'][2];c,s=np.cos(angle),np.sin(angle)
+                    billboard=view@np.array([[c,-s,0],[s,c,0],[0,0,1]])
+                matrix[:3,:3] = billboard@np.diag(np.linalg.norm(matrix[:3,:3],axis=0))
             points = local@matrix[:3,:3].T+matrix[:3,3]
             result.append((mesh,points))
         return result

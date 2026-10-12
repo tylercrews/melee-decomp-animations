@@ -315,6 +315,12 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
     if action.startswith(('attack-','tech-')) and actor.get('sequence'):
         motion={**motion,'sequence_actor':actor}
         metadata={**metadata,'frames':actor['render_duration']}
+    if action.startswith('attack-'):
+        from .character_effects import effect_archives
+        if effect_archives(actor):motion={**motion,'effect_actor':actor}
+        if actor.get('effect_loop_duration') and not actor.get('sequence'):
+            motion={**motion,'fighter_period':metadata['frames']}
+            metadata={**metadata,'frames':actor['effect_loop_duration']}
     return motion,metadata,tracks
 
 
@@ -509,6 +515,11 @@ def main():
             companion_phase_visible=[phase_drawables(companion,p) for _,_,p in companion_sequence.phases]
     def follow_center(posed,mask):
         return projected_pose_center(posed,mask,view)
+    character_fx=None;companion_fx=None;effect_matrices={}
+    if motion.get('effect_actor'):
+        from .character_effects import CharacterEffects
+        character_fx=CharacterEffects(motion['effect_actor'],args.files,model,sequence_scene)
+        if companion and cm.get('effect_actor'):companion_fx=CharacterEffects(cm['effect_actor'],args.files,companion,companion_sequence)
     # Precompute poses once; fit over the whole selected source interval.
     cache = {}
     def evaluate_pose(frame,scene_mode=None):
@@ -516,6 +527,7 @@ def main():
         if key in cache:
             return cache[key]
         pose_meta,pose_tracks,pose_time,height=jump_scenes[scene_mode or jump_mode].sample(frame) if jump_scenes else (metadata,tracks,frame,0.)
+        if motion.get('fighter_period'):pose_time=frame%motion['fighter_period']
         if sequence_scene:pose_meta,pose_tracks,pose_time,phase_id,_=sequence_scene.sample(frame)
         matrices = pose_matrices(model["bones"], pose_tracks, pose_time, pose_meta["type"],
                                  root_scale=model.get("runtime_root_scale"),
@@ -555,6 +567,13 @@ def main():
                 extra,visible=companion_sequence_props.pose(cp,frame,view)
                 for positions,_ in extra:positions[:,0]+=2.8
                 posed.extend(extra);mask.extend(visible)
+        if character_fx:
+            fm=matrices.copy()
+            if companion:fm[:,0,3]-=2.8
+            effect_matrices[key]=(fm,None)
+            if companion_fx:
+                cfm=cp.copy();cfm[:,0,3]+=2.8
+                effect_matrices[key]=(fm,cfm)
         cache[key] = (posed, mask)
         return posed, mask
     sampled = [evaluate_pose(frame) for frame in source_times]
@@ -605,6 +624,13 @@ def main():
             tick=specification['shot_ticks'][0]
             spawned,shown=held.pose(held.anchor_at(tick),tick,view)
             cloud=np.concatenate([cloud]+[p for (p,_),visible in zip(spawned,shown) if visible])
+    if character_fx:
+        bounds=[]
+        for tick in fit_times or source_times:
+            fm,cfm=effect_matrices[(round(tick,10),None)]
+            bounds.extend(character_fx.bounds(tick,fm,view))
+            if companion_fx:bounds.extend(companion_fx.bounds(tick,cfm,view))
+        if bounds:cloud=np.concatenate([cloud]+bounds)
     effect = None
     flash = None
     anchors = [[-2.8,0,0],[2.8,0,0]] if companion else [[0,0,0]]
@@ -643,6 +669,10 @@ def main():
         if effect and args.ground_effects=='on':
             layer = effect.render(source_times[i],anchors,view,args.size,center,scale)
             image = Image.alpha_composite(layer,image)
+        if character_fx:
+            fm,cfm=effect_matrices[(round(source_times[i],10),None)]
+            image=character_fx.render(source_times[i],fm,view,args.size,frame_center,scale,image)
+            if companion_fx:image=companion_fx.render(source_times[i],cfm,view,args.size,frame_center,scale,image)
         image.save(args.output/f"frame_{i:04d}.png")
         images.append(image.convert("RGBA"))
         if i == 0 or (i+1) % 20 == 0 or i == len(poses)-1:
@@ -684,6 +714,11 @@ def main():
                               'companion_hold_joint':companion_held_joint if companion_held else None}
         manifest['framing_policy']='whole-animation fighter and held-item geometry'
         if specification.get('behavior')=='needle-release':manifest['framing_policy']='stable fighter and emission-point fit; needles leave the image naturally'
+    if character_fx:
+        manifest['character_effects']=character_fx.provenance()
+        manifest['fighter_loop_period_ticks']=motion.get('fighter_period')
+        manifest['effect_loop_policy']='repeat original fighter/effect cycles over their least common multiple' if motion.get('fighter_period') else 'phase-local effect timing'
+        manifest['framing_policy']='whole-animation fighter and attached effect geometry; foreground RGBA effects'
     if knockdown:
         manifest['ground_effects_enabled'] = bool(effect and args.ground_effects=='on')
         manifest['ground_effect'] = effect.provenance() if effect else None

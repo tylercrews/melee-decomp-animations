@@ -4,6 +4,10 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Add Fox/Falco reflector startup/holding/reflection-hit effects to ground/air and combined down specials, including source attachment, color, looping and all exports. Add Ness PSI Magnet and Mario/Dr. Mario/Luigi tornado effects through the same reader. Preserve all actual costumes; use shared holding intervals (reflector 84 ticks, magnet 40) without retiming source curves. Verify 162 Python tests / Node controls and 28 full clips / 1,142 matching transparent frames; see investigation section 47.
+- [ ] Implement Zelda Nayru's Love's child/orientation attachment and full state callbacks; its two EfZd mesh descriptors are asset-confirmed. Add Falcon/Ganondorf punch effects using the original throw-flag timing, multiple attachments and facing callbacks.
+- [ ] Extend special-effect particles, depth/occlusion, lighting/additive coverage and material/palette/shape controllers; compare rendered effects against original-game references. Current special meshes are automatic, separate from the ground-impact toggle.
+
 - [x] Stitch supported multipart attacks into additional combined presets, including Kirby Final Cutter, Fox/Falco neutral blasters, unambiguous startup/middle/ending specials and rapid jabs. Add missed tech → matching lying cycle for all selectable characters and Sandbag. Preserve original phase choices, local scripts/props, continuous Cutter effect time, single impacts, all colors/powers/angles and GIF/exact-still exports. Verified 153 Python tests / Node controls and 108 full default-costume sequences / 7,476 frames; see investigation section 46.
 - [ ] Add user-adjustable middle-loop repetitions/hold duration and an optional sequence editor, with deterministic timing and manifests.
 - [ ] Add explicit recipes for duplicate-name/branching moves (charge variants, alternate endings, side-special combos, DK hand-slap endings, teleport phases). Read the source state/submotion mapping rather than selecting the first identically named DAT clip.

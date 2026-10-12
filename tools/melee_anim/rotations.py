@@ -67,6 +67,8 @@ class RotationCache:
                 from .attacks import CATALOG, find_action
                 attack_catalog = self.root/CATALOG
                 actor = find_action(json.loads(attack_catalog.read_text()), data['fighter_kind'], action)
+                from .character_effects import effect_archives
+                paths.extend(self.repo/'orig/GALE01/files'/archive for archive in effect_archives(actor))
                 from .sequences import prop_archives
                 for prop_archive in prop_archives(actor):
                     paths.extend([self.repo/'orig/GALE01/files'/prop_archive,self.repo/'orig/GALE01/files/PlCo.dat'])

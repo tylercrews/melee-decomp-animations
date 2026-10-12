@@ -148,6 +148,8 @@ def build_attack_catalog(repo, report):
             prop=item_for_motion(f'attack-{motion["animation_id"]}',kind) if category=='attack' else None
             from .character_props import character_prop, resolve_profile
             special=resolve_profile(files,report,character_prop(kind,name)) if category=='attack' else None
+            from .character_effects import character_effects
+            effects=character_effects(kind,name) if category=='attack' else []
             if prop:
                 suffix=(('Jab','Tilt','Smash','Dash attack','Smash follow-up')[prop['variant']] if 'variant' in prop else common.get(motion['animation_id'],name))
                 chosen=(prop['name']+' — '+suffix,'Item attacks')
@@ -174,15 +176,23 @@ def build_attack_catalog(repo, report):
                     reason = 'This clip needs additional animation channel support'; break
                 actors.append({'fighter_kind':member_kind, 'source_fighter_kind':source_kind,
                                'character_prop':special,
+                               'character_effects':effects,
                                'animation_file':table['animation_file'], 'clip':{**selected, **metadata,
                                'effective_loop':metadata['tree_loop'] or selected['motion_loop'],
                                'script':script_graph_summary(archive, selected['script_offset'], sizes)}})
             prefix='other' if category in ('taunt','hit') else category
+            loop_duration={}
+            if reason is None and effects and actors[0]['clip']['effective_loop']:
+                from .character_effects import shared_loop_period
+                duration=shared_loop_period(actors[0]['clip']['frames'],effects)
+                for actor in actors:actor['effect_loop_duration']=duration
+                loop_duration={'duration_ticks':duration}
             actions.append({'key':f'{prefix}-{motion["animation_id"]}_source', 'animation_id':motion['animation_id'],
                             'animation_type':category, 'ground_effect':recovery[1] if recovery else None,
                             'name':name, 'label':chosen[0], 'group':chosen[1], 'actors':actors,
                             'held_item':prop or special,
-                            'available':reason is None, 'unavailable_reason':reason})
+                            'character_effects':effects,
+                            'available':reason is None, 'unavailable_reason':reason,**loop_duration})
         # Full/short hops share JumpF but have distinct source launch velocities.
         has_jump=all(aid<len(motions) and motions[aid]['size'] for aid in JUMP_PHASE_IDS.values())
         for mode,title in ([('fullhop','Full hop'),('shorthop','Short hop')] if has_jump else []):
@@ -249,6 +259,7 @@ def virtual_clips(root):
                                'ground_effect':action.get('ground_effect'),
                                'held_item':action.get('held_item'),
                                'sequence':action.get('sequence'),
+                               'character_effects':action.get('character_effects'),
                                'costume_id':cid, 'costume_label':color, 'fps':50, 'period':period,
                                'authored_loop':clip['effective_loop'], 'symbol':clip['symbol'],
                                'frame_count':len(times), 'download_name':filename, 'frames':[], 'source_times':[],
@@ -283,6 +294,8 @@ class AttackCache:
             effects = bool(effects and clip.get('ground_effect'))
             paths = [catalog, model, self.repo/'build/melee_anim/motions.json']
             actor=find_action(selection,json.loads(model.read_text()).get('fighter_kind'),action)
+            from .character_effects import effect_archives
+            paths.extend(self.repo/'orig/GALE01/files'/archive for archive in effect_archives(actor))
             from .sequences import prop_archives
             for archive in prop_archives(actor):
                 paths.extend([self.repo/'orig/GALE01/files'/archive,self.repo/'orig/GALE01/files/PlCo.dat'])

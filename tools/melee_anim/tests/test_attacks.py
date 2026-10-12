@@ -99,6 +99,17 @@ class AttackTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(),(self.root/preview['frames'][1]).read_bytes())
             self.assertEqual(len(self.calls),1)
 
+    def test_attached_effect_archive_change_invalidates_cached_render(self):
+        effect=self.repo/'orig/GALE01/files/effect.dat';effect.write_bytes(b'first effect')
+        self.actor['character_effects']=[dict(source_archive='effect.dat')]
+        (self.root/'attack-catalog.json').write_text(json.dumps(self.catalog))
+        with patch('tools.melee_anim.attacks.subprocess.run',side_effect=self.render):
+            first=self.cache.get(self.clip)
+            effect.write_bytes(b'updated original effect fixture')
+            second=self.cache.get(self.clip)
+            self.assertNotEqual(first['gif'],second['gif'])
+            self.assertEqual(len(self.calls),2)
+
     def test_tech_effect_toggle_has_separate_cache_and_names_without_mutation(self):
         action=self.catalog['characters'][0]['actions'][0]
         action.update(key='tech-199_source',animation_type='tech',ground_effect='tech')
