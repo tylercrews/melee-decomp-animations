@@ -3,7 +3,7 @@
 Turn Super Smash Bros. Melee animations into transparent GIFs and PNGs. This Windows tool builds on the Melee decompilation: import assets from your own game ISO, choose a character and costume, play an animation, rotate the view, and download the animation or a single paused frame.
 
 > [!WARNING]
-> **Plan for roughly 67 GB — SIXTY-SEVEN GIGABYTES — of local project data.** That is the author's reported checkout size after the larger renders, including generated assets, rather than the size of the source download. Importing and rendering creates extracted files, PNG frames, GIFs, ZIP bundles and caches. More animations, Kirby hats, viewing angles and larger native renders increase it further. Leave additional free space for preparation and downloads.
+> **Plan for roughly 69 GB — SIXTY-NINE GIGABYTES — of local project data.** That is the author's reported checkout size after the larger renders, including generated assets, rather than the size of the source download. Importing and rendering creates extracted files, PNG frames, GIFs, ZIP bundles and caches. More animations, Kirby hats, viewing angles and larger native renders increase it further. Leave additional free space for preparation and downloads.
 
 ![The animation player with character, costume, playback and export controls](docs/media/player.png)
 
