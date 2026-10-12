@@ -3,12 +3,20 @@ Current mixed-resolution / scoped-export / README work (2026-10-12; investigatio
 - [x] Implement semantic Download All families, grounded/aerial and combined preference, live counts and Kirby batch appearances/colors.
 - [x] Remove the whole-batch server lock while preserving individual render/artifact synchronization;177 Python tests pass.
 - [x] Implement1024 native Victory Pose/Taunt/Clapping and512 other categories across defaults, caches, resume checks and UI native/upsizing policy.
-- [ ] Finish all984 native1024 base clips and123 sync claps, retaining source cuts and42-frame sync schedules.
-- [ ] Regenerate native GIF/paused-still ZIPs and actual player.html; pass full coverage and Node controls.
-- [ ] Restart production service and verify selected/all-color defaults, native stars/notices, scoped batches and actual1024 PNG/GIF exports.
+- [x] Finish all984 native1024 base clips and123 sync claps, retaining source cuts and42-frame sync schedules.
+- [x] Regenerate native GIF/paused-still ZIPs and actual player.html; pass full coverage and Node controls.
+- [x] Restart production service and verify selected/all-color defaults, native stars/notices, scoped batches and actual1024 PNG/GIF exports.
 - [x] Make root README primary by archiving .github/README.md; rewrite summary, Windows setup, size rationale and early **~67 GB** warning.
-- [ ] Finish curated generated samples and real UI screenshots in docs/media; verify local README links and document this limited tracked-media exception.
-- [ ] Update final verification/evidence and remaining batch/fidelity limits in all four handoff documents.
+- [x] Finish curated generated samples and real UI screenshots in docs/media; document this limited tracked-media exception.
+- [x] Update final verification/evidence and remaining batch/fidelity limits in all four handoff documents.
+
+Game & Watch source outlines (2026-10-12; investigation section54):
+
+- [x] Recover original class-4 meshes, matching visibility alternatives, TEV RGB overlay and color/depth-only passes for all four colors and Kirby's copy.
+- [x] Replace the one-pixel approximation with source geometry in both raster backends;180 Python tests pass.
+- [x] Rebuild32 results/taunt clips, four sync claps and refreshed player/bundles, preserving timing/cuts.
+- [x] Complete frame/download/bundle checks, powered/rotated probes, service restart and source-pass notes.
+- [x] Refresh README media and verify final links/Git checks.
 
 Native512 migration (2026-10-11; investigation section52):
 

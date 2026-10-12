@@ -197,11 +197,8 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
     depth = np.full((height, width), -np.inf)
     light = np.array([-0.35, 0.6, 0.72])
     light /= np.linalg.norm(light)
-    ordered=list(zip(model['meshes'],posed))
-    if any(m.get('item_alpha_blend') for m in model['materials']):
-        ordered.sort(key=lambda pair:(bool(model['materials'][pair[0]['material_index']].get('item_alpha_blend')),
-                                       np.mean((pair[1][0]-center)@view,axis=0)[2] if pair[1][0] is not None else 0))
-    for mesh, (positions, normals) in ordered:
+    from .game_watch import draw_passes
+    for mesh, (positions, normals), pass_type in draw_passes(model,posed,center,view):
         if positions is None:
             continue
         projected = (positions - center) @ view
@@ -279,8 +276,8 @@ def render_frame(model, posed, textures, view, width, height, center, pixels_per
                 output[mask]=np.clip(np.rint(combined[mask]),0,255).astype('uint8')
             else:
                 mask &= rgb[..., 3]*alpha >= 128
-                output[mask] = np.clip(rgb[mask], 0, 255).astype(np.uint8)
-                region[mask] = z[mask]
+                if pass_type!='outline-depth':output[mask] = np.clip(rgb[mask], 0, 255).astype(np.uint8)
+                if pass_type!='outline-color':region[mask] = z[mask]
     return Image.fromarray(color)
 
 

@@ -71,7 +71,11 @@ def visible_drawables(model,states=None):
     groups=model["visibility"]["groups"]
     states=states if states is not None else model["visibility"]["defaults"]
     hidden={d for group in groups for option in group for d in option}
+    outlines=model['visibility'].get('outline_groups',[])
+    hidden.update(d for group in outlines for option in group for d in option)
     visible=set(model["visibility"]["base"])-hidden
     for i,group in enumerate(groups):
+        if 0<=states[i]<len(group):visible.update(group[states[i]])
+    for i,group in enumerate(outlines):
         if 0<=states[i]<len(group):visible.update(group[states[i]])
     return visible

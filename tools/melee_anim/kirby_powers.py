@@ -61,6 +61,8 @@ def descriptor(repo, power, costume):
         if row is None:row=ar.pointer(vis+cls*4)
         classes.append({'groups':visibility_lookup(ar,row,count)})
     result['classes']=classes
+    if power=='game-and-watch':
+        result['outline_groups']=visibility_lookup(ar,ar.pointer(root+24),count)
     return result
 
 
@@ -114,7 +116,8 @@ def model_for_power(repo, power, costume):
     if not valid:
         target,_=export_fighter(repo/'orig/GALE01/files',folder,4,costume,
             archive_path=d['body'] or d['archive'],root_symbol=d['symbol'],
-            root_offset=None if d['body'] else d['hat_root'],copy_classes=d['classes'],reflection_preview=d['fighter_kind']==13)
+            root_offset=None if d['body'] else d['hat_root'],copy_classes=d['classes'],reflection_preview=d['fighter_kind']==13,
+            outline_groups=d.get('outline_groups'))
         model=json.loads(target.read_text())
         model.update(kirby_power=power,kirby_part_mask=d['mask'],kirby_appearance_mode='body' if d['body'] else 'hat')
         if power=='game-and-watch':
@@ -123,6 +126,8 @@ def model_for_power(repo, power, costume):
             for mat in model['materials']:mat.update(diffuse_rgba=color,alpha=1.0,unlit=True)
             model['runtime_root_scale']=[ar.f32(attrs),1,1]
             model['outline_rgba']=list(ar.read(attrs+8,4))
+            from .export_model import configure_outline_materials
+            configure_outline_materials(model,model['outline_rgba'])
         target.write_text(json.dumps(model,separators=(',',':'))+'\n')
         needed={'model.json'}|{t['image_file'] for m in model['materials'] for t in m['textures'] if t.get('image_file')}
         marker.write_text(json.dumps({'key':key,'files':{n:hashlib.sha256((folder/n).read_bytes()).hexdigest() for n in needed}}))

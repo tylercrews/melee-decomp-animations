@@ -17,6 +17,8 @@ Turn Super Smash Bros. Melee animations into transparent GIFs and PNGs. This Win
 
 The roster also includes Giga Bowser, both wireframes, Master Hand, Crazy Hand and Sandbag. Selected attacks include held items, character props and special effects. Multipart moves have combined playback presets, with their individual phases hidden by default. Lighting, effects and some runtime behavior remain approximate. **MP4 export is still future work.**
 
+Game & Watch uses the game's original outline meshes, so his border scales with the character and remains visible in smaller exports. Kirby's Game & Watch appearance uses its own original outline meshes too.
+
 | Victory pose | Clapping | A paused frame |
 | --- | --- | --- |
 | ![Mario's third victory pose](docs/media/mario-victory.gif) | ![Mr. Game & Watch clapping](docs/media/game-and-watch-clap.gif) | ![Pikachu's sleeping victory pose](docs/media/pikachu-sleep.png) |

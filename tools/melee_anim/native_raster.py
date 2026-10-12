@@ -66,7 +66,7 @@ class NativeRaster:
             "glTexImage2D":[ui,integer,integer,integer,integer,integer,ui,ui,ptr],
             "glReadPixels":[integer,integer,integer,integer,ui,ui,ptr],"glPixelStorei":[ui,integer],"glFinish":[],
             "glCullFace":[ui],"glFrontFace":[ui],"glGetError":[],"glGetString":[ui]}
-        specs.update(glBlendFunc=[ui,ui],glDepthMask=[W.BYTE])
+        specs.update(glBlendFunc=[ui,ui],glDepthMask=[W.BYTE],glColorMask=[W.BYTE]*4)
         for name, args in specs.items():
             api(self.gl,name,C.c_uint if name=="glGetError" else C.c_char_p if name=="glGetString" else None,args)
         self.renderer = self.gl.glGetString(0x1F01).decode()
@@ -109,11 +109,8 @@ class NativeRaster:
             return Image.alpha_composite(Image.new('RGBA',result.size,background),result)
         self.gl.glClearColor(*(v/255 for v in background)); self.gl.glClear(0x4100)
         light=np.array([-.35,.6,.72]); light/=np.linalg.norm(light)
-        ordered=list(zip(model['meshes'],posed))
-        if translucent:
-            ordered.sort(key=lambda pair:(bool(model['materials'][pair[0]['material_index']].get('item_alpha_blend')),
-                                           np.mean((pair[1][0]-center)@view,axis=0)[2] if pair[1][0] is not None else 0))
-        for mesh,(positions,normals) in ordered:
+        from .game_watch import draw_passes
+        for mesh,(positions,normals),pass_type in draw_passes(model,posed,center,view):
             if positions is None:
                 continue
             mat=model["materials"][mesh["material_index"]]
@@ -122,6 +119,10 @@ class NativeRaster:
                 self.gl.glDepthMask(0);self.gl.glAlphaFunc(0x0206,.001)
             else:
                 self.gl.glDisable(0x0BE2);self.gl.glDepthMask(1);self.gl.glAlphaFunc(0x0206,.5)
+            depth_only=pass_type=='outline-depth'
+            self.gl.glColorMask(*([0]*4 if depth_only else [1]*4))
+            self.gl.glDepthFunc(0x0203 if depth_only else 0x0201)
+            if pass_type=='outline-color':self.gl.glDepthMask(0)
             candidates=[t for t in mat["textures"] if t.get("coordinate_type",0)==0 and t.get("image_file") in textures]
             diffuse_only=mat.get('copy_diffuse_only') or mat.get('diffuse_texture_only')
             if diffuse_only:
@@ -159,7 +160,7 @@ class NativeRaster:
             indices=np.ascontiguousarray(mesh["triangles"],dtype=np.uint32)
             self.gl.glVertexPointer(3,0x1406,0,verts.ctypes.data);self.gl.glColorPointer(4,0x1406,0,colors.ctypes.data)
             self.gl.glDrawElements(4,indices.size,0x1405,indices.ctypes.data)
-        self.gl.glDepthMask(1);self.gl.glDisable(0x0BE2)
+        self.gl.glDepthMask(1);self.gl.glDisable(0x0BE2);self.gl.glColorMask(1,1,1,1);self.gl.glDepthFunc(0x0201)
         pixels=np.empty((height,width,4),dtype=np.uint8)
         self.gl.glFinish();self.gl.glReadPixels(0,0,width,height,0x1908,0x1401,pixels.ctypes.data)
         error=self.gl.glGetError()
@@ -171,7 +172,7 @@ class NativeRaster:
         self.gl.glReadPixels(0,0,width,height,0x1902,0x1406,depth.ctypes.data)
         mask=np.flipud(depth)<.999999
         pixels[:,:,3]=np.where(mask,255,background[3])
-        if model.get('outline_rgba'):
+        if model.get('outline_rgba') and not model.get('outline_geometry'):
             expanded=np.asarray(Image.fromarray((mask*255).astype(np.uint8)).filter(ImageFilter.MaxFilter(3)))>0
             border=expanded&~mask;outline=np.array(model['outline_rgba'])
             if background[3]==0:
