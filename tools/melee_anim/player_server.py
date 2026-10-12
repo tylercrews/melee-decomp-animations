@@ -18,8 +18,7 @@ from .render_settings import MASTER_SIZE
 def make_server(root, port=8765, catalog=None):
     root = Path(root).resolve()
     catalog = DownloadCatalog(root) if catalog is None else catalog
-    # Serialize exports to bound Pillow's memory use for long, large GIFs.
-    lock = threading.Lock()
+    # Catalog render/artifact locks protect each clip; long batches yield.
     # Bound waiting render/download requests as well as active work.
     slots = threading.BoundedSemaphore(4)
 
@@ -52,7 +51,7 @@ def make_server(root, port=8765, catalog=None):
                 values = parse_qs(url.query, strict_parsing=True)
                 allowed = {'character', 'action', 'costume', 'cycle', 'pitch', 'yaw', 'roll', 'effects', 'power', 'center'}
                 if url.path in ('/export','/prepare-export'):
-                    allowed |= {'size', 'kind', 'scope', 'frame', 'view'}
+                    allowed |= {'size', 'kind', 'scope', 'frame', 'view','hats'}
                 if set(values)-allowed or any(len(v) != 1 for v in values.values()):
                     raise ValueError('Unknown or repeated download option')
                 options = {k: v[0] for k, v in values.items()}
@@ -71,13 +70,12 @@ def make_server(root, port=8765, catalog=None):
                     self.send_error(503, 'Renderer is busy; retry after the current render completes')
                     return
                 try:
-                    with lock:
-                        if url.path == '/rotation':
-                            data = json.dumps(catalog.preview(**options)).encode()
-                        else:
-                            target, filename, mime = catalog.export(**options)
-                            if url.path=='/prepare-export':
-                                data=json.dumps({'url':'/'+quote(target.resolve().relative_to(root).as_posix()),'filename':filename}).encode()
+                    if url.path == '/rotation':
+                        data = json.dumps(catalog.preview(**options)).encode()
+                    else:
+                        target, filename, mime = catalog.export(**options)
+                        if url.path=='/prepare-export':
+                            data=json.dumps({'url':'/'+quote(target.resolve().relative_to(root).as_posix()),'filename':filename}).encode()
                 finally:
                     slots.release()
             except (ValueError, TypeError) as error:

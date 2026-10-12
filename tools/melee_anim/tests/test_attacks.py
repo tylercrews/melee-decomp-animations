@@ -133,7 +133,7 @@ class AttackTests(unittest.TestCase):
             self.assertEqual(self.calls[1][self.calls[1].index('--ground-effects')+1],'on')
             catalog=DownloadCatalog(self.root,clips=[self.clip]);catalog.attacks=self.cache
             with self.assertRaises(ValueError):catalog.preview(character='game-and-watch',action='tech-199_source',effects='invalid')
-            with self.assertRaises(ValueError):catalog.export(character='game-and-watch',action='tech-199_source',effects='on',scope='all')
+            with self.assertRaises(ValueError):catalog.export(character='game-and-watch',action='tech-199_source',effects='on',scope='all',hats='bad')
             self.assertEqual(len(catalog.preview(character='game-and-watch',action='tech-199_source',effects='on')['frames']),3)
 
 

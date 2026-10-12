@@ -19,7 +19,7 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -145,7 +145,7 @@ for (const size of [128,256,1024,2048]) {
 elements.downloadsize.value='512';elements.downloadsize.onchange();
 assert.equal(elements.sizewarning.hidden,true,'switching away from X-Large hides the warning');
 assert.match(elements.still.href,/frame_0067.png$/);
-assert(html.includes('download="melee-all-characters-all-animations.zip"'));
+assert.match(html,/id="allzip" download>Download matching animations for all characters/);
 assert(fs.existsSync(path.join(path.dirname(page), 'downloads/melee-all-characters-all-animations.zip')));
 for (const [slug,length] of [['luigi',20],['kirby',34],['link',12]]) {
   elements.character.value=slug;elements.character.onchange();
@@ -383,7 +383,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.get('kind'),'gif');
   assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.get('view'),'1');
   assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.has('frame'),false,'animation ticks do not reload right-click GIF');
-  assert.equal(servedElements.allzip.hidden,true);
+  assert.equal(servedElements.allzip.hidden,false);
   servedElements.scrub.value='3';servedElements.scrub.oninput();
   assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('frame'),'3');
   assert.equal(new URL(servedElements.framezip.href,'http://localhost').searchParams.get('scope'),'colors');
@@ -411,7 +411,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(servedElements.groundeffects.disabled,false);
   let techRequest=requests.shift();assert.equal(new URL(techRequest.url,'http://localhost').searchParams.get('effects'),'on');
   complete(techRequest,'tech-on');await settle();
-  assert.equal(servedElements.allzip.hidden,true);
+  assert.equal(servedElements.allzip.hidden,false);
   assert.equal(new URL(servedElements.saveimage.src,'http://localhost').searchParams.get('effects'),'on');
   assert.match(servedElements.gif.download,/-ground-effects-/);
   servedElements.scrub.value='3';servedElements.scrub.oninput();
@@ -469,7 +469,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('power'),'mario');
   assert.equal(new URL(servedElements.framezip.href,'http://localhost').searchParams.get('power'),'mario');
   assert.match(servedElements.gif.download,/-power-mario/);
-  assert.equal(servedElements.allzip.hidden,true);
+  assert.equal(servedElements.allzip.hidden,false);
   servedElements.kirbypower.value='luigi';servedElements.kirbypower.onchange();const staleHat=requests.at(-1);
   servedElements.kirbypower.value='none';servedElements.kirbypower.onchange();
   const noneFrame=servedElements.frame.src;
@@ -722,6 +722,42 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(elements.effecthint.hidden,false);assert.match(elements.effecthint.textContent,/Sleep bubbles/);
   elements.action.value='victory3_wait';elements.action.onchange();assert.match(elements.effecthint.textContent,/fading bubbles/);
   elements.action.value='victory1_source';elements.action.onchange();assert.equal(elements.effecthint.hidden,true);
+
+  // Batch scopes track the selected type/family, independently of costume and partial display.
+  elements.character.value='mario';elements.character.onchange();elements.animationtype.value='victory';elements.animationtype.onchange();
+  assert.match(elements.allzip.textContent,/738 GIFs/);assert.match(elements.allzip.textContent,/victory poses/);
+  assert.equal(elements.kirbymode.checked,false);
+  elements.kirbymode.checked=true;elements.kirbymode.onchange();
+  assert.match(elements.allzip.textContent,/1638 GIFs/);
+  assert.equal(new URL(elements.allzip.href).searchParams.get('hats'),'all');
+  assert(!new URL(elements.gif.href).searchParams.has('hats'),'individual files keep the selected appearance');
+  elements.animationtype.value='clapping';elements.animationtype.onchange();
+  assert.match(elements.allzip.textContent,/273 GIFs/);
+  elements.synccycle.checked=true;elements.synccycle.onchange();assert.match(elements.allzip.textContent,/synced/);
+  assert.equal(new URL(elements.allzip.href).searchParams.get('cycle'),'sync');
+  elements.character.value='kirby';elements.character.onchange();
+  elements.scrub.value='3';elements.scrub.oninput();
+  assert.equal(new URL(elements.framezip.href).searchParams.get('hats'),'all');
+  assert.match(elements.animationzip.textContent,/156 GIFs/);
+  const retainedIndex=data('index');elements.kirbymode.checked=false;elements.kirbymode.onchange();
+  assert.equal(data('index'),retainedIndex);assert.equal(data('playing'),false);
+  assert.match(elements.allzip.textContent,/123 GIFs/);
+  elements.character.value='fox';elements.character.onchange();elements.animationtype.value='attack';elements.animationtype.onchange();
+  elements.action.value='attack-295-combined_source';elements.action.onchange();
+  const family=data('clips[current].batch_family');
+  const matching=data('clips').filter(c=>c.batch_family===family&&!c.batch_partial);
+  assert(matching.some(c=>c.character==='mario'));assert(matching.some(c=>c.character==='falco'));
+  assert(matching.some(c=>c.sequence));assert(matching.every(c=>!c.batch_partial));
+  assert.match(elements.allzip.textContent,/Neutral special/);
+  assert.equal(new URL(elements.allzip.href).searchParams.get('scope'),'all');
+  elements.hidepartials.checked=false;elements.hidepartials.onchange();
+  const sameCount=elements.allzip.textContent;elements.action.value='attack-295_source';elements.action.onchange();
+  assert.equal(elements.allzip.textContent,sameCount,'a phase and its combined action select the same all-character family');
+  elements.character.value='kirby';elements.character.onchange();elements.animationtype.value='clapping';elements.animationtype.onchange();
+  elements.kirbymode.checked=true;elements.kirbymode.onchange();
+  await elements.animationzip.onclick({preventDefault(){}});
+  assert.equal(new URLSearchParams(new URL(context.location.href).hash.slice(1)).get('hats'),'all');
+  console.log('Scoped victory/clap/attack groups, counts, all hats/colors, exact stills, retained frame and batch handoff: PASS');
   console.log('Shared roster color names and exact file-to-HTTP batch handoff: PASS');
   console.log('Selector rows, default partial filter, all-character choices, contiguous families, fallback, paused retention and handoff: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');

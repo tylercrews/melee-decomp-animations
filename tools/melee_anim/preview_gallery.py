@@ -84,9 +84,11 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 </select></label><small id="sizewarning" role="status" aria-live="polite" hidden>Extremely large GIF files</small>
 <small id="upsizenotice" role="status" aria-live="polite" hidden>Upsized from the 512 × 512 render; no additional detail.</small>
 </div>
+<div class="controls" id="downloadoptions"><label><input id="kirbymode" type="checkbox" autocomplete="off"> Kirby Mode - include all hats all colors</label>
+<small>Adds every Kirby copy appearance to batch ZIPs. First downloads may need additional rendering.</small></div>
 <div class="downloads" id="downloadpanel"><a class="download primary" id="gif" download>Download GIF</a>
 <a class="download" id="animationzip" download>Download this animation in all colors</a>
-<a class="download" id="allzip" download="melee-all-characters-all-animations.zip" href="downloads/melee-all-characters-all-animations.zip">Download all GIFs</a>
+<a class="download" id="allzip" download>Download matching animations for all characters</a>
 <a class="download" id="still" hidden download>Download paused frame PNG</a>
 <a class="download" id="framezip" hidden download>Download paused frame in all colors</a>
 <a id="open" target="_blank" rel="noopener">Open GIF</a></div>
@@ -98,6 +100,11 @@ If it is closed, start it from the repository with <code>python -m tools.melee_a
 <p>This prototype uses original models and motion curves with approximate shading. Common swing weapons and supported character props are included in attacks. Ground-impact effects are optional; projectiles, unsupported props, complete game scripts, dynamics and audio remain unfinished. Native seams are preserved.</p>
 <script>
 const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__, powers=__POWERS__;
+const batchGroups=new Map();for(const c of clips){if(c.batch_partial)continue;let group=batchGroups.get(c.batch_family);if(!group){group={count:0,kirby:0,label:c.batch_label};batchGroups.set(c.batch_family,group)}group.count++;if(c.character==='kirby')group.kirby++}
+const kirbymode=document.getElementById('kirbymode');let includeKirbyHats=false;kirbymode.checked=false;
+function batchHats(){return includeKirbyHats?'all':'off'}
+function hatsName(name){return includeKirbyHats?name.replace(/(\.[^.]+)$/,'-kirby-all-hats-all-colors$1'):name}
+function batchMarkedName(name,scope){let marked=markedName(name);if(scope==='all')marked=marked.replace(`-power-${powerSetting()}`,'');const kirby=scope==='all'?batchGroups.get(clips[current].batch_family)?.kirby:character.value==='kirby';if(includeKirbyHats&&kirby){marked=marked.replace(`-power-${powerSetting()}`,'');marked=hatsName(marked)}return marked}
 const animationTypes=new Map(animations.filter(a=>a.type).map(a=>[a.character+':'+a.key,a.type]));
 const kirbypower=document.getElementById('kirbypower'),powerlabel=document.getElementById('powerlabel');
 let kirbyPower='none';
@@ -163,7 +170,7 @@ result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotation
 }catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
 rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
 applyangle.onclick=()=>{angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
-function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled;kirbypower.value=kirbyPower;centerjump.checked=centerJumpEnabled;hidepartials.checked=partialsHidden}
+function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled;kirbypower.value=kirbyPower;centerjump.checked=centerJumpEnabled;hidepartials.checked=partialsHidden;kirbymode.checked=includeKirbyHats}
 resetangle.onclick=()=>{angles=[0,0,0];syncAngleInputs();loadRotation()};
 // Form restoration can run after this script; also reset a cached page when
 // returning through browser history. Explicit file-to-server handoffs still
@@ -221,30 +228,36 @@ document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frame
 function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
 costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:cycleMode()});
 if(isHop())query.set('center',centerSetting());
-if(hasPower())query.set('power',powerSetting());
+if(hasPower()&&scope!=='all'&&!(scope==='colors'&&includeKirbyHats))query.set('power',powerSetting());
+if(scope!=='costume'&&includeKirbyHats)query.set('hats','all');
 if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
 if(hasAngle()){['pitch','yaw','roll'].forEach((key,i)=>query.set(key,String(angles[i])))}return `${exportBase}/export?${query}`}
 function updateDownloads(){if(current<0)return;let c=clips[current];let a=animations.find(a=>a.key===c.action_key&&a.character===c.character);
 let original=downloadsize.value==='512'&&!useMinimum()&&!hasAngle()&&!hasPower()&&!c.lazy;
 gif.href=original?c.gif:exportURL('gif','costume');gif.download=sizedName(angleName(effectName(markedName(c.download_name))));
 open.href=original?c.gif:exportURL('gif','costume')+'&view=1';
-archive.href=original?a.zip:exportURL('gif','colors');archive.download=sizedName(angleName(effectName(markedName(a.download_name))));
-allzip.href=original?'downloads/melee-all-characters-all-animations.zip':exportURL('gif','all');
-allzip.hidden=Boolean(c.lazy)||hasPower();
-allzip.textContent=cycleMode()==='sync'?`Download all ${clips.filter(c=>c.sync_cycle).length} synced claps`:`Download all ${preparedCount} results/taunt GIFs`;
-allzip.download=cycleMode()==='sync'?sizedName(angleName('melee-all-characters-clapping-sync.zip')):sizedName(angleName(markedName('melee-all-characters-all-animations.zip')));
+const colorHats=includeKirbyHats&&c.character==='kirby';
+archive.href=original&&!colorHats?a.zip:exportURL('gif','colors');archive.download=sizedName(angleName(effectName(batchMarkedName(a.download_name,'colors'))));
+archive.textContent=`Download this animation — ${a.color_count*(colorHats?powers.length:1)} GIFs${colorHats?' (all Kirby hats/colors)':''}`;
+allzip.href=exportURL('gif','all');
+const group=batchGroups.get(c.batch_family);allzip.hidden=!group||group.count===0;
+const count=group?group.count+(includeKirbyHats?group.kirby*(powers.length-1):0):0;
+allzip.textContent=`Download all ${group?.label||'matching animations'}${cycleMode()==='sync'?' (synced)':''} — ${count} GIFs`;
+let allName='melee-all-characters-'+(group?.label||'matching').toLowerCase().replace(/[^a-z0-9]+/g,'-');
+if(cycleMode()==='sync')allName='melee-all-characters';
+allzip.download=sizedName(angleName(effectName(batchMarkedName(allName+'.zip','all'))));
 still.href=original?c.frames[index]:exportURL('png','costume');
 still.download=sizedName(angleName(effectName(markedName(c.download_name)).replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`)));
-framezip.href=original?`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`:exportURL('png','colors');
-framezip.download=sizedName(angleName(effectName(markedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`))))}
+framezip.href=original&&!colorHats?`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`:exportURL('png','colors');
+framezip.download=sizedName(angleName(effectName(batchMarkedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`,'colors'))))}
 let batchBusy=false,pendingBatch=null;
 const batchButtons=[archive,framezip,allzip];
-function playerHandoff(batch=null){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show'});if(batch)query.set('batch',batch);return `${exportBase}/player.html#${query}`}
+function playerHandoff(batch=null){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show',hats:batchHats()});if(batch)query.set('batch',batch);return `${exportBase}/player.html#${query}`}
 function runPendingBatch(){if(location.protocol!=='http:'||!pendingBatch)return;const button={gif:archive,png:framezip,all:allzip}[pendingBatch];pendingBatch=null;if(button&&!button.hidden)batchDownload({preventDefault(){}},button)}
 function batchState(busy,active){batchBusy=busy;for(const button of batchButtons){button.ariaDisabled=String(busy);button.ariaBusy=String(busy&&button===active);button.tabIndex=busy?-1:0;button.className=(button.className||'download').replace(/\s*busy\b/g,'')+(busy&&button===active?' busy':'')}}
 async function batchDownload(event,button){event.preventDefault();if(batchBusy)return;
 const href=button.href,filename=button.download,status=document.getElementById('downloadstatus');
-batchState(true,button);status.textContent='Preparing download… Please wait.';
+batchState(true,button);status.textContent='Preparing download… Additional characters, colors or Kirby hats may need rendering. Please wait.';
 try{let ready=href;
 if(location.protocol!=='http:'&&href.includes('/export?')){location.href=playerHandoff(button===framezip?'png':button===allzip?'all':'gif');return}
 if(href.includes('/export?')){const response=await fetch(href.replace('/export?','/prepare-export?'));if(!response.ok)throw Error(`Preparation failed (${response.status}). Try again.`);const result=await response.json();ready=exportBase+result.url}
@@ -275,13 +288,14 @@ let c=clips[current];frame.hidden=false;gif.hidden=false;open.hidden=false;scrub
 loop.checked=true;playing=true;play.textContent='Pause';
 gif.href=c.gif;gif.download=c.download_name;gif.textContent=`Download GIF / ${c.costume_label}`;open.href=c.gif;
 updateCycleInfo();
-c.frames.forEach(src=>{let image=new Image();image.src=src});if(render)loadRotation()}
+c.frames.forEach(src=>{let image=new Image();image.src=src});updateDownloads();if(render)loadRotation()}
 character.onchange=()=>{colors();actions();select()};animationtype.onchange=()=>{actions();select()};
 kirbypower.onchange=()=>{kirbyPower=kirbypower.value;loadRotation()};
 action.onchange=()=>{animationtype.value=typeForAction(action.value);actions();select()};costume.onchange=select;
 hidepartials.onchange=()=>{let old=action.value;partialsHidden=hidepartials.checked;actions();if(action.value!==old)select()};
 function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048';document.getElementById('upsizenotice').hidden=!['1024','2048'].includes(downloadsize.value)}
 downloadsize.onchange=()=>{updateSizeWarning();show()};
+kirbymode.onchange=()=>{includeKirbyHats=kirbymode.checked;show()};
 groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[current].ground_effect)loadRotation()};
 centerjump.onchange=()=>{centerJumpEnabled=centerjump.checked;if(isHop())loadRotation()};
 function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle()||hasPower())loadRotation();else show()}
@@ -293,6 +307,7 @@ function tick(now){if(current>=0&&playing&&!previewUnavailable()){let c=clips[cu
 while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.checked)index=0;else{playing=false;play.textContent='Play';break}}show()}
 last=now;requestAnimationFrame(tick)}
 function restoreSelection(){let incoming=new URLSearchParams((location.hash||'').slice(1));
+includeKirbyHats=incoming.get('hats')==='all';kirbymode.checked=includeKirbyHats;
 pendingBatch=['gif','png','all'].includes(incoming.get('batch'))?incoming.get('batch'):null;
 // Consume this one-time handoff so refresh/reopen cannot replay old angles.
 if(location.hash&&typeof history!=='undefined')history.replaceState(null,'',location.pathname+location.search);
@@ -525,6 +540,9 @@ def main():
             {'id':cid,'label':next(c['costume_label'] for c in owned if c['costume_id']==cid)}
             for cid in sorted({c['costume_id'] for c in owned})]})
     characters.sort(key=lambda character: character['label'].casefold())
+    from .batch_exports import enrich
+    catalog_path=args.root/'attack-catalog.json'
+    clips=enrich(clips,json.loads(catalog_path.read_text()) if catalog_path.is_file() else {})
     safe_json = lambda value: json.dumps(value).replace("<", "\\u003c")
     from .kirby_powers import powers
     content = TEMPLATE.replace("__CLIPS__",safe_json(clips)).replace("__ANIMATIONS__",safe_json(animations)).replace("__CHARACTERS__",safe_json(characters)).replace('__POWERS__',safe_json(powers()))
