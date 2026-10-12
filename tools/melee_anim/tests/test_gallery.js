@@ -5,6 +5,12 @@ const path = require('node:path');
 const vm = require('node:vm');
 const page = path.resolve('build/melee_anim/preview/player.html');
 const html = fs.readFileSync(page, 'utf8');
+for(const [row,ids] of [['charactercontrols',['character','kirbypower','costume']],['animationcontrols',['animationtype','action','hidepartials']],['playbackcontrols',['play','restart','loop']]]){
+  const markup=html.match(new RegExp(`<div class="controls" id="${row}">([\\s\\S]*?)<\\/div>`))[1];
+  const positions=ids.map(id=>markup.indexOf(`id="${id}"`));
+  assert(positions.every(p=>p>=0));assert.deepEqual(positions,[...positions].sort((a,b)=>a-b));
+}
+assert.match(html,/<input id="hidepartials" type="checkbox" checked autocomplete="off"> Hide partial animations/);
 assert.match(html,/<option value="tech">Knockdown<\/option>/);
 assert.match(html,/<option value="movement">Movement<\/option>/);
 assert.match(html,/\.stage\{background:transparent;/);
@@ -13,13 +19,15 @@ assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/)
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: [], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
   performance: {now: () => 0}, Image: class {}, requestAnimationFrame: callback => {context.nextFrame = callback;}});
 vm.runInContext(script, context);
 const data = expression => vm.runInContext(expression, context);
+assert.equal(elements.hidepartials.checked,true,'partial clips are hidden on fresh loads');
+elements.hidepartials.checked=false;elements.hidepartials.onchange();
 assert.equal(elements.sizewarning.hidden,true,'default size has no warning');
 assert.equal(elements.action.options.length, 1);
 assert.equal(elements.actionlabel.hidden, true);
@@ -211,6 +219,8 @@ const servedContext=vm.createContext({document:{getElementById:id=>servedElement
     performance:context.performance, Image:context.Image, requestAnimationFrame:()=>{},
     fetch:url=>new Promise(resolve=>requests.push({url,resolve}))});
 vm.runInContext(script,servedContext);
+assert.equal(servedElements.hidepartials.checked,true);
+servedElements.hidepartials.checked=false;servedElements.hidepartials.onchange();
 // Fresh loads override stale restored form values, even if restoration is late.
 for(const id of ['pitch','yaw','roll'])assert.equal(servedElements[id].value,'0');
 for(const id of ['pitch','yaw','roll'])servedElements[id].value='75';
@@ -554,7 +564,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
     servedElements.animationtype.value=type;servedElements.animationtype.onchange();
     servedElements.action.value=key;servedElements.action.onchange();
     assert.equal(servedElements.sequencehint.hidden,false);
-    assert.match(servedElements.sequencehint.textContent,/individual phases remain/);
+    assert.match(servedElements.sequencehint.textContent,/Uncheck Hide partial animations/);
     assert.equal(vm.runInContext('clips[current].authored_loop',servedContext),false);
     complete(requests.at(-1),'combined-'+slug);await settle();
     servedElements.scrub.value='20';servedElements.scrub.oninput();
@@ -578,6 +588,57 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   servedElements.action.value='attack-44_source';servedElements.action.onchange();
   assert.equal(servedElements.effecthint.hidden,true);
   console.log('Reflector/magnet/cyclone hints, combined phases and effect export URLs: PASS');
+  // Fresh pages hide parts for every family; showing parts keeps each family
+  // contiguous, including shared ground/air Kirby Cutter phase variants.
+  const filteredElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const filteredContext=vm.createContext({document:{getElementById:id=>filteredElements[id],createElement:()=>({})},location:{protocol:'file:'},URLSearchParams,
+    performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{}});
+  vm.runInContext(script,filteredContext);
+  const filtered=expression=>vm.runInContext(expression,filteredContext);
+  assert.equal(filteredElements.hidepartials.checked,true);
+  for(const c of filtered('characters')){
+    filteredElements.character.value=c.slug;filteredElements.character.onchange();
+    for(const type of ['attack','tech']){
+      const owned=filtered('animations').filter(a=>a.character===c.slug&&a.type===type&&!a.unavailable);
+      if(!owned.length)continue;
+      filteredElements.animationtype.value=type;filteredElements.animationtype.onchange();
+      const keys=filteredElements.action.options.map(o=>o.value);
+      for(const a of owned)assert.equal(keys.includes(a.key),!a.partial,`${c.slug}/${a.key}`);
+    }
+  }
+  filteredElements.character.value='fox';filteredElements.character.onchange();
+  filteredElements.animationtype.value='attack';filteredElements.animationtype.onchange();
+  assert(filteredElements.action.options.some(o=>o.value==='attack-315_source'),'reflection response is not a hidden combined phase');
+  filteredElements.hidepartials.checked=false;filteredElements.hidepartials.onchange();
+  let keys=filteredElements.action.options.map(o=>o.value),start=keys.indexOf('attack-295-combined_source');
+  assert.deepEqual(keys.slice(start,start+4),['attack-295-combined_source','attack-295_source','attack-296_source','attack-297_source']);
+  filteredElements.action.value='attack-296_source';filteredElements.action.onchange();
+  filteredElements.costume.value='2';filteredElements.costume.onchange();
+  filteredElements.scrub.value='5';filteredElements.scrub.oninput();
+  assert.equal(new URLSearchParams(new URL(filteredContext.location.href).hash.slice(1)).get('partials'),'show');
+  filteredElements.hidepartials.checked=true;filteredElements.hidepartials.onchange();
+  assert.equal(filteredElements.action.value,'attack-295-combined_source');assert.equal(filteredElements.costume.value,'2');
+  assert.equal(filtered('index'),0);
+  filteredElements.scrub.value='9';filteredElements.scrub.oninput();
+  filteredElements.hidepartials.checked=false;filteredElements.hidepartials.onchange();
+  assert.equal(filteredElements.action.value,'attack-295-combined_source');assert.equal(filtered('index'),9);assert.equal(filtered('playing'),false);
+  filteredElements.character.value='kirby';filteredElements.character.onchange();
+  keys=filteredElements.action.options.map(o=>o.value);
+  const cutterKeys=['attack-324-combined_source','attack-328-combined_source',...Array.from({length:8},(_,i)=>`attack-${324+i}_source`)];
+  const cutterPositions=cutterKeys.map(key=>keys.indexOf(key)).sort((a,b)=>a-b);
+  assert(cutterPositions.every((p,i)=>p===cutterPositions[0]+i));
+  filteredElements.hidepartials.checked=true;filteredElements.hidepartials.onchange();
+  assert(Array.from({length:8},(_,i)=>`attack-${324+i}_source`).every(key=>!filteredElements.action.options.some(o=>o.value===key)));
+  filteredElements.character.value='mario';filteredElements.character.onchange();
+  filteredElements.animationtype.value='tech';filteredElements.animationtype.onchange();
+  assert.equal(filteredElements.action.options.length,5,'three tech rolls and two combined missed-tech choices');
+  // Existing links to individual phases remain usable without opting in again.
+  const linkElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:[],append(option){this.options.push(option)}}]));
+  const linkContext=vm.createContext({document:{getElementById:id=>linkElements[id],createElement:()=>({})},location:{protocol:'file:',hash:'#character=fox&action=attack-296_source&costume=2'},URLSearchParams,
+    performance:context.performance,Image:context.Image,requestAnimationFrame:()=>{}});
+  vm.runInContext(script,linkContext);
+  assert.equal(linkElements.hidepartials.checked,false);assert.equal(linkElements.action.value,'attack-296_source');assert.equal(linkElements.costume.value,'2');
+  console.log('Selector rows, default partial filter, all-character choices, contiguous families, fallback, paused retention and handoff: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

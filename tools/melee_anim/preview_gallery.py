@@ -30,7 +30,7 @@ body{font:16px system-ui;background:#161b22;color:#edf2f7;padding:32px;max-width
 h1{margin:0 0 8px;font-size:28px}p{color:#b5c0ce;line-height:1.5}select,button,input{font:inherit}
 select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;background:#263243;color:inherit}
 .controls,.downloads{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:20px 0}
-.controls label{display:flex;align-items:center;gap:8px}.download{display:inline-block;text-decoration:none}
+.controls label{display:flex;align-items:center;gap:8px;min-width:0;max-width:100%}.controls select{min-width:0;max-width:100%}.download{display:inline-block;text-decoration:none}
 .download.primary{background:#235da8;border-color:#3878cb}.download:hover{filter:brightness(1.15)}
 .stage{background:transparent;border:1px solid #354151;border-radius:12px;display:flex;justify-content:center;min-height:400px;align-items:center}
 .framewrap{position:relative;width:min(100%,512px)}#saveimage{position:absolute;inset:0;width:100%;height:100%;opacity:0}
@@ -39,15 +39,18 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 [hidden]{display:none!important}small{color:#b5c0ce}
 #sizewarning{color:#b59a19}
 </style><h1>Melee animation preview</h1>
-<p>Choose a character, animation type, and costume color, then save its GIF or download a bundle of colors.</p>
-<div class="controls">
+<p>Choose a character and costume color, then an animation type and animation. Save its GIF or download a bundle of colors.</p>
+<div class="controls" id="charactercontrols">
 <label>Character <select id="character" aria-label="Character"></select></label>
 <label id="powerlabel" hidden>Kirby Power <select id="kirbypower" aria-label="Kirby Power" autocomplete="off"></select></label>
+<label>Costume <select id="costume" aria-label="Costume color"></select></label></div>
+<div class="controls" id="animationcontrols">
 <label>Animation Type <select id="animationtype" aria-label="Animation Type">
 <option value="victory">Victory Pose</option><option value="taunt">Taunt</option>
 <option value="clapping">Clapping</option><option value="attack">Attack</option><option value="tech">Knockdown</option><option value="movement">Movement</option><option value="hit">Hit</option><option value="other">Other</option></select></label>
 <label id="actionlabel">Animation <select id="action" aria-label="Animation"></select></label>
-<label>Costume <select id="costume" aria-label="Costume color"></select></label>
+<label><input id="hidepartials" type="checkbox" checked autocomplete="off"> Hide partial animations</label></div>
+<div class="controls" id="playbackcontrols">
 <button id="play">Pause</button><button id="restart">Restart</button>
 <label><input id="loop" type="checkbox" checked autocomplete="off"> Repeat preview</label></div>
 <fieldset id="clapmodes" class="controls"><legend>Clapping mode</legend>
@@ -111,6 +114,8 @@ function isHop(){return ['movement-fullhop_source','movement-shorthop_source'].i
 function centerSetting(){return isHop()&&centerJumpEnabled?'on':'off'}
 function centeredName(name){return centerSetting()==='on'?name.replace(/(\.[^.]+)$/,'-centered$1'):name}
 const animationtype=document.getElementById('animationtype'), actionlabel=document.getElementById('actionlabel');
+const hidepartials=document.getElementById('hidepartials');
+let partialsHidden=true;hidepartials.checked=true;
 const action=document.getElementById('action'), costume=document.getElementById('costume'), frame=document.getElementById('frame'),
 play=document.getElementById('play'), restart=document.getElementById('restart'), loop=document.getElementById('loop'),
 scrub=document.getElementById('scrub'), clock=document.getElementById('time'), gif=document.getElementById('gif'),
@@ -140,7 +145,7 @@ function updateRotationState(){frame.hidden=previewUnavailable();saveimage.hidde
 document.getElementById('downloadpanel').hidden=previewUnavailable()}
 async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
 if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();return}
-if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting()});
+if(location.protocol!=='http:'){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show'});
 location.href=`${exportBase}/player.html#${query}`;return}
 rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
 updateRotationState();
@@ -157,7 +162,7 @@ result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotation
 }catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
 rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
 applyangle.onclick=()=>{angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
-function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled;kirbypower.value=kirbyPower;centerjump.checked=centerJumpEnabled}
+function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled;kirbypower.value=kirbyPower;centerjump.checked=centerJumpEnabled;hidepartials.checked=partialsHidden}
 resetangle.onclick=()=>{angles=[0,0,0];syncAngleInputs();loadRotation()};
 // Form restoration can run after this script; also reset a cached page when
 // returning through browser history. Explicit file-to-server handoffs still
@@ -176,9 +181,10 @@ function typeForAction(key){return animationTypes.get(character.value+':'+key)||
 function actions(){let old=action.value;let owned=animations.filter(a=>a.character===character.value);let available=new Set(owned.filter(a=>!a.unavailable).map(a=>typeForAction(a.key)));
 for(const option of animationtype.options){option.disabled=!available.has(option.value);option.hidden=option.disabled}
 if(!available.has(animationtype.value))animationtype.value=available.has('movement')?'movement':available.values().next().value;
-let list=owned.filter(a=>typeForAction(a.key)===animationtype.value);action.options.length=0;
+let list=owned.filter(a=>typeForAction(a.key)===animationtype.value&&(!partialsHidden||!a.partial));action.options.length=0;
 list.forEach(a=>{let o=document.createElement('option');o.value=a.key;o.textContent=a.unavailable?a.label+' — unavailable':a.label;o.disabled=Boolean(a.unavailable);action.append(o)});
-action.value=list.some(a=>a.key===old&&!a.unavailable)?old:list.find(a=>!a.unavailable).key;
+let replacement=owned.find(a=>a.key===old)?.combined_key;
+action.value=list.some(a=>a.key===old&&!a.unavailable)?old:list.some(a=>a.key===replacement&&!a.unavailable)?replacement:list.find(a=>!a.unavailable).key;
 actionlabel.hidden=list.filter(a=>!a.unavailable).length<=1}
 colors();actions();
 allzip.textContent=`Download all ${preparedCount} results/taunt GIFs`;
@@ -194,7 +200,7 @@ function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value
 function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
 document.getElementById('movementhint').hidden=!c.action_key.startsWith('movement-');
 document.getElementById('sequencehint').hidden=!c.sequence;
-document.getElementById('sequencehint').textContent=c.sequence?`Combined sequence: ${c.sequence.policy} The individual phases remain available. Repeat Preview repeats the entire sequence.`:'';
+document.getElementById('sequencehint').textContent=c.sequence?`Combined sequence: ${c.sequence.policy} Uncheck Hide partial animations to see the individual phases. Repeat Preview repeats the entire sequence.`:'';
 document.getElementById('effecthint').hidden=!c.character_effects?.length;
 document.getElementById('effecthint').textContent=c.character_effects?.length?`${[...new Set(c.character_effects.map(e=>e.name))].join(', ')} effects are included in the preview and GIF/PNG downloads. Extra particles and collision responses are not included yet.`:'';
 document.getElementById('itemhint').hidden=!c.held_item;
@@ -255,6 +261,7 @@ c.frames.forEach(src=>{let image=new Image();image.src=src});if(render)loadRotat
 character.onchange=()=>{colors();actions();select()};animationtype.onchange=()=>{actions();select()};
 kirbypower.onchange=()=>{kirbyPower=kirbypower.value;loadRotation()};
 action.onchange=()=>{animationtype.value=typeForAction(action.value);actions();select()};costume.onchange=select;
+hidepartials.onchange=()=>{let old=action.value;partialsHidden=hidepartials.checked;actions();if(action.value!==old)select()};
 function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048'}
 downloadsize.onchange=()=>{updateSizeWarning();show()};
 groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[current].ground_effect)loadRotation()};
@@ -272,7 +279,11 @@ function restoreSelection(){let incoming=new URLSearchParams((location.hash||'')
 if(location.hash&&typeof history!=='undefined')history.replaceState(null,'',location.pathname+location.search);
 if(characters.some(c=>c.slug===incoming.get('character'))){character.value=incoming.get('character');colors();actions()}
 if(character.value==='kirby'&&powers.some(p=>p.slug===incoming.get('power'))){kirbyPower=incoming.get('power');kirbypower.value=kirbyPower}
-if(animations.some(a=>a.character===character.value&&a.key===incoming.get('action')&&!a.unavailable)){animationtype.value=typeForAction(incoming.get('action'));action.value=incoming.get('action');actions()}
+let requested=animations.find(a=>a.character===character.value&&a.key===incoming.get('action')&&!a.unavailable);
+if(['show','hide'].includes(incoming.get('partials')))partialsHidden=incoming.get('partials')==='hide';
+else if(requested?.partial)partialsHidden=false;
+hidepartials.checked=partialsHidden;
+if(requested){animationtype.value=typeForAction(requested.key);action.value=requested.key;actions()}
 if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===incoming.get('costume')))costume.value=incoming.get('costume');
 if(['full','minimum','dirty','sync'].includes(incoming.get('cycle')))checkMode(incoming.get('cycle'));
 if(['128','256','512','1024','2048'].includes(incoming.get('size')))downloadsize.value=incoming.get('size');
@@ -289,6 +300,50 @@ angleInputs.forEach((input,i)=>{input.value=String(savedAngles[i]);input.oninput
 }else loadRotation()}
 restoreSelection();requestAnimationFrame(tick);
 </script></html>'''
+
+
+def arrange_animation_choices(animations, catalog):
+    """Group connected sequence families and mark their partial menu choices.
+
+    Keys come from actual source submotions, never duplicate display names.
+    This is presentation metadata only; catalog/export identities stay intact.
+    """
+    lookup={(a['character'],a['key']):a for a in animations}
+    groups={}
+    for fighter in catalog['characters']:
+        slug=fighter['character'];parent={};combos={}
+        def root(key):
+            parent.setdefault(key,key)
+            if parent[key]!=key:parent[key]=root(parent[key])
+            return parent[key]
+        for action in fighter['actions']:
+            if not action.get('available') or not action.get('sequence'):continue
+            key=action['key'];prefix=key.split('-',1)[0]
+            parts=[f'{prefix}-{p["clip"]["animation_id"]}_source' for p in action['actors'][0]['sequence']['phases']]
+            # Alternate Kirby Cutter ground/air states belong to the same
+            # multipart move, although the neutral recipe switches air/ground.
+            if slug=='kirby' and action['name'] in ('SpecialHi1','SpecialAirHi1'):
+                parts.extend(a['key'] for a in fighter['actions'] if a['available'] and not a.get('sequence')
+                             and re.fullmatch(r'Special(?:Air)?Hi[1-4]',a['name']))
+            parts=list(dict.fromkeys(p for p in parts if (slug,p) in lookup))
+            combos[key]=parts
+            for part in parts:parent[root(part)]=root(key)
+        families=defaultdict(list)
+        for key in parent:families[root(key)].append(key)
+        for keys in families.values():
+            combined=[a['key'] for a in animations if a['character']==slug and a['key'] in keys and a['key'] in combos]
+            partial=[a['key'] for a in animations if a['character']==slug and a['key'] in keys and a['key'] not in combos]
+            ordered=[lookup[(slug,key)] for key in combined+partial]
+            for key in partial:
+                preferred=next((c for c in combined if combos[c][0]==key),combined[0])
+                lookup[(slug,key)].update(partial=True,combined_key=preferred)
+            for key in keys:groups[(slug,key)]=ordered
+    result=[];seen=set()
+    for animation in animations:
+        for choice in groups.get((animation['character'],animation['key']),[animation]):
+            identity=(choice['character'],choice['key'])
+            if identity not in seen:result.append(choice);seen.add(identity)
+    return result
 
 
 def collect_clips(root, include_attacks=True):
@@ -430,11 +485,13 @@ def main():
                            'download_name':filename,'zip':'','stills':''})
     catalog_path = args.root/'attack-catalog.json'
     if catalog_path.is_file():
-        for fighter in json.loads(catalog_path.read_text())['characters']:
+        catalog=json.loads(catalog_path.read_text())
+        for fighter in catalog['characters']:
             for a in fighter['actions']:
                 if not a['available']:
                     animations.append({'character':fighter['character'],'key':a['key'],'label':a['label'],
                                        'type':a.get('animation_type','attack'),'unavailable':a['unavailable_reason']})
+        animations=arrange_animation_choices(animations,catalog)
     clips.extend(attack_clips)
     for slug in dict.fromkeys(c['character'] for c in attack_clips):
         if any(c['slug']==slug for c in characters):continue

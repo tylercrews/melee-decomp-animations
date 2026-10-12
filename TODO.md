@@ -4,6 +4,8 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 
 ## Current workflow and remaining work
 
+- [x] Group combined animations beside their parts and add checked-by-default Hide partial animations. Reorder selectors into Character / Kirby Power / Costume, Animation Type / Animation / filter, then Pause / Restart / Repeat preview. Preserve independent actions, actual source keys, colors/powers/angles, paused state when still selected, explicit partial links and UI handoff preferences. Node controls and served HTML checks pass; regenerate player only. See investigation section 48.
+
 - [x] Add Fox/Falco reflector startup/holding/reflection-hit effects to ground/air and combined down specials, including source attachment, color, looping and all exports. Add Ness PSI Magnet and Mario/Dr. Mario/Luigi tornado effects through the same reader. Preserve all actual costumes; use shared holding intervals (reflector 84 ticks, magnet 40) without retiming source curves. Verify 162 Python tests / Node controls and 28 full clips / 1,142 matching transparent frames; see investigation section 47.
 - [ ] Implement Zelda Nayru's Love's child/orientation attachment and full state callbacks; its two EfZd mesh descriptors are asset-confirmed. Add Falcon/Ganondorf punch effects using the original throw-flag timing, multiple attachments and facing callbacks.
 - [ ] Extend special-effect particles, depth/occlusion, lighting/additive coverage and material/palette/shape controllers; compare rendered effects against original-game references. Current special meshes are automatic, separate from the ground-impact toggle.
