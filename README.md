@@ -100,7 +100,7 @@ Use this shortcut each time you want the UI. It does not import the ISO or rebui
 
 Choose **Character**, optional **Kirby Power**, and **Costume**, then **Animation Type** and **Animation**. The animation selector appears when the type offers multiple choices. **Hide partial animations** starts checked; uncheck it to see combined moves alongside their separate phases.
 
-**Repeat preview** starts on. Pause or scrub to a frame, then download its PNG. Right-clicking the preview saves the GIF while playing or the exact PNG while paused. Adjust the X/Y/Z sliders and click **Apply** to render a different view; **Reset** returns to the original angle. New views are cached after rendering.
+**Repeat preview** starts on. Pause or scrub to a frame, then download its PNG. Right-clicking the preview saves the GIF while playing or the exact PNG while paused. Adjust the X/Y/Z sliders and click **Apply** to render a different view; **Reset** returns to the original angle. The sliders have magnetic stops every 45° from −180° to +180°. Enter an exact angle in the adjacent number box, or use the slider's arrow keys for 1° steps. New views are cached after rendering.
 
 | Option | What it does |
 | --- | --- |

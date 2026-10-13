@@ -1,3 +1,10 @@
+Rotation stops and native2048 stills (2026-10-13; investigation section61):
+
+- [x] Add all nine 45° stops to X/Y/Z sliders with pointer snapping; retain 1° keyboard steps and exact number entry.
+- [x] Validate exact degree inputs and preserve Apply/Reset, handoffs, paused frames and every download angle.
+- [x] Regenerate player-only HTML, verify live served bytes and pass Node controls plus15 targeted Python tests. Browser visual QA was unavailable in this session.
+- [x] Allow explicit CLI2048 renders and generate two transparent Sandbag standing stills at source tick0, yaw0/+43, in ignored workspace output.
+
 Prop timing and paired visibility (2026-10-12; investigation section60):
 
 - [x] Verify all51 changed GIF/PNG clips,984-clip/81369-frame file coverage,209 GIF bundle inventories/member hashes and17348 still-bundle inventories/sample bytes; leave unchanged GIF pixels covered by earlier verification.

@@ -18,6 +18,12 @@ assert(!html.includes('repeating-conic-gradient'),'preview must have no checkerb
 assert.match(html,/<option value="2048">⚠ X-Large \(2048 × 2048\)<\/option>/);
 assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
+for(const id of ['pitch','yaw','roll']){
+  assert.match(html,new RegExp(`<input id="${id}"[^>]*step="1"[^>]*list="anglestops"`));
+  assert.match(html,new RegExp(`<input id="${id}value" type="number"[^>]*min="-180" max="180" step="1"`));
+}
+const stops=html.match(/<datalist id="anglestops">([\s\S]*?)<\/datalist>/)[1];
+assert.deepEqual([...stops.matchAll(/value="(-?\d+)"/g)].map(match=>Number(match[1])),[-180,-135,-90,-45,0,45,90,135,180]);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const elements = Object.fromEntries(['downloadprogress','downloadbar','downloadcount','electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[], append(option) {this.options.push(option);}}]));
@@ -241,8 +247,33 @@ for(const id of ['pitch','yaw','roll'])assert.equal(servedElements[id].value,'0'
 for(const id of ['pitch','yaw','roll'])servedElements[id].value='75';
 servedPageShow({persisted:false});
 for(const id of ['pitch','yaw','roll']){
-  assert.equal(servedElements[id].value,'0');assert.equal(servedElements[id+'value'].textContent,'0°');
+  assert.equal(servedElements[id].value,'0');assert.equal(servedElements[id+'value'].value,'0');
 }
+for(const id of ['pitch','yaw','roll']){
+  const slider=servedElements[id],exact=servedElements[id+'value'];
+  slider.onpointerdown();
+  for(const stop of [-180,-135,-90,-45,0,45,90,135,180]){
+    const nearby=stop===180?177:stop+3;
+    slider.value=String(nearby);slider.oninput();
+    assert.equal(slider.value,String(stop),'dragging lands on every 45-degree stop');
+    assert.equal(exact.value,String(stop));
+  }
+  slider.value='41';slider.oninput();assert.equal(slider.value,'41','outside the snap zone remains arbitrary');
+  slider.onpointerup();slider.value='43';slider.oninput();assert.equal(slider.value,'43','non-pointer input stays exact');
+  slider.onpointerdown();slider.onkeydown();slider.value='44';slider.oninput();assert.equal(slider.value,'44','keyboard adjustments bypass snapping');
+  slider.onpointerdown();slider.onpointercancel();slider.value='-43';slider.oninput();assert.equal(slider.value,'-43');
+  exact.value='43';exact.oninput();assert.equal(slider.value,'43','typed degrees bypass snapping');
+  exact.value='-179';exact.oninput();assert.equal(slider.value,'-179');
+  for(const invalid of ['', '181', '-181', '1.5']){exact.value=invalid;exact.oninput();assert.equal(slider.value,'-179','invalid entry cannot change the angle');}
+}
+servedPageShow({persisted:false});
+let reportedInvalid=false;
+servedElements.yawvalue.checkValidity=()=>false;
+servedElements.yawvalue.reportValidity=()=>{reportedInvalid=true};
+const beforeInvalidApply=requests.length;
+servedElements.applyangle.onclick();
+assert(reportedInvalid);assert.equal(requests.length,beforeInvalidApply,'invalid exact degrees cannot start a render');
+delete servedElements.yawvalue.checkValidity;delete servedElements.yawvalue.reportValidity;
 assert.equal(servedElements.servicehint.hidden,true);
 servedElements.downloadsize.value='256';servedElements.downloadsize.onchange();
 assert(servedElements.gif.href.startsWith('/export?'));
@@ -370,11 +401,11 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   servedElements.downloadsize.value='256';servedElements.downloadsize.onchange();
   servedElements.action.value='victory3_source';servedElements.action.onchange();
   servedElements.scrub.value='67';servedElements.scrub.oninput();
-  servedElements.pitch.value='20';servedElements.pitch.oninput();servedElements.yaw.value='45';servedElements.roll.value='10';
-  assert.equal(servedElements.pitchvalue.textContent,'20°');
+  servedElements.pitch.value='20';servedElements.pitch.oninput();servedElements.yawvalue.value='43';servedElements.yawvalue.oninput();servedElements.roll.value='10';
+  assert.equal(servedElements.pitchvalue.value,'20');
   servedElements.applyangle.onclick();
   assert.equal(servedElements.frame.hidden,true);assert.equal(servedElements.downloadpanel.hidden,true);
-  const first=requests.shift();assert.equal(new URL(first.url,'http://localhost').searchParams.get('yaw'),'45');
+  const first=requests.shift();assert.equal(new URL(first.url,'http://localhost').searchParams.get('yaw'),'43');
   complete(first,'first');await settle();
   assert.equal(inspect('index'),67);assert.equal(inspect('playing'),false);
   assert.equal(servedElements.saveimage.src,servedElements.still.href);
@@ -382,7 +413,8 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(servedElements.frame.hidden,false);assert.equal(servedElements.downloadpanel.hidden,false);
   for(const id of ['gif','animationzip','allzip','still','framezip']){
     const url=new URL(servedElements[id].href,'http://localhost');assert.equal(url.searchParams.get('pitch'),'20');assert.equal(url.searchParams.get('roll'),'10');
-    assert.match(servedElements[id].download,/-view-x20-y45-z10-256px\.(gif|png|zip)$/);
+    assert.equal(url.searchParams.get('yaw'),'43');
+    assert.match(servedElements[id].download,/-view-x20-y43-z10-256px\.(gif|png|zip)$/);
   }
   servedElements.downloadsize.value='1024';servedElements.downloadsize.onchange();
   assert.equal(inspect('index'),67);assert.equal(new URL(servedElements.still.href,'http://localhost').searchParams.get('size'),'1024');
@@ -390,7 +422,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   servedElements.yaw.value='90';servedElements.applyangle.onclick();const stale=requests.shift();
   servedElements.resetangle.onclick();complete(stale,'stale');await settle();
   assert.equal(inspect('hasAngle()'),false);assert.match(servedElements.frame.src,/mario\/costume_00\/victory3_source\/frame_0067.png$/);
-  assert.equal(servedElements.pitch.value,'0');assert.equal(servedElements.pitchvalue.textContent,'0°');
+  assert.equal(servedElements.pitch.value,'0');assert.equal(servedElements.pitchvalue.value,'0');
   servedElements.character.value='luigi';servedElements.character.onchange();servedElements.action.value='results-clap_source';servedElements.action.onchange();
   servedElements.yaw.value='90';servedElements.applyangle.onclick();complete(requests.shift(),'full');await settle();
   servedElements.minimumcycle.checked=true;servedElements.minimumcycle.onchange();

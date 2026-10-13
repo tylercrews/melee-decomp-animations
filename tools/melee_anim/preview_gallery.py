@@ -38,6 +38,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 #scrub{flex:1}a{color:#81baff}.meta{background:#202a36;padding:16px;border-radius:8px}
 [hidden]{display:none!important}small{color:#b5c0ce}
 #sizewarning{color:#b59a19}
+.controls .angle-control{flex:1 1 280px}.angle-control input[type="range"]{flex:1;width:160px;min-width:80px}.angle-control input[type="number"]{width:4.5em;padding:5px;border:1px solid #445368;border-radius:4px;background:#263243;color:inherit}#anglehint,#rotationstatus{flex-basis:100%}
 #downloadprogress{margin:12px 0}#downloadbar{width:100%;height:18px;accent-color:#3878cb}#downloadcount{display:block;margin-top:6px}
 </style><h1>Melee animation preview</h1>
 <p>Choose a character and costume color, then an animation type and animation. Save its GIF or download a bundle of colors.</p>
@@ -72,9 +73,11 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label><input id="groundeffects" type="checkbox" checked> Ground-impact effects</label>
 <small id="techhint">Towards/away follow the character's facing. With impacts on, the whole effect fits; turning them off zooms in on the character. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.</small></div>
 <fieldset class="controls"><legend>Viewing angle</legend>
-<label>X tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="X tilt"><output id="pitchvalue">0°</output></label>
-<label>Y turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="Y turn"><output id="yawvalue">0°</output></label>
-<label>Z roll <input id="roll" type="range" min="-180" max="180" step="1" value="0" autocomplete="off" aria-label="Z roll"><output id="rollvalue">0°</output></label>
+<label class="angle-control">X tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" list="anglestops" autocomplete="off" aria-label="X tilt" aria-describedby="anglehint"><input id="pitchvalue" type="number" min="-180" max="180" step="1" value="0" required autocomplete="off" aria-label="Exact X tilt degrees">°</label>
+<label class="angle-control">Y turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" list="anglestops" autocomplete="off" aria-label="Y turn" aria-describedby="anglehint"><input id="yawvalue" type="number" min="-180" max="180" step="1" value="0" required autocomplete="off" aria-label="Exact Y turn degrees">°</label>
+<label class="angle-control">Z roll <input id="roll" type="range" min="-180" max="180" step="1" value="0" list="anglestops" autocomplete="off" aria-label="Z roll" aria-describedby="anglehint"><input id="rollvalue" type="number" min="-180" max="180" step="1" value="0" required autocomplete="off" aria-label="Exact Z roll degrees">°</label>
+<datalist id="anglestops"><option value="-180"></option><option value="-135"></option><option value="-90"></option><option value="-45"></option><option value="0"></option><option value="45"></option><option value="90"></option><option value="135"></option><option value="180"></option></datalist>
+<small id="anglehint">Sliders snap near each 45° mark. Enter any exact degree in the number boxes, or use the slider's arrow keys for 1° steps.</small>
 <button id="applyangle">Apply</button><button id="resetangle">Reset</button>
 <small id="rotationstatus" role="status" aria-live="polite">Angles apply to previews and every GIF/PNG download. New angles need rendering.</small></fieldset>
 <div class="stage"><div class="framewrap"><img id="frame" alt="Animated character costume preview"><img id="saveimage" aria-hidden="true" alt="" title="Right-click to save"></div></div>
@@ -149,9 +152,20 @@ function isJudgeNine(){return current>=0&&clips[current].character==='game-and-w
 function electricSetting(){return judgeElectricEnabled?'on':'off'}
 judgeelectric.onchange=()=>{judgeElectricEnabled=judgeelectric.checked;updateDownloads();loadRotation()};
 const angleInputs=['pitch','yaw','roll'].map(id=>document.getElementById(id));
+const angleValues=['pitchvalue','yawvalue','rollvalue'].map(id=>document.getElementById(id));
 const rotationstatus=document.getElementById('rotationstatus'), applyangle=document.getElementById('applyangle'), resetangle=document.getElementById('resetangle');
 let angles=[0,0,0], rotated=null, rotationBusy=false, rotationFailed=false, rotationGeneration=0;
-angleInputs.forEach((input,i)=>{input.value='0';input.oninput=()=>document.getElementById(['pitchvalue','yawvalue','rollvalue'][i]).textContent=`${input.value}°`});
+angleInputs.forEach((input,i)=>{
+input.value=angleValues[i].value='0';let dragging=false;
+input.onpointerdown=()=>{dragging=true};
+input.onpointerup=input.onpointercancel=input.onblur=()=>{dragging=false};
+input.onkeydown=()=>{dragging=false};
+input.oninput=()=>{let value=Number(input.value),stop=Math.round(value/45)*45;
+if(dragging&&Math.abs(value-stop)<=3)input.value=String(stop);
+angleValues[i].value=input.value};
+angleValues[i].oninput=()=>{let value=Number(angleValues[i].value);
+if(angleValues[i].value!==''&&Number.isInteger(value)&&Math.abs(value)<=180)input.value=String(value)};
+});
 if(location.protocol!=='http:')rotationstatus.textContent='Choose an angle. Apply opens the local rendering player with your current selections.';
 function hasAngle(){return angles.some(v=>v!==0)}
 function effectSetting(){return clips[current].ground_effect&&groundEffectsEnabled?'on':'off'}
@@ -179,7 +193,7 @@ rotationstatus.textContent=`Viewing angle: X ${angles[0]}°, Y ${angles[1]}°, Z
 result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotationState();show();runPendingBatch();
 }catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
 rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
-applyangle.onclick=()=>{angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
+applyangle.onclick=()=>{for(const input of angleValues){if(input.checkValidity&&!input.checkValidity()){input.reportValidity();return}}angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
 function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled;kirbypower.value=kirbyPower;centerjump.checked=centerJumpEnabled;hidepartials.checked=partialsHidden;kirbymode.checked=includeKirbyHats}
 resetangle.onclick=()=>{angles=[0,0,0];syncAngleInputs();loadRotation()};
 // Form restoration can run after this script; also reset a cached page when

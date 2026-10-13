@@ -400,8 +400,8 @@ def main():
     parser.add_argument("--backend", choices=("python","native"), default="python")
     parser.add_argument("--max-frames", type=int, help="diagnostic truncation, not a complete export")
     args = parser.parse_args()
-    if args.size is not None and not 64 <= args.size <= 1024 or args.ticks_per_second <= 0:
-        parser.error("size must be 64..1024 and ticks-per-second positive")
+    if args.size is not None and not 64 <= args.size <= 2048 or args.ticks_per_second <= 0:
+        parser.error("size must be 64..2048 and ticks-per-second positive")
     if args.max_frames is not None and args.max_frames <= 0:
         parser.error("max-frames must be positive")
     if args.section == "wait" and not args.action.startswith("victory"):
