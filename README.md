@@ -94,7 +94,7 @@ Extraction alone does not prepare the UI. Run the full import afterward.
 
 Open **[Open Melee Decomp Animation UI.cmd](Open%20Melee%20Decomp%20Animation%20UI.cmd)**. It starts or reuses this checkout's local server and opens **[http://127.0.0.1:8765/player.html](http://127.0.0.1:8765/player.html)** in your browser.
 
-Use this shortcut each time you want the UI. It does not import the ISO or rebuild the entire collection. The background server keeps running after its launcher window closes; a later launch starts it again if necessary.
+Use this shortcut each time you want the UI. It opens a versioned player URL so updated controls load after the player HTML is regenerated. It does not import the ISO or rebuild the entire collection. The background server keeps running after its launcher window closes; a later launch starts it again if necessary.
 
 ## Use the player
 

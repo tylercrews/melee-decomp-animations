@@ -85,12 +85,24 @@ class LauncherTests(unittest.TestCase):
                     launcher.server_status(8765, root)
 
     def test_open_reuses_server_without_installing_or_spawning(self):
-        self.prepare_ui()
+        root = self.prepare_ui()
+        stat = (root/'player.html').stat()
+        expected = f'http://127.0.0.1:8766/player.html?v={stat.st_mtime_ns:x}-{stat.st_size:x}'
         with patch.object(launcher, 'server_status', return_value=True), patch.object(launcher.subprocess, 'Popen') as spawn, patch.object(launcher.webbrowser, 'open') as browser:
-            self.assertEqual(launcher.open_ui(self.repo, 'python', port=8766), 'http://127.0.0.1:8766/player.html')
-            browser.assert_called_once(); spawn.assert_not_called()
-            launcher.open_ui(self.repo, 'python', port=8766, browser=False)
+            self.assertEqual(launcher.open_ui(self.repo, 'python', port=8766), expected)
+            browser.assert_called_once_with(expected); spawn.assert_not_called()
+            self.assertEqual(launcher.open_ui(self.repo, 'python', port=8766, browser=False), expected)
             self.assertEqual(browser.call_count, 1)
+
+    def test_rebuilt_player_opens_a_new_url_without_restarting_server(self):
+        root = self.prepare_ui()
+        with patch.object(launcher, 'server_status', return_value=True), patch.object(launcher.subprocess, 'Popen') as spawn, patch.object(launcher.webbrowser, 'open') as browser:
+            original = launcher.open_ui(self.repo, 'python')
+            (root/'player.html').write_text('updated controls')
+            updated = launcher.open_ui(self.repo, 'python')
+            self.assertNotEqual(original, updated)
+            self.assertEqual(browser.call_args.args, (updated,))
+            spawn.assert_not_called()
 
     def test_open_starts_hidden_child_with_spaced_paths_and_reports_failed_start(self):
         root = self.prepare_ui()

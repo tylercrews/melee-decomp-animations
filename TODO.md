@@ -1,5 +1,6 @@
 Rotation stops and native2048 stills (2026-10-13; investigation section61):
 
+- [x] Make the UI launcher open a versioned player URL after HTML rebuilds; pass8 launcher tests and verify the real py3.13 launch path/live response.
 - [x] Add all nine 45° stops to X/Y/Z sliders with pointer snapping; retain 1° keyboard steps and exact number entry.
 - [x] Validate exact degree inputs and preserve Apply/Reset, handoffs, paused frames and every download angle.
 - [x] Regenerate player-only HTML, verify live served bytes and pass Node controls plus15 targeted Python tests. Browser visual QA was unavailable in this session.

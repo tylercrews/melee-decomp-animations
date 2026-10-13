@@ -134,7 +134,10 @@ def open_ui(repo, python, port=8765, browser=True):
             if process.poll() is None:
                 process.terminate()
             raise
-    url = f'http://127.0.0.1:{port}/player.html'
+    # A rebuilt player needs a fresh browser URL even when reusing the server.
+    player_stat = (root/'player.html').stat()
+    version = f'{player_stat.st_mtime_ns:x}-{player_stat.st_size:x}'
+    url = f'http://127.0.0.1:{port}/player.html?v={version}'
     if browser:
         webbrowser.open(url)
     print(f'Player ready: {url}', flush=True)
