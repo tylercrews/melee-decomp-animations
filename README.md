@@ -104,6 +104,8 @@ Choose **Character**, optional **Kirby Power**, and **Costume**, then **Animatio
 
 While paused, the purple **Rerender Selected Frame In HD** button renders that pose directly from the original model; the dark-purple **Rerender Selected Frame In HD In All Colors** button creates a ZIP for every actual costume. **HD PNG size** defaults to **4096 × 4096**, with **2048 × 2048** also available. Both buttons show the loading spinner and preparation progress, preserving the selected frame, applied angles, framing, props, effects and Kirby appearance. These transparent PNGs use the original textures; higher raster resolution does not add source texture detail. Exports use temporary storage outside the project and expire after 10 minutes; save the browser download to keep it. No prebuilt HD animation collection is needed.
 
+**Crop Transparent Border**, after the purple buttons, starts checked. Each HD PNG is rendered at the selected resolution first, then cropped to the smallest rectangle containing all pixels with nonzero alpha. Pixel detail and partial transparency are preserved; the delivered dimensions can be smaller and need not be square. All-color ZIP members are cropped individually. Uncheck it to keep the full 4096 × 4096 (or 2048 × 2048) canvas.
+
 Attack rotations use the prepared animation's saved source timing, while an HD request can generate its selected frame directly from the catalog without first storing a full animation at HD size.
 
 | Option | What it does |

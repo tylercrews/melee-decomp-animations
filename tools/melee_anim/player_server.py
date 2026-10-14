@@ -107,7 +107,7 @@ def make_server(root, port=8765, catalog=None):
                 values = parse_qs(url.query, strict_parsing=True)
                 allowed = {'character', 'action', 'costume', 'cycle', 'pitch', 'yaw', 'roll', 'effects', 'power', 'center', 'electric'}
                 if url.path in ('/export','/prepare-export'):
-                    allowed |= {'size', 'kind', 'scope', 'frame', 'view','hats','render'}
+                    allowed |= {'size', 'kind', 'scope', 'frame', 'view','hats','render','crop'}
                 if url.path == '/prepare-export':allowed.add('progress')
                 if set(values)-allowed or any(len(v) != 1 for v in values.values()):
                     raise ValueError('Unknown or repeated download option')

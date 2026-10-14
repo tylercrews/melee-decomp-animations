@@ -1,3 +1,10 @@
+HD transparent-border cropping (2026-10-13; investigation section63):
+
+- [x] Add checked-by-default Crop Transparent Border after purple buttons; preserve it in HD snapshots/handoffs and keep it out of preview options.
+- [x] Crop native-rendered PNGs by exact nonzero alpha bounds without resizing; preserve faint alpha/opaque black, crop every ZIP member independently and allow full-canvas opt-out.
+- [x] Reuse short-lived full renders for cropped/uncropped output, hash/verify derived artifacts and retain temporary cleanup/loading progress.
+- [x] Pass27 targeted Python tests and Node controls plus live4K/2K pixel equality, four-color ZIPs, crop-off and served HTML; regenerate player and restart service86197 on8765.
+
 Native HD selected-frame PNGs (2026-10-13; investigation section62):
 
 - [x] Fix prepared-lazy attack rotation reading catalog timing instead of its render manifest; add both lazy-state regressions and verify actual rotated attacks/GIFs/native4096 stills. Service session16444.

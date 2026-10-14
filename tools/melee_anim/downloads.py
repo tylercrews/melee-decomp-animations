@@ -14,7 +14,7 @@ from PIL import Image
 from .preview_gallery import collect_clips
 from .rotations import RotationCache, camera_angles, marked_angle
 from .render_settings import native_size
-from .hd_stills import HD_SIZES, HD_DEFAULT_SIZE, HDArtifacts, StillCache
+from .hd_stills import HD_SIZES, HD_DEFAULT_SIZE, HDArtifacts, StillCache, crop_transparent_png
 
 SIZES = (128, 256, 512, 1024, 2048)
 
@@ -120,9 +120,12 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
-    def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off', electric='on', render='standard', progress=None):
+    def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off', electric='on', render='standard', crop=None, progress=None):
         if render not in ('standard','hd') or render=='hd' and (kind!='png' or scope not in ('costume','colors')):
             raise ValueError('HD rendering requires a single-frame PNG or all-color PNG ZIP')
+        if crop is None:crop='on' if render=='hd' else 'off'
+        if crop not in ('on','off') or crop=='on' and render!='hd':
+            raise ValueError('Transparent border cropping requires an HD PNG export')
         if size is None:
             selected=next((c for c in self.clips if c['character']==character and c['action_key']==action),{})
             size=HD_DEFAULT_SIZE if render=='hd' else native_size(action,selected.get('animation_type'))
@@ -169,7 +172,7 @@ class DownloadCatalog:
             if kind == 'png' and not 0 <= frame < length:
                 raise ValueError('Frame index is outside this animation')
         if render=='hd':
-            return self._export_hd(jobs,character,action,size,scope,frame,cycle,angles,effects,power,centered,hats,electric,progress)
+            return self._export_hd(jobs,character,action,size,scope,frame,cycle,angles,effects,power,centered,hats,electric,crop=='on',progress)
         units = len(jobs)*2 + (scope != 'costume')
         def notify(phase,completed,files,work,done=0,count=0,label='',unit='frames'):
             if progress:
@@ -282,7 +285,7 @@ class DownloadCatalog:
         notify('Files ready',len(jobs),len(jobs),units)
         return bundle, f'{name}-{size}px.zip', 'application/zip'
 
-    def _export_hd(self,jobs,character,action,size,scope,frame,cycle,angles,effects,power,center,hats,electric,progress):
+    def _export_hd(self,jobs,character,action,size,scope,frame,cycle,angles,effects,power,center,hats,electric,crop,progress):
         artifacts=self.hd_artifacts
         artifacts.begin()
         try:
@@ -302,6 +305,9 @@ class DownloadCatalog:
                 def on_render(stage,done,count):
                     notify(stage,index,index,2*index+.9*done/max(1,count),done,count,label)
                 target,key=self.hd_stills.get(clip,angles,size,frame,cycle,variant,center,effects=='on',electric=='on',on_render if progress else None)
+                if crop:
+                    notify('Cropping transparent border',index+1,index,2*index+1,0,1,label)
+                    with self.artifact_lock:target,key=crop_transparent_png(target,key)
                 name=Path(clip['download_name']).stem
                 if variant!='none':name+=f'-power-{variant}'
                 if center:name+='-centered'
@@ -309,7 +315,7 @@ class DownloadCatalog:
                 short=((clip.get('dirty_cycle') if cycle=='dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum','dirty') and action=='results-clap_source' else None
                 if short:name+='-dirty-loop' if short.get('dirty') else '-minimum-cycle'
                 if cycle=='sync':name+='-clapping-sync'
-                name=marked_angle(name+'.png',angles).replace('.png',f'-frame-{frame+1:04d}-hd-{size}px.png')
+                name=marked_angle(name+'.png',angles).replace('.png',f'-frame-{frame+1:04d}{"-cropped" if crop else ""}-hd-{size}px.png')
                 entries.append((name,target,key))
                 notify('HD frame ready',index+1,index+1,2*(index+1),1,1,label)
                 if total>1:time.sleep(.005)
@@ -337,7 +343,7 @@ class DownloadCatalog:
             if center:name+='-centered'
             if electric=='off':name+='-no-electric'
             if cycle!='full':name+=f'-{cycle}-cycle'
-            name=marked_angle(name+'.zip',angles).replace('.zip',f'-hd-{size}px.zip')
+            name=marked_angle(name+'.zip',angles).replace('.zip',f'{"-cropped" if crop else ""}-hd-{size}px.zip')
             notify('HD files ready',total,total,units)
             return bundle,name,'application/zip'
         finally:artifacts.end()

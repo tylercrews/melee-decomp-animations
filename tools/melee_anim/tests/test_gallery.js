@@ -20,6 +20,8 @@ assert.match(html,/#sizewarning\{color:#b59a19\}/);
 assert.match(html,/<small id="sizewarning"[^>]* hidden>Extremely large GIF files<\/small>/);
 assert.match(html,/<a class="download hd" id="hdstill" hidden download>Rerender Selected Frame In HD<\/a>/);
 assert.match(html,/<a class="download hd-colors" id="hdcolors" hidden download>Rerender Selected Frame In HD In All Colors<\/a>/);
+assert.match(html,/<input id="cropborder" type="checkbox" checked autocomplete="off"> Crop Transparent Border/);
+assert(html.indexOf('id="hdcolors"')<html.indexOf('id="hdcroplabel"'));
 assert(html.indexOf('id="framezip"')<html.indexOf('id="hdstill"')&&html.indexOf('id="hdstill"')<html.indexOf('id="hdcolors"'));
 assert.match(html,/\.download\.hd\{background:#7540b0/);assert.match(html,/\.download\.hd-colors\{background:#45206c/);
 for(const id of ['pitch','yaw','roll']){
@@ -29,7 +31,7 @@ for(const id of ['pitch','yaw','roll']){
 const stops=html.match(/<datalist id="anglestops">([\s\S]*?)<\/datalist>/)[1];
 assert.deepEqual([...stops.matchAll(/value="(-?\d+)"/g)].map(match=>Number(match[1])),[-180,-135,-90,-45,0,45,90,135,180]);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['hdstill','hdcolors','hdsize','hdcontrols','downloadprogress','downloadbar','downloadcount','electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['hdcroplabel','cropborder','hdstill','hdcolors','hdsize','hdcontrols','downloadprogress','downloadbar','downloadcount','electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -292,16 +294,19 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
     performance:context.performance,Image:context.Image,requestAnimationFrame(){},fetch:url=>new Promise(resolve=>pending.push({url,resolve}))});
   vm.runInContext(script,hdContext);
   assert.equal(hdElements.hdsize.value,'4096','HD starts at native 4096, independently of ordinary export size');
+  assert.equal(hdElements.cropborder.checked,true);assert.equal(hdElements.hdcroplabel.hidden,true);
   assert.equal(hdElements.hdstill.hidden,true);assert.equal(hdElements.hdcontrols.hidden,true);
   hdElements.scrub.value='5';hdElements.scrub.oninput();
   assert.equal(hdElements.hdstill.hidden,false);assert.equal(hdElements.hdcolors.hidden,false);assert.equal(hdElements.hdcontrols.hidden,false);
+  assert.equal(hdElements.hdcroplabel.hidden,false);
   hdElements.yawvalue.value='43';hdElements.yawvalue.oninput();hdElements.applyangle.onclick();
   assert.equal(hdElements.downloadpanel.hidden,true);assert.equal(hdElements.hdcontrols.hidden,true);
   pending.shift().resolve({ok:true,json:async()=>({frames:Array.from({length:vm.runInContext('frameCount()',hdContext)},(_,i)=>`rotations/hd/frame_${i}.png`)})});
   await new Promise(resolve=>setImmediate(resolve));
   hdElements.hdsize.value='4096';hdElements.hdsize.onchange();
   const query=new URL(hdElements.hdstill.href,'http://localhost').searchParams;
-  for(const [key,value] of Object.entries({render:'hd',kind:'png',scope:'costume',size:'4096',frame:'5',yaw:'43'}))assert.equal(query.get(key),value);
+  for(const [key,value] of Object.entries({render:'hd',crop:'on',kind:'png',scope:'costume',size:'4096',frame:'5',yaw:'43'}))assert.equal(query.get(key),value);
+  assert.equal(new URL(hdElements.still.href,'http://localhost').searchParams.has('crop'),false);
   assert.equal(new URL(hdElements.still.href,'http://localhost').searchParams.get('size'),'1024','HD size does not alter ordinary downloads');
   const originalName=hdElements.hdstill.download;
   const saving=hdElements.hdstill.onclick({preventDefault(){}});
@@ -310,9 +315,11 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   await hdElements.hdcolors.onclick({preventDefault(){}});assert.equal(pending.length,1);
   assert.match(pending[0].url,/prepare-export.*render=hd.*progress=/);
   hdElements.hdsize.value='2048';hdElements.hdsize.onchange();hdElements.scrub.value='7';hdElements.scrub.oninput();
+  hdElements.cropborder.checked=false;hdElements.cropborder.onchange();
+  assert.equal(new URL(hdElements.hdcolors.href,'http://localhost').searchParams.get('crop'),'off');
   pending.shift().resolve({ok:true,json:async()=>({url:'/hd-export/selected.png',progress:{percent:100,total:1,completed:1,files_completed:1,phase:'HD frame ready'}})});
   await saving;
-  assert.equal(saved[0].name,originalName);assert.match(saved[0].name,/-frame-0006-view-x0-y43-z0-hd-4096px\.png$/);
+  assert.equal(saved[0].name,originalName);assert.match(saved[0].name,/-frame-0006-view-x0-y43-z0-cropped-hd-4096px\.png$/);
   assert.equal(hdElements.hdstill.className,'download hd');assert.equal(hdElements.downloadbar.value,100);
   assert.equal(new URL(hdElements.hdcolors.href,'http://localhost').searchParams.get('scope'),'colors');
   const failed=hdElements.hdcolors.onclick({preventDefault(){}});
@@ -324,10 +331,22 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
     performance:context.performance,Image:context.Image,requestAnimationFrame(){}});
   vm.runInContext(script,fileContext);
   fileElements.scrub.value='7';fileElements.scrub.oninput();fileElements.yawvalue.value='43';fileElements.yawvalue.oninput();fileElements.applyangle.onclick();
+  fileElements.cropborder.checked=false;fileElements.cropborder.onchange();
   fileElements.hdsize.value='4096';fileElements.hdsize.onchange();await fileElements.hdstill.onclick({preventDefault(){}});
   const handoff=new URL(fileContext.location.href),state=new URLSearchParams(handoff.hash.slice(1));
-  assert.equal(state.get('batch'),'hd-single');assert.equal(state.get('hdsize'),'4096');assert.equal(state.get('frame'),'7');assert.equal(state.get('yaw'),'43');
+  assert.equal(state.get('batch'),'hd-single');assert.equal(state.get('hdsize'),'4096');assert.equal(state.get('frame'),'7');assert.equal(state.get('yaw'),'43');assert.equal(state.get('crop'),'off');
   await fileElements.hdcolors.onclick({preventDefault(){}});assert.equal(new URLSearchParams(new URL(fileContext.location.href).hash.slice(1)).get('batch'),'hd-colors');
+  const restoreElements=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
+  let restoring;
+  const restoreContext=vm.createContext({document:{getElementById:id=>restoreElements[id],createElement:()=>({click(){},remove(){}}),body:{append(){}}},location:{protocol:'http:',hash:new URL(fileContext.location.href).hash},URLSearchParams,
+    performance:context.performance,Image:context.Image,requestAnimationFrame(){},fetch:url=>new Promise(resolve=>{restoring={url,resolve}})});
+  vm.runInContext(script,restoreContext);assert.equal(restoreElements.cropborder.checked,false);
+  assert.equal(new URL(restoring.url,'http://localhost').searchParams.has('crop'),false,'crop is not a preview/render option');
+  restoreElements.cropborder.checked=true;vm.runInContext('syncAngleInputs()',restoreContext);assert.equal(restoreElements.cropborder.checked,false);
+  restoring.resolve({ok:true,json:async()=>({frames:Array.from({length:vm.runInContext('frameCount()',restoreContext)},(_,i)=>`rotations/crop/frame_${i}.png`)})});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(new URL(restoring.url,'http://localhost').searchParams.get('crop'),'off');
+  restoring.resolve({ok:true,json:async()=>({url:'/hd-export/restored.zip'})});await new Promise(resolve=>setImmediate(resolve));
   console.log('Purple HD PNG buttons, independent 2048/4096 sizes, exact paused angle/frame, spinner, shared lock, snapshots, errors and file handoff: PASS');
   }
   {

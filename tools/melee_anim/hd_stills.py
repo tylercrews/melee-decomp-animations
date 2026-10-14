@@ -19,6 +19,33 @@ HD_SIZES = (2048, 4096)
 HD_DEFAULT_SIZE = 4096
 
 
+def crop_transparent_png(source, source_key):
+    """Trim only alpha-zero pixels after native rendering; never resize content."""
+    source=Path(source)
+    digest=hashlib.sha256(source.read_bytes()).hexdigest()
+    key=hashlib.sha256(('alpha-bounds-v1:'+source_key+':'+digest).encode()).hexdigest()
+    target=source.parent/'cropped.png';marker=source.parent/'crop.json'
+    if target.is_file() and marker.is_file():
+        try:
+            saved=json.loads(marker.read_text())
+            if saved['key']==key and saved['sha256']==hashlib.sha256(target.read_bytes()).hexdigest():
+                return target,key
+        except (ValueError,KeyError,OSError,TypeError):pass
+    with Image.open(source) as image:
+        if image.mode!='RGBA':raise ValueError('HD cropping requires an RGBA PNG')
+        # Alpha1 counts as visible; black RGB is never treated as transparency.
+        bounds=image.getchannel('A').getbbox()
+        cropped=image.crop(bounds or (0,0,1,1))
+        temporary=target.with_suffix('.png.tmp')
+        cropped.save(temporary,format='PNG')
+        temporary.replace(target)
+        saved={'key':key,'source_size':list(image.size),'bounds':list(bounds) if bounds else None,
+               'output_size':list(cropped.size),'sha256':hashlib.sha256(target.read_bytes()).hexdigest()}
+    temporary=marker.with_suffix('.json.tmp')
+    temporary.write_text(json.dumps(saved,indent=2)+'\n');temporary.replace(marker)
+    return target,key
+
+
 class HDArtifacts:
     """Short-lived downloads in OS temporary storage, outside the project."""
     def __init__(self, ttl=600):

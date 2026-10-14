@@ -13,7 +13,7 @@ from zipfile import ZipFile
 
 from PIL import Image
 from tools.melee_anim.downloads import DownloadCatalog
-from tools.melee_anim.hd_stills import HDArtifacts, StillCache
+from tools.melee_anim.hd_stills import HDArtifacts, StillCache, crop_transparent_png
 from tools.melee_anim.player_server import make_server
 
 
@@ -108,6 +108,39 @@ class StillCacheTests(unittest.TestCase):
 
 
 class HDArtifactTests(unittest.TestCase):
+    def test_crop_preserves_exact_rgba_black_and_faint_pixels_and_repairs_cache(self):
+        artifacts=HDArtifacts()
+        try:
+            folder=artifacts.root/'renders/example';folder.mkdir(parents=True)
+            source=folder/'frame.png'
+            image=Image.new('RGBA',(9,8),(90,120,200,0))
+            image.putpixel((2,1),(0,0,0,255));image.putpixel((6,5),(255,180,60,1))
+            image.save(source)
+            cropped,key=crop_transparent_png(source,'source-key')
+            with Image.open(cropped) as result:
+                self.assertEqual(result.size,(5,5))
+                self.assertEqual(result.tobytes(),image.crop((2,1,7,6)).tobytes())
+                self.assertEqual(result.getpixel((4,4))[3],1)
+                self.assertEqual(result.getpixel((0,0)),(0,0,0,255))
+            saved=json.loads((folder/'crop.json').read_text())
+            self.assertEqual(saved['bounds'],[2,1,7,6]);self.assertEqual(saved['source_size'],[9,8])
+            self.assertEqual(crop_transparent_png(source,'source-key'),(cropped,key))
+            cropped.write_bytes(b'corrupt')
+            crop_transparent_png(source,'source-key')
+            with Image.open(cropped) as result:self.assertEqual(result.size,(5,5))
+            with Image.open(source) as full:self.assertEqual(full.size,(9,8),'full canvas remains available when cropping is disabled')
+        finally:artifacts.close()
+
+    def test_empty_frame_crop_is_a_valid_one_pixel_transparent_png(self):
+        artifacts=HDArtifacts()
+        try:
+            folder=artifacts.root/'renders/empty';folder.mkdir(parents=True)
+            source=folder/'frame.png';Image.new('RGBA',(9,8),(200,90,20,0)).save(source)
+            target,_=crop_transparent_png(source,'empty')
+            with Image.open(target) as result:
+                self.assertEqual(result.size,(1,1));self.assertEqual(result.getpixel((0,0))[3],0)
+        finally:artifacts.close()
+
     def test_temporary_location_expiry_protection_and_cleanup(self):
         artifacts=HDArtifacts(ttl=10)
         try:
@@ -165,6 +198,26 @@ class HDExportTests(unittest.TestCase):
         self.assertEqual(events[-1]['files_completed'],2)
         self.assertEqual([e['percent'] for e in events],sorted(e['percent'] for e in events))
         self.assertFalse(list(self.root.rglob('*.png')))
+
+    def test_crop_default_all_colors_uses_individual_bounds_and_off_keeps_canvas(self):
+        def bordered(clip,angles,size,*args):
+            folder=self.catalog.hd_artifacts.root/'renders'/str(clip['costume_id']);folder.mkdir(parents=True,exist_ok=True)
+            target=folder/'frame.png';image=Image.new('RGBA',(size,size),(60,80,90,0))
+            width,height=(3,2) if clip['costume_id']==0 else (4,3)
+            image.paste((0,0,0,255),(17,23,17+width,23+height));image.save(target)
+            return target,str(clip['costume_id'])
+        opts=dict(character='synthetic',action='taunt_source',render='hd',kind='png',scope='colors',frame=1,size=2048)
+        with patch('tools.melee_anim.hd_stills.StillCache.get',side_effect=bordered):
+            cropped,name,_=self.catalog.export(**opts)
+            full,full_name,_=self.catalog.export(**opts,crop='off')
+        self.assertNotEqual(cropped,full);self.assertIn('-cropped-',name);self.assertNotIn('-cropped-',full_name)
+        with ZipFile(cropped) as archive:
+            for i,name in enumerate(archive.namelist()):
+                with Image.open(BytesIO(archive.read(name))) as image:self.assertEqual(image.size,(3,2) if i==0 else (4,3))
+        with ZipFile(full) as archive:
+            for name in archive.namelist():
+                with Image.open(BytesIO(archive.read(name))) as image:self.assertEqual(image.size,(2048,2048))
+        with self.assertRaises(ValueError):self.catalog.export(**opts,crop='invalid')
 
     def test_http_hd_download_is_temporary_attachment_and_errors_are_clean(self):
         server=make_server(self.root,0,catalog=self.catalog)
