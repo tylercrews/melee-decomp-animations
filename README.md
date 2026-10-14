@@ -1,6 +1,9 @@
 # Melee Decomp Animation UI
 
-Turn Super Smash Bros. Melee animations into transparent GIFs and PNGs. This tool builds on the Melee decompilation: import assets from your own game ISO, choose a character and costume, play an animation, rotate the view, and download the animation or a single paused frame. Setup launchers are available for Windows, macOS and Linux. Windows uses a fast native renderer; Mac and Linux use the slower portable Python renderer and have not yet been verified on those operating systems.
+Turn Super Smash Bros. Melee animations into transparent GIFs and PNGs. This tool builds on the Melee decompilation: import assets from your own game ISO, choose a character and costume, play an animation, rotate the view, and download the animation or a single paused frame. Setup launchers are available for Windows, macOS and Linux. Windows uses a fast native renderer; Mac and Linux use the slower portable Python renderer.
+
+> [!WARNING]
+> **I developed and tested this project on Windows. Until I update this notice, the Mac and Linux setup scripts and UI launchers are untested on those operating systems.** The setup and launch code is straightforward and should work, but I haven't verified it on a Mac or Linux machine yet.
 
 > [!WARNING]
 > **Plan for roughly 69 GB — SIXTY-NINE GIGABYTES — of local project data.** That is the author's reported checkout size after the larger renders, including generated assets, rather than the size of the source download. Importing and rendering creates extracted files, PNG frames, GIFs, ZIP bundles and caches. More animations, Kirby hats, viewing angles and larger native renders increase it further. Leave additional free space for preparation and downloads.
