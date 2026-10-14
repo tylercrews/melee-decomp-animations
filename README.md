@@ -102,6 +102,10 @@ Choose **Character**, optional **Kirby Power**, and **Costume**, then **Animatio
 
 **Repeat preview** starts on. Pause or scrub to a frame, then download its PNG. Right-clicking the preview saves the GIF while playing or the exact PNG while paused. Adjust the X/Y/Z sliders and click **Apply** to render a different view; **Reset** returns to the original angle. The sliders have magnetic stops every 45° from −180° to +180°. Enter an exact angle in the adjacent number box, or use the slider's arrow keys for 1° steps. New views are cached after rendering.
 
+While paused, the purple **Rerender Selected Frame In HD** button renders that pose directly from the original model; the dark-purple **Rerender Selected Frame In HD In All Colors** button creates a ZIP for every actual costume. **HD PNG size** defaults to **4096 × 4096**, with **2048 × 2048** also available. Both buttons show the loading spinner and preparation progress, preserving the selected frame, applied angles, framing, props, effects and Kirby appearance. These transparent PNGs use the original textures; higher raster resolution does not add source texture detail. Exports use temporary storage outside the project and expire after 10 minutes; save the browser download to keep it. No prebuilt HD animation collection is needed.
+
+Attack rotations use the prepared animation's saved source timing, while an HD request can generate its selected frame directly from the catalog without first storing a full animation at HD size.
+
 | Option | What it does |
 | --- | --- |
 | Clapping modes | Original animation, minimum cycle, dirty/jittery cut, or the 0.84-second clapping-sync alteration. |
@@ -117,7 +121,7 @@ Batch buttons show a spinner while preparing files and prevent duplicate request
 
 I chose **512 × 512 as the native render size for most animations** to balance project size with useful image quality. I chose **1024 × 1024 for taunts, victory poses and clapping**, because those are the images I expect to use most myself. Synchronized claps and rotated/Kirby versions follow the same type-based policy.
 
-Downloads offer **128, 256, 512, 1024 and 2048px** square images. A **★** marks the selected type's native size: **512 for most types, 1024 for Taunt, Victory Pose and Clapping**. Smaller exports downsample. Larger exports upscale the native image, adding dimensions without extra detail. The UI explains upsizing and shows a dark-yellow large-GIF warning for 2048px.
+Standard downloads offer **128, 256, 512, 1024 and 2048px** square images. A **★** marks the selected type's native size: **512 for most types, 1024 for Taunt, Victory Pose and Clapping**. Smaller exports downsample. Larger standard exports upscale the native image, adding dimensions without extra detail. The separate purple HD buttons render a single PNG at native **4096px** (or **2048px**) from the model. The UI explains standard upsizing and shows a dark-yellow large-GIF warning for 2048px.
 
 To make a smaller collection—or spend the same space on higher native resolution—limit the characters, actions, colors and cached views you render. Adding all Kirby powers and colors roughly doubled my earlier storage estimate. Rendering his 25 copied appearances in all six colors adds **150 extra appearance/color variants per animation**, so omitting unneeded hats can save substantial space. The current estimate is about **67 GB**, and higher-resolution builds will increase it. CLI render commands accept `--size` for custom builds; keep custom outputs separate from the standard player collection unless you also update its resolution policy.
 

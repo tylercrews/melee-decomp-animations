@@ -1,3 +1,12 @@
+Native HD selected-frame PNGs (2026-10-13; investigation section62):
+
+- [x] Fix prepared-lazy attack rotation reading catalog timing instead of its render manifest; add both lazy-state regressions and verify actual rotated attacks/GIFs/native4096 stills. Service session16444.
+- [x] Add purple single-frame and dark-purple all-color HD buttons after the existing PNG buttons, with shared loading spinner, progress and duplicate locking.
+- [x] Default HD to native4096 with2048 available; retain exact frame, camera, state, source textures, props/effects, sync and powered/centered appearances.
+- [x] Render only the selected PNG while evaluating original clip framing; skip GIFs/contact sheets and preserve normal native512/1024 collection.
+- [x] Store HD artifacts temporarily outside the project, protect active jobs, expire after10 minutes, serve opaque attachment URLs and clean on shutdown.
+- [x] Pass213 Python tests and Node controls, native-pixel equality, source-state live checks and real color ZIPs; benchmark2048/4096, regenerate player and restart verified8765 service. Service session23159.
+
 Rotation stops and native2048 stills (2026-10-13; investigation section61):
 
 - [x] Make the UI launcher open a versioned player URL after HTML rebuilds; pass8 launcher tests and verify the real py3.13 launch path/live response.

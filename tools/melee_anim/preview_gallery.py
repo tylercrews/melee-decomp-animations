@@ -31,6 +31,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 .controls,.downloads{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:20px 0}
 .controls label{display:flex;align-items:center;gap:8px;min-width:0;max-width:100%}.controls select{min-width:0;max-width:100%}.download{display:inline-block;text-decoration:none}
 .download.primary{background:#235da8;border-color:#3878cb}.download:hover{filter:brightness(1.15)}
+.download.hd{background:#7540b0;border-color:#a677df}.download.hd-colors{background:#45206c;border-color:#8153ad}
 .download[aria-disabled="true"]{opacity:.65;cursor:wait}.download.busy::before{content:"";display:inline-block;width:1em;height:1em;margin-right:8px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 .stage{background:transparent;border:1px solid #354151;border-radius:12px;display:flex;justify-content:center;min-height:400px;align-items:center}
 .framewrap{position:relative;width:min(100%,512px)}#saveimage{position:absolute;inset:0;width:100%;height:100%;opacity:0}
@@ -97,7 +98,11 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <a class="download" id="allzip" download>Download matching animations for all characters</a>
 <a class="download" id="still" hidden download>Download paused frame PNG</a>
 <a class="download" id="framezip" hidden download>Download paused frame in all colors</a>
+<a class="download hd" id="hdstill" hidden download>Rerender Selected Frame In HD</a>
+<a class="download hd-colors" id="hdcolors" hidden download>Rerender Selected Frame In HD In All Colors</a>
 <a id="open" target="_blank" rel="noopener">Open GIF</a></div>
+<div class="controls" id="hdcontrols" hidden><label>HD PNG size <select id="hdsize" aria-label="HD PNG size"><option value="2048">2048 × 2048</option><option value="4096" selected>4096 × 4096</option></select></label>
+<small>Renders the selected pose from the model with your applied angles. Transparent PNGs; temporary exports expire after 10 minutes. Original texture detail is retained.</small></div>
 <small id="downloadstatus" role="status" aria-live="polite"></small>
 <div id="downloadprogress" hidden><progress id="downloadbar" max="100" value="0" aria-label="Download preparation progress"></progress><small id="downloadcount"></small></div>
 <small>Repeat preview does not alter the saved GIF. Victory loops are the separate authored wait animations. If a browser opens a local file instead of downloading it, use Save link as.</small>
@@ -120,6 +125,8 @@ function powerSetting(){return character.value==='kirby'?kirbyPower:'none'}
 function hasPower(){return powerSetting()!=='none'}
 function powerName(name){return hasPower()?name.replace(/(\.[^.]+)$/,`-power-${powerSetting()}$1`):name}
 const character=document.getElementById("character"), still=document.getElementById("still"), framezip=document.getElementById("framezip");
+const hdstill=document.getElementById('hdstill'),hdcolors=document.getElementById('hdcolors'),hdsize=document.getElementById('hdsize'),hdcontrols=document.getElementById('hdcontrols');
+hdsize.value='4096';
 const saveimage=document.getElementById('saveimage');
 const groundeffects=document.getElementById('groundeffects'),techcontrols=document.getElementById('techcontrols'),techhint=document.getElementById('techhint');
 let groundEffectsEnabled=true;
@@ -174,7 +181,7 @@ function angleSuffix(){return hasAngle()?'-view-'+angles.map((v,i)=>'xyz'[i]+v).
 function angleName(name){return name.replace(/(\.[^.]+)$/,`${angleSuffix()}$1`)}
 function previewUnavailable(){return rotationBusy||rotationFailed}
 function updateRotationState(){frame.hidden=previewUnavailable();saveimage.hidden=previewUnavailable();play.disabled=previewUnavailable();scrub.disabled=previewUnavailable();
-document.getElementById('downloadpanel').hidden=previewUnavailable()}
+document.getElementById('downloadpanel').hidden=previewUnavailable();hdcontrols.hidden=previewUnavailable()||playing}
 async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
 if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();runPendingBatch();return}
 if(location.protocol!=='http:'){location.href=playerHandoff();return}
@@ -250,8 +257,9 @@ short?`${short.length} frames / ${(short.length/c.fps).toFixed(2)}s instead of $
 (c.action_key==='results-clap_source'?'No shorter repeat passed the checks.':'Minimum cycle is available for repeating claps.');
 scrub.max=frameCount()-1;
 document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frames at ${c.fps} fps / ${(frameCount()/c.fps).toFixed(2)}s / ${cycleMode()==='sync'?'clapping-sync alteration':cycleMode()==='dirty'?'minimum loop (dirty/jittery)':useMinimum()?'minimum cycle (edited loop)':c.authored_loop?'full authored loop':'one-shot action'}`}
-function exportURL(kind,scope){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
+function exportURL(kind,scope,hd=false){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
 costume:String(c.costume_id),size:downloadsize.value,kind,scope,frame:String(index),cycle:cycleMode()});
+if(hd){query.set('size',hdsize.value);query.set('render','hd')}
 if(isHop())query.set('center',centerSetting());
 if(isJudgeNine())query.set('electric',electricSetting());
 if(hasPower()&&scope!=='all'&&!(scope==='colors'&&includeKirbyHats))query.set('power',powerSetting());
@@ -275,11 +283,14 @@ allzip.download=sizedName(angleName(effectName(batchMarkedName(allName+'.zip','a
 still.href=original?c.frames[index]:exportURL('png','costume');
 still.download=sizedName(angleName(effectName(markedName(c.download_name)).replace('.gif',`-frame-${String(index+1).padStart(4,'0')}.png`)));
 framezip.href=original&&!colorHats?`${a.stills}/frame-${String(index+1).padStart(4,'0')}.zip`:exportURL('png','colors');
-framezip.download=sizedName(angleName(effectName(batchMarkedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`,'colors'))))}
+framezip.download=sizedName(angleName(effectName(batchMarkedName(`${c.character}-${c.action_key.replaceAll('_','-')}-frame-${String(index+1).padStart(4,'0')}-all-colors.zip`,'colors'))));
+hdstill.href=exportURL('png','costume',true);hdcolors.href=exportURL('png','colors',true);
+hdstill.download=still.download.replace(/-\d+px\.png$/,`-hd-${hdsize.value}px.png`);
+hdcolors.download=framezip.download.replace(/-\d+px\.zip$/,`-hd-${hdsize.value}px.zip`)}
 let batchBusy=false,pendingBatch=null;
-const batchButtons=[gif,still,archive,framezip,allzip];
-function playerHandoff(batch=null){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show',hats:batchHats()});if(isJudgeNine())query.set('electric',electricSetting());if(batch)query.set('batch',batch);return `${exportBase}/player.html#${query}`}
-function runPendingBatch(){if(location.protocol!=='http:'||!pendingBatch)return;const button={gif:archive,png:framezip,all:allzip,'single-gif':gif,'single-png':still}[pendingBatch];pendingBatch=null;if(button&&!button.hidden)batchDownload({preventDefault(){}},button)}
+const batchButtons=[gif,still,archive,framezip,allzip,hdstill,hdcolors];
+function playerHandoff(batch=null){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(index),playing:String(playing),repeat:String(loop.checked),size:downloadsize.value,hdsize:hdsize.value,pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2]),effects:effectSetting(),power:powerSetting(),center:centerSetting(),partials:partialsHidden?'hide':'show',hats:batchHats()});if(isJudgeNine())query.set('electric',electricSetting());if(batch)query.set('batch',batch);return `${exportBase}/player.html#${query}`}
+function runPendingBatch(){if(location.protocol!=='http:'||!pendingBatch)return;const button={gif:archive,png:framezip,all:allzip,'single-gif':gif,'single-png':still,'hd-single':hdstill,'hd-colors':hdcolors}[pendingBatch];pendingBatch=null;if(button&&!button.hidden)batchDownload({preventDefault(){}},button)}
 function batchState(busy,active){batchBusy=busy;for(const button of batchButtons){button.ariaDisabled=String(busy);button.ariaBusy=String(busy&&button===active);button.tabIndex=busy?-1:0;button.className=(button.className||'download').replace(/\s*busy\b/g,'')+(busy&&button===active?' busy':'')}}
 function downloadProgress(state){document.getElementById('downloadprogress').hidden=false;document.getElementById('downloadbar').value=Math.max(0,Math.min(100,Number(state.percent)||0));document.getElementById('downloadcount').textContent=state.total?`Animations ready: ${state.completed}/${state.total} · Files ready: ${state.files_completed}/${state.total}`:'';const frames=state.frames_total?` · ${state.frames_done}/${state.frames_total} ${state.unit||'frames'}`:'';document.getElementById('downloadstatus').textContent=`${state.phase||'Preparing download'}${state.label?' · '+state.label:''}${frames}`}
 async function prepareDownload(href){const id=typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():`download-${Date.now()}-${Math.random().toString(36).slice(2)}`;let stopped=false,timer=null;
@@ -290,9 +301,9 @@ try{const response=await responsePromise;if(!response.ok)throw Error(`Preparatio
 finally{stopped=true;if(timer!==null&&typeof clearTimeout==='function')clearTimeout(timer)}}
 async function batchDownload(event,button){event.preventDefault();if(batchBusy)return;
 const href=button.href,filename=button.download,status=document.getElementById('downloadstatus');
-batchState(true,button);downloadProgress({percent:0,phase:'Preparing download…'});
+batchState(true,button);downloadProgress({percent:0,phase:button===hdstill||button===hdcolors?'Preparing selected HD frame…':'Preparing download…'});
 try{let ready=href;
-if(location.protocol!=='http:'&&href.includes('/export?')){location.href=playerHandoff(button===gif?'single-gif':button===still?'single-png':button===framezip?'png':button===allzip?'all':'gif');return}
+if(location.protocol!=='http:'&&href.includes('/export?')){location.href=playerHandoff(button===hdstill?'hd-single':button===hdcolors?'hd-colors':button===gif?'single-gif':button===still?'single-png':button===framezip?'png':button===allzip?'all':'gif');return}
 if(href.includes('/export?')){ready=await prepareDownload(href)}
 else if(location.protocol==='http:'){const response=await fetch(href,{method:'HEAD'});if(!response.ok)throw Error(`Download unavailable (${response.status}).`)}
 const link=document.createElement('a');link.href=ready;link.download=filename;document.body.append(link);link.click();link.remove();document.getElementById('downloadbar').value=100;status.textContent='Download ready. Your browser is saving the file.';
@@ -301,7 +312,7 @@ finally{batchState(false,button)}}
 for(const button of batchButtons)button.onclick=event=>batchDownload(event,button);
 function show(){if(current<0||previewUnavailable())return;let c=clips[current];let src=framePath();if(lastImage!==src){frame.src=src;lastImage=src}scrub.value=index;
 updateDownloads();
-still.hidden=playing;framezip.hidden=playing;
+still.hidden=playing;framezip.hidden=playing;hdstill.hidden=playing;hdcolors.hidden=playing;hdcontrols.hidden=playing;
 // A real image receives the browser's native Save image as operation. The
 // timed PNG underneath preserves scrubbing/repeat semantics; the save target
 // is the actual GIF while playing and the exact PNG while paused. Remove the
@@ -316,7 +327,7 @@ index=0;carry=0;last=performance.now();
 let a=animations.find(a=>a.key===action.value&&a.character===character.value);archive.href=a.zip;archive.download=a.download_name;
 archive.textContent=`Download this animation — ${a.color_count} colors`;
 if(current<0){playing=false;play.textContent='Play';frame.hidden=true;gif.hidden=true;open.hidden=true;
-still.hidden=true;framezip.hidden=true;
+still.hidden=true;framezip.hidden=true;hdstill.hidden=true;hdcolors.hidden=true;hdcontrols.hidden=true;
 document.getElementById('meta').textContent='This animation/color has not been rendered yet.';return}
 let c=clips[current];frame.hidden=false;gif.hidden=false;open.hidden=false;scrub.max=c.frames.length-1;
 loop.checked=true;playing=true;play.textContent='Pause';
@@ -330,6 +341,7 @@ hidepartials.onchange=()=>{let old=action.value;partialsHidden=hidepartials.chec
 function updateNativeSize(keep=false){const size=['victory','taunt','clapping'].includes(typeForAction(action.value))?1024:512;if(!keep&&Number(downloadsize.value)===nativeDefaultSize)downloadsize.value=String(size);nativeDefaultSize=size;const names={128:'Extra small',256:'Small',512:'Medium',1024:'Large',2048:'X-Large'};for(const option of downloadsize.options){const n=Number(option.value);option.textContent=`${n===size?'★ ':n===2048?'⚠ ':''}${names[n]} (${n} × ${n}${n===size?', native render':''})`}updateSizeWarning()}
 function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048';const notice=document.getElementById('upsizenotice');notice.hidden=Number(downloadsize.value)<=nativeDefaultSize;notice.textContent=`Upsized from the ${nativeDefaultSize} × ${nativeDefaultSize} render; no additional detail.`}
 downloadsize.onchange=()=>{updateSizeWarning();show()};
+hdsize.onchange=()=>show();
 kirbymode.onchange=()=>{includeKirbyHats=kirbymode.checked;show()};
 groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[current].ground_effect)loadRotation()};
 centerjump.onchange=()=>{centerJumpEnabled=centerjump.checked;if(isHop())loadRotation()};
@@ -343,7 +355,7 @@ while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.chec
 last=now;requestAnimationFrame(tick)}
 function restoreSelection(){let incoming=new URLSearchParams((location.hash||'').slice(1));
 includeKirbyHats=incoming.get('hats')==='all';kirbymode.checked=includeKirbyHats;
-pendingBatch=['gif','png','all','single-gif','single-png'].includes(incoming.get('batch'))?incoming.get('batch'):null;
+pendingBatch=['gif','png','all','single-gif','single-png','hd-single','hd-colors'].includes(incoming.get('batch'))?incoming.get('batch'):null;
 // Consume this one-time handoff so refresh/reopen cannot replay old angles.
 if(location.hash&&typeof history!=='undefined')history.replaceState(null,'',location.pathname+location.search);
 if(characters.some(c=>c.slug===incoming.get('character'))){character.value=incoming.get('character');colors();actions()}
@@ -356,6 +368,7 @@ if(requested){animationtype.value=typeForAction(requested.key);actions(requested
 if(characters.find(c=>c.slug===character.value).costumes.some(c=>String(c.id)===incoming.get('costume')))costume.value=incoming.get('costume');
 if(['full','minimum','dirty','sync'].includes(incoming.get('cycle')))checkMode(incoming.get('cycle'));
 if(['128','256','512','1024','2048'].includes(incoming.get('size')))downloadsize.value=incoming.get('size');
+if(['2048','4096'].includes(incoming.get('hdsize')))hdsize.value=incoming.get('hdsize');
 if(action.value.startsWith('tech-')&&['on','off'].includes(incoming.get('effects'))){groundEffectsEnabled=incoming.get('effects')==='on';groundeffects.checked=groundEffectsEnabled}
 if(['on','off'].includes(incoming.get('electric'))){judgeElectricEnabled=incoming.get('electric')==='on';judgeelectric.checked=judgeElectricEnabled}
 if(['movement-fullhop_source','movement-shorthop_source'].includes(action.value)&&['on','off'].includes(incoming.get('center'))){centerJumpEnabled=incoming.get('center')==='on';centerjump.checked=centerJumpEnabled}

@@ -39,12 +39,14 @@ class RotationCache:
         self.repo = Path(repo).resolve() if repo else Path(__file__).resolve().parents[2]
         self.lock = threading.RLock()
 
-    def _inputs(self, clip, angles, sync, power='none', center=False):
+    def _inputs(self, clip, angles, sync, power='none', center=False, manifest_override=None):
         slug, cid = clip['character'], clip['costume_id']
         model = self.repo/'build/melee_anim/exported'/slug/f'costume_{cid:02d}'/'model.json'
         companion = model.parent/'companion/model.json'
-        original = self.root/Path(clip['gif']).parent/'preview-manifest.json'
-        manifest = json.loads(original.read_text())
+        # AttackCache retains lazy=True after preparing its GIF and manifest.
+        # Only an unprepared HD request needs catalog-based timing provenance.
+        original = self.root/'attack-catalog.json' if clip.get('lazy') and not clip.get('gif') else self.root/Path(clip['gif']).parent/'preview-manifest.json'
+        manifest = manifest_override if manifest_override is not None else json.loads(original.read_text())
         selected = manifest
         if sync:
             selected = json.loads((self.root/Path(clip['sync_cycle']['gif']).parent/'preview-manifest.json').read_text())

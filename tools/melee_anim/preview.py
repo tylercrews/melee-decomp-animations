@@ -399,9 +399,12 @@ def main():
     parser.add_argument("--roll", type=float, default=0)
     parser.add_argument("--backend", choices=("python","native"), default="python")
     parser.add_argument("--max-frames", type=int, help="diagnostic truncation, not a complete export")
+    parser.add_argument("--still-frame", type=int, help="render only this zero-based sample as PNG, retaining whole-clip framing")
     args = parser.parse_args()
-    if args.size is not None and not 64 <= args.size <= 2048 or args.ticks_per_second <= 0:
-        parser.error("size must be 64..2048 and ticks-per-second positive")
+    if args.size is not None and not 64 <= args.size <= (4096 if args.still_frame is not None else 2048) or args.ticks_per_second <= 0:
+        parser.error("size must be 64..2048 (4096 for single PNGs) and ticks-per-second positive")
+    if args.still_frame is not None and (args.still_frame < 0 or args.max_frames):
+        parser.error('still-frame must be nonnegative and cannot truncate the animation')
     if args.max_frames is not None and args.max_frames <= 0:
         parser.error("max-frames must be positive")
     if args.section == "wait" and not args.action.startswith("victory"):
@@ -476,8 +479,10 @@ def main():
             parser.error('invalid clapping-sync timing')
     if args.max_frames:
         source_times = source_times[:args.max_frames]
+    if args.still_frame is not None and args.still_frame >= len(source_times):
+        parser.error('still-frame is outside the animation')
     args.output.mkdir(parents=True, exist_ok=True)
-    expected_frames = {f"frame_{i:04d}.png" for i in range(len(source_times))}
+    expected_frames = {f"frame_{i:04d}.png" for i in range(1 if args.still_frame is not None else len(source_times))}
     stale = {p.name for p in args.output.glob("frame_*.png")} - expected_frames
     if stale:
         parser.error(f"Output has extra frame files; choose a fresh output directory: {sorted(stale)[:5]}")
@@ -767,6 +772,12 @@ def main():
         from .fighter_colors import TechFlash, tech_color_animation
         if tech_color_animation(args.action) is not None:
             flash = TechFlash(args.files,args.action,motion)
+    original_source_times = source_times
+    if args.still_frame is not None:
+        source_times = [source_times[args.still_frame]]
+        poses = [poses[args.still_frame]]
+        visibility = [visibility[args.still_frame]]
+        sampled = [sampled[args.still_frame]]
     images = []
     raster=None
     if args.backend=="native":
@@ -795,18 +806,19 @@ def main():
         images.append(image.convert("RGBA"))
         if i == 0 or (i+1) % 20 == 0 or i == len(poses)-1:
             print(f"Rendered {i+1}/{len(poses)} frames ({time.monotonic()-started:.1f}s)", flush=True)
-    from .gif_export import encode_frames, quantize_rgba
-    frames = quantize_rgba(images)
-    (args.output/'preview.gif').write_bytes(encode_frames(frames,[1000//args.fps]*len(frames),
-                                            0 if (looping and not args.max_frames) or sync_plan else None))
     if raster:raster.close()
-    strip = Image.new("RGB", (args.size*4, args.size+28), (34, 38, 46))
-    draw = ImageDraw.Draw(strip)
-    for i in range(4):
-        frame_id = min(len(images)-1, i*len(images)//4)
-        strip.paste(images[frame_id], (i*args.size, 28))
-        draw.text((i*args.size+8, 8), f"source frame {source_times[frame_id]:.2f}", fill="white")
-    strip.save(args.output/"contact_sheet.png")
+    if args.still_frame is None:
+        from .gif_export import encode_frames, quantize_rgba
+        frames = quantize_rgba(images)
+        (args.output/'preview.gif').write_bytes(encode_frames(frames,[1000//args.fps]*len(frames),
+                                                0 if (looping and not args.max_frames) or sync_plan else None))
+        strip = Image.new("RGB", (args.size*4, args.size+28), (34, 38, 46))
+        draw = ImageDraw.Draw(strip)
+        for i in range(4):
+            frame_id = min(len(images)-1, i*len(images)//4)
+            strip.paste(images[frame_id], (i*args.size, 28))
+            draw.text((i*args.size+8, 8), f"source frame {source_times[frame_id]:.2f}", fill="white")
+        strip.save(args.output/"contact_sheet.png")
     manifest = {"prototype": "Roster textured pose preview; approximate shading and runtime behavior",
                 "character": model["character"], "costume_id": model["costume_id"],
                 "source_model_archive": model["source_archive"],
@@ -815,7 +827,7 @@ def main():
                 "fps": args.fps, "nominal_ticks_per_second": args.ticks_per_second,
                 "timing_basis": "explicit prototype preset; not measured emulator timing",
                 "output_duration_seconds": len(images)/args.fps,
-                "complete_interval": args.max_frames is None, "size": args.size, "camera_yaw": args.yaw,
+                "complete_interval": args.max_frames is None and args.still_frame is None, "size": args.size, "camera_yaw": args.yaw,
                 "transparent_background": True, "alpha_source": "raster coverage; GIF threshold 128; RGBA PNG master",
                 "camera_pitch": args.pitch, "camera_roll": args.roll,
                 "camera_rotation_order": "Ry(yaw) @ Rx(pitch) @ Rz(roll)",
@@ -882,12 +894,16 @@ def main():
         manifest['output_mode'] = 'clapping-sync alteration'
         manifest['uniform_gif_ticks'] = True
         manifest['companion_sha256'] = hashlib.sha256(args.companion.read_bytes()).hexdigest() if args.companion else None
+    if args.still_frame is not None:
+        manifest['output_mode'] = 'single frame PNG'
+        manifest['selected_sample_index'] = args.still_frame
+        manifest['fit_source_times'] = fit_times or original_source_times
     manifest['fighter_texture_commands']='source opcode 40, frozen TObj image FObjs; costume-specific mapping'
     manifest_path=args.output/'preview-manifest.json'
     temporary=manifest_path.with_suffix('.json.tmp')
     temporary.write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")
     temporary.replace(manifest_path)
-    print(f"Preview: {args.output/'preview.gif'}", flush=True)
+    print(f"Preview: {args.output/('frame_0000.png' if args.still_frame is not None else 'preview.gif')}", flush=True)
 
 
 if __name__ == "__main__":

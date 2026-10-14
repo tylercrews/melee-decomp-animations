@@ -134,6 +134,18 @@ class RotationCacheTests(unittest.TestCase):
             self.assertEqual(len(self.calls), 3)
             self.assertNotEqual(self.cache.get(self.clip, (20, 90, 10))['gif'], changed['gif'])
 
+    def test_prepared_lazy_attack_rotates_using_its_render_manifest(self):
+        actor={'fighter_kind':0,'animation_file':'fake.dat'}
+        catalog={'characters':[{'fighter_kind':0,'actions':[{'key':'attack-62_source','available':True,'actors':[actor]}]}]}
+        (self.root/'attack-catalog.json').write_text(json.dumps(catalog))
+        clip={**self.clip,'action_key':'attack-62_source','lazy':True}
+        with patch('tools.melee_anim.rotations.subprocess.run',side_effect=self.render):
+            rotated=self.cache.get(clip,(0,43,0))
+            self.assertEqual(len(rotated['frames']),3)
+            self.assertEqual(json.loads((self.root/Path(rotated['gif']).parent/'timeline.json').read_text())['source_times'],[0,1,2])
+            self.assertEqual(self.cache.get(clip,(0,43,0)),rotated)
+            self.assertEqual(len(self.calls),1)
+
     def test_kirby_power_renders_at_zero_angle_and_separates_cache_and_names(self):
         model=self.repo/'build/melee_anim/exported/kirby/costume_00/model.json'
         model.parent.mkdir(parents=True)

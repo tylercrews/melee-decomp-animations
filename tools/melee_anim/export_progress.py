@@ -55,7 +55,7 @@ class ProgressRegistry:
 
 
 @contextmanager
-def render_progress(log_path, total, callback):
+def render_progress(log_path, total, callback, png=False):
     """Watch fresh stdout from the existing renderer; no guessed timers/counts."""
     if callback is None:
         yield
@@ -70,8 +70,8 @@ def render_progress(log_path, total, callback):
         matches = re.findall(r'Rendered (\d+)/(\d+) frames', text)
         if matches:
             done, count = map(int,matches[-1])
-            phase = 'Encoding rendered GIF' if done == count else 'Rendering frames'
-        else:done,count,phase = 0,total,'Preparing animation'
+            phase = ('PNG rendered' if png else 'Encoding rendered GIF') if done == count else 'Rendering frames'
+        else:done,count,phase = 0,total,'Preparing selected frame' if png else 'Preparing animation'
         current = (phase,done,count)
         if current != previous:
             callback(*current)

@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlsplit, quote
 from .downloads import DownloadCatalog, SIZES
 from .render_settings import MASTER_SIZE,RESULTS_SIZE
 from .export_progress import ProgressRegistry
+from .hd_stills import HD_SIZES, HD_DEFAULT_SIZE
 
 
 def make_server(root, port=8765, catalog=None):
@@ -31,8 +32,37 @@ def make_server(root, port=8765, catalog=None):
         def list_directory(self, path):
             self.send_error(404, 'Open player.html')
 
+        def _hd_download(self, token):
+            row = catalog.hd_artifacts.get(token)
+            if row is None:
+                self.send_error(404, 'HD download expired; rerender the selected frame')
+                return
+            target, filename = row
+            try:source = target.open('rb')
+            except OSError:
+                self.send_error(404, 'HD download expired; rerender the selected frame')
+                return
+            with source:
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/png' if target.suffix=='.png' else 'application/zip')
+                self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+                self.send_header('Content-Length', str(target.stat().st_size))
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                if self.command!='HEAD':
+                    try:shutil.copyfileobj(source, self.wfile)
+                    except (BrokenPipeError,ConnectionResetError):pass
+
+        def do_HEAD(self):
+            url = urlsplit(self.path)
+            if url.path.startswith('/hd-export/'):
+                return self._hd_download(url.path.removeprefix('/hd-export/'))
+            return super().do_HEAD()
+
         def do_GET(self):
             url = urlsplit(self.path)
+            if url.path.startswith('/hd-export/'):
+                return self._hd_download(url.path.removeprefix('/hd-export/'))
             if url.path == '/export-progress':
                 try:
                     query = parse_qs(url.query,strict_parsing=True)
@@ -57,6 +87,8 @@ def make_server(root, port=8765, catalog=None):
                 data = json.dumps({'service': 'melee-animation-downloads', 'sizes': SIZES,
                                    'master_size':MASTER_SIZE,
                                    'results_master_size':RESULTS_SIZE,
+                                   'hd_sizes':HD_SIZES,
+                                   'hd_default_size':HD_DEFAULT_SIZE,
                                    'clips': len(catalog.clips), 'root': str(root)}).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -75,7 +107,7 @@ def make_server(root, port=8765, catalog=None):
                 values = parse_qs(url.query, strict_parsing=True)
                 allowed = {'character', 'action', 'costume', 'cycle', 'pitch', 'yaw', 'roll', 'effects', 'power', 'center', 'electric'}
                 if url.path in ('/export','/prepare-export'):
-                    allowed |= {'size', 'kind', 'scope', 'frame', 'view','hats'}
+                    allowed |= {'size', 'kind', 'scope', 'frame', 'view','hats','render'}
                 if url.path == '/prepare-export':allowed.add('progress')
                 if set(values)-allowed or any(len(v) != 1 for v in values.values()):
                     raise ValueError('Unknown or repeated download option')
@@ -106,7 +138,9 @@ def make_server(root, port=8765, catalog=None):
                         target, filename, mime = catalog.export(**options,**({'progress':callback} if callback else {}))
                         if progress_id:progress_jobs.finish(progress_id)
                         if url.path=='/prepare-export':
-                            ready = {'url':'/'+quote(target.resolve().relative_to(root).as_posix()),'filename':filename}
+                            artifact_url = ('/'+quote(target.resolve().relative_to(root).as_posix()) if target.resolve().is_relative_to(root)
+                                            else catalog.hd_artifacts.publish(target,filename))
+                            ready = {'url':artifact_url,'filename':filename}
                             if progress_id:ready['progress']=progress_jobs.get(progress_id)
                             data=json.dumps(ready).encode()
                 finally:
@@ -142,7 +176,12 @@ def make_server(root, port=8765, catalog=None):
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
-    return ThreadingHTTPServer(('127.0.0.1', port), Handler)
+    class Server(ThreadingHTTPServer):
+        def server_close(self):
+            super().server_close()
+            if hasattr(catalog,'hd_artifacts'):catalog.hd_artifacts.close()
+
+    return Server(('127.0.0.1', port), Handler)
 
 
 def main():

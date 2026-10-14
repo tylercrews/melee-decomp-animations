@@ -14,6 +14,7 @@ from PIL import Image
 from .preview_gallery import collect_clips
 from .rotations import RotationCache, camera_angles, marked_angle
 from .render_settings import native_size
+from .hd_stills import HD_SIZES, HD_DEFAULT_SIZE, HDArtifacts, StillCache
 
 SIZES = (128, 256, 512, 1024, 2048)
 
@@ -85,6 +86,8 @@ class DownloadCatalog:
         self.artifact_lock=threading.RLock()
         self.attacks.lock=self.render_lock
         self.rotations.lock=self.render_lock
+        self.hd_artifacts=HDArtifacts()
+        self.hd_stills=None
 
     def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', electric='on'):
         from .movement import centered_jump_setting
@@ -117,10 +120,12 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
-    def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off', electric='on', progress=None):
+    def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off', electric='on', render='standard', progress=None):
+        if render not in ('standard','hd') or render=='hd' and (kind!='png' or scope not in ('costume','colors')):
+            raise ValueError('HD rendering requires a single-frame PNG or all-color PNG ZIP')
         if size is None:
             selected=next((c for c in self.clips if c['character']==character and c['action_key']==action),{})
-            size=native_size(action,selected.get('animation_type'))
+            size=HD_DEFAULT_SIZE if render=='hd' else native_size(action,selected.get('animation_type'))
         from .electric_burst import is_judge9
         if electric not in ('on','off') or electric=='off' and not is_judge9(character,action):raise ValueError('Electric explosion toggle requires Judgment9')
         from .movement import centered_jump_setting
@@ -132,7 +137,7 @@ class DownloadCatalog:
             raise ValueError('Kirby Mode applies only to batch ZIP downloads')
         if hats=='all':power='none'
         angles = camera_angles(pitch, yaw, roll)
-        if size not in SIZES or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum', 'dirty', 'sync'):
+        if size not in (HD_SIZES if render=='hd' else SIZES) or kind not in ('gif', 'png') or scope not in ('costume', 'colors', 'all') or cycle not in ('full', 'minimum', 'dirty', 'sync'):
             raise ValueError('Unsupported download option')
         if effects not in ('on','off') or effects=='on' and not action.startswith('tech-'):
             raise ValueError('Ground effects require a selected Tech animation')
@@ -163,6 +168,8 @@ class DownloadCatalog:
             length = len(c['sync_cycle']['frames']) if cycle == 'sync' else short['length'] if short else c.get('frame_count',len(c['frames']))
             if kind == 'png' and not 0 <= frame < length:
                 raise ValueError('Frame index is outside this animation')
+        if render=='hd':
+            return self._export_hd(jobs,character,action,size,scope,frame,cycle,angles,effects,power,centered,hats,electric,progress)
         units = len(jobs)*2 + (scope != 'costume')
         def notify(phase,completed,files,work,done=0,count=0,label='',unit='frames'):
             if progress:
@@ -274,3 +281,63 @@ class DownloadCatalog:
         name = marked_angle(name+'.zip', angles)[:-4]
         notify('Files ready',len(jobs),len(jobs),units)
         return bundle, f'{name}-{size}px.zip', 'application/zip'
+
+    def _export_hd(self,jobs,character,action,size,scope,frame,cycle,angles,effects,power,center,hats,electric,progress):
+        artifacts=self.hd_artifacts
+        artifacts.begin()
+        try:
+            with self.render_lock:
+                if self.hd_stills is None:
+                    self.hd_stills=StillCache(self.root,artifacts.root/'renders')
+                    self.hd_stills.lock=self.render_lock
+            total=len(jobs);units=2*total+(scope!='costume')
+            def notify(phase,completed,files,work,done=0,count=0,label='',unit='frames'):
+                if progress:progress(dict(phase=phase,completed=completed,total=total,files_completed=files,
+                                          percent=100*work/units,frames_done=done,frames_total=count,label=label,unit=unit))
+            entries=[]
+            for index,(clip,variant) in enumerate(jobs):
+                label=f"{clip.get('character_label',character)} / {clip.get('costume_label',clip['costume_id'])}"
+                if variant!='none':label+=f' / Kirby {variant}'
+                notify('Preparing selected HD frame',index,index,2*index,0,1,label)
+                def on_render(stage,done,count):
+                    notify(stage,index,index,2*index+.9*done/max(1,count),done,count,label)
+                target,key=self.hd_stills.get(clip,angles,size,frame,cycle,variant,center,effects=='on',electric=='on',on_render if progress else None)
+                name=Path(clip['download_name']).stem
+                if variant!='none':name+=f'-power-{variant}'
+                if center:name+='-centered'
+                if electric=='off':name+='-no-electric'
+                short=((clip.get('dirty_cycle') if cycle=='dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum','dirty') and action=='results-clap_source' else None
+                if short:name+='-dirty-loop' if short.get('dirty') else '-minimum-cycle'
+                if cycle=='sync':name+='-clapping-sync'
+                name=marked_angle(name+'.png',angles).replace('.png',f'-frame-{frame+1:04d}-hd-{size}px.png')
+                entries.append((name,target,key))
+                notify('HD frame ready',index+1,index+1,2*(index+1),1,1,label)
+                if total>1:time.sleep(.005)
+            if scope=='costume':
+                name,target,_=entries[0]
+                return target,name,'image/png'
+            if len({name for name,_,_ in entries})!=total:raise ValueError('Batch has duplicate export filenames')
+            key=hashlib.sha256(repr([(n,k) for n,_,k in entries]).encode()).hexdigest()
+            folder=artifacts.root/'bundles'/key
+            bundle=folder/'frames.zip'
+            with self.artifact_lock:
+                folder.mkdir(parents=True,exist_ok=True)
+                if not bundle.is_file():
+                    temporary=bundle.with_suffix('.zip.tmp')
+                    with ZipFile(temporary,'w',compression=ZIP_STORED) as archive:
+                        for index,(name,target,_) in enumerate(entries,1):
+                            archive.write(target,name)
+                            notify('Packing HD PNG ZIP',total,total,2*total+index/total,index,total,unit='files')
+                    temporary.replace(bundle)
+                import os
+                os.utime(folder,None)
+            name=f'{character}-{action.replace("_","-")}-frame-{frame+1:04d}-all-colors'
+            if power!='none':name+=f'-power-{power}'
+            if hats=='all' and character=='kirby':name+='-kirby-all-hats-all-colors'
+            if center:name+='-centered'
+            if electric=='off':name+='-no-electric'
+            if cycle!='full':name+=f'-{cycle}-cycle'
+            name=marked_angle(name+'.zip',angles).replace('.zip',f'-hd-{size}px.zip')
+            notify('HD files ready',total,total,units)
+            return bundle,name,'application/zip'
+        finally:artifacts.end()
