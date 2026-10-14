@@ -1,3 +1,11 @@
+Cross-platform setup (2026-10-14; investigation section64):
+
+- [x] Rename the Windows setup/import shortcut and add Mac/Linux setup and UI entry points.
+- [x] Detect/install compatible Python with supported package managers; keep pinned dependencies in local .venv and document manual fallback.
+- [x] Remove the Windows-only launcher guard, select portable rendering for full-roster/sync jobs and detach POSIX background servers.
+- [x] Update README and pass231 Python tests, mocked shell installer/error/argument checks, live Windows help and an actual portable1024 still.
+- [ ] Verify full imports and UI/server lifecycle on native Mac and Linux installations; measure full-roster/HD performance there.
+
 HD transparent-border cropping (2026-10-13; investigation section63):
 
 - [x] Add checked-by-default Crop Transparent Border after purple buttons; preserve it in HD snapshots/handoffs and keep it out of preview options.

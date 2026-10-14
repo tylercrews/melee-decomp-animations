@@ -1,8 +1,15 @@
 import unittest
+from unittest.mock import patch
+from tools.melee_anim import render_settings
 from tools.melee_anim.render_settings import native_size
 
 
 class RenderSettingsTests(unittest.TestCase):
+    def test_backend_follows_the_host_platform(self):
+        for platform, backend in [('win32','native'),('darwin','python'),('linux','python')]:
+            with self.subTest(platform=platform), patch.object(render_settings.sys, 'platform', platform):
+                self.assertEqual(render_settings.default_backend(),backend)
+
     def test_results_use_1024_and_other_types_keep_512(self):
         for action in ('victory1','victory3_wait','results-clap','results-clap_source','taunt','taunt_source'):
             self.assertEqual(native_size(action),1024)

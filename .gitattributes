@@ -3,10 +3,12 @@
 
 # Force strict Unix-style line endings (LF) for shell scripts and dtk config.
 *.sh text eol=lf
+*.command text eol=lf
 config/**/*.txt text eol=lf
 
 # Always use CRLF for Windows batch scripts.
 *.bat text eol=crlf
+*.cmd text eol=crlf
 
 # Explicitly declare source/build files as text to ensure Git normalizes them.
 *.c text

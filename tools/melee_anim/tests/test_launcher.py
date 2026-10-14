@@ -59,17 +59,46 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(run.call_count, 1); environment.assert_not_called()
 
     def test_environment_reuses_ready_packages_and_installs_only_locally(self):
-        with patch.object(launcher, 'packages_ready', return_value=True), patch.object(launcher, 'run_step') as run:
+        with patch.object(launcher.sys, 'prefix', str(self.repo/'.venv')), patch.object(launcher, 'packages_ready', return_value=True), patch.object(launcher, 'run_step') as run:
             self.assertEqual(launcher.environment_python(self.repo), launcher.sys.executable)
             run.assert_not_called()
         with patch.object(launcher, 'packages_ready', return_value=False), patch.object(launcher, 'run_step') as run:
             executable = launcher.environment_python(self.repo)
-            self.assertEqual(executable, str(self.repo/'.venv/Scripts/python.exe'))
+            self.assertEqual(executable, str(launcher.venv_python(self.repo)))
             create, install = [call.args[0] for call in run.call_args_list]
             self.assertEqual(create[-1], str(self.repo/'.venv'))
             self.assertEqual(install[:4], [executable, '-m', 'pip', 'install'])
             self.assertIn('--only-binary=:all:', install)
             self.assertEqual(install[-1], str(self.repo/'tools/melee_anim/requirements.txt'))
+
+    def test_global_packages_still_create_a_local_environment(self):
+        with patch.object(launcher, 'packages_ready', return_value=True), patch.object(launcher, 'run_step') as run:
+            self.assertEqual(launcher.environment_python(self.repo), str(launcher.venv_python(self.repo)))
+            self.assertEqual(run.call_count, 2)
+
+    def test_supported_platforms_and_posix_venv(self):
+        for platform in ('win32', 'darwin', 'linux'):
+            with self.subTest(platform=platform), patch.object(launcher.sys, 'platform', platform):
+                launcher.check_python()
+                suffix = '.venv/Scripts/python.exe' if platform == 'win32' else '.venv/bin/python'
+                self.assertEqual(launcher.venv_python(self.repo), self.repo/suffix)
+                with patch.object(launcher, 'run_step') as run:
+                    self.assertEqual(launcher.environment_python(self.repo), str(self.repo/suffix))
+                    self.assertEqual(run.call_args.args[0][0], str(self.repo/suffix))
+        with patch.object(launcher.sys, 'platform', 'unsupported'):
+            with self.assertRaisesRegex(ValueError, 'support Windows, macOS and Linux'):
+                launcher.check_python()
+        for version, bits in [((3, 9), 8), ((3, 14), 8), ((3, 13), 4)]:
+            with patch.object(launcher.sys, 'version_info', version), patch.object(launcher.struct, 'calcsize', return_value=bits):
+                with self.assertRaisesRegex(ValueError, '64-bit Python'):
+                    launcher.check_python()
+
+    def test_foreign_or_incomplete_venv_fails_before_installing(self):
+        (self.repo/'.venv').mkdir()
+        with patch.object(launcher, 'run_step') as run:
+            with self.assertRaisesRegex(ValueError, 'another OS'):
+                launcher.environment_python(self.repo)
+            run.assert_not_called()
 
     def test_server_identity_and_repository_check(self):
         root = self.repo/'build/melee_anim/preview'
@@ -115,6 +144,7 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(kwargs['cwd'], self.repo); self.assertEqual(kwargs['stdin'], launcher.subprocess.DEVNULL)
             if launcher.os.name == 'nt':
                 self.assertEqual(kwargs['creationflags'], launcher.subprocess.CREATE_NO_WINDOW)
+            self.assertEqual(kwargs['start_new_session'], launcher.os.name != 'nt')
             child.terminate.assert_not_called()
         child.poll.return_value = 1
         with patch.object(launcher, 'server_status', return_value=False), patch.object(launcher.subprocess, 'Popen', return_value=child), patch.object(launcher.webbrowser, 'open') as browser:

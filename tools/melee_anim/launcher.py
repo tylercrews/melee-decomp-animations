@@ -1,4 +1,4 @@
-"""Windows double-click setup/UI orchestration, using only the standard library.
+"""Cross-platform setup/UI orchestration, using only the standard library.
 
 python -m tools.melee_anim.launcher import [path/to/melee.iso]
 python -m tools.melee_anim.launcher import --extract-only
@@ -24,8 +24,8 @@ PACKAGES = {'numpy': '2.2.4', 'Pillow': '11.1.0'}
 
 
 def check_python():
-    if os.name != 'nt':
-        raise ValueError('These launchers require Windows. The current full-roster raster backend uses Windows OpenGL.')
+    if sys.platform not in ('win32', 'darwin', 'linux'):
+        raise ValueError('The setup launchers support Windows, macOS and Linux.')
     if not (3, 10) <= sys.version_info[:2] <= (3, 13) or struct.calcsize('P') != 8:
         raise ValueError('Use 64-bit Python 3.13 (compatible range: 3.10-3.13). See README.md for the download link.')
 
@@ -42,15 +42,21 @@ def run_step(command, repo, label):
     result = subprocess.run(command, cwd=repo,
                             env={**os.environ, 'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1'})
     if result.returncode:
-        raise RuntimeError(f'{label} failed (exit {result.returncode}). Fix the error above and run Import Melee Iso again.')
+        raise RuntimeError(f'{label} failed (exit {result.returncode}). Fix the error above and run your platform setup launcher again.')
+
+
+def venv_python(repo):
+    return repo / ('.venv/Scripts/python.exe' if sys.platform == 'win32' else '.venv/bin/python')
 
 
 def environment_python(repo):
     """Install only inside this checkout's ignored .venv, never globally."""
-    if packages_ready():
+    executable = venv_python(repo)
+    if Path(sys.prefix).resolve() == (repo/'.venv').resolve() and packages_ready():
         return sys.executable
-    executable = repo/'.venv/Scripts/python.exe'
     if not executable.is_file():
+        if (repo/'.venv').exists():
+            raise ValueError('The existing .venv is incomplete or belongs to another OS. Rename it and run setup again.')
         run_step([sys.executable, '-m', 'venv', str(repo/'.venv')], repo, 'Creating local Python environment')
     run_step([str(executable), '-m', 'pip', 'install', '--only-binary=:all:', '-r',
               str(repo/'tools/melee_anim/requirements.txt')], repo,
@@ -78,19 +84,25 @@ def preparation_steps(python, iso, jobs=4):
 def import_iso(repo, iso, jobs=4, extract_only=False):
     iso = iso.resolve()
     if not iso.is_file():
-        raise ValueError(f'ISO not found: {iso}\nPut your game dump beside README.md and name it melee.iso, then run Import Melee Iso.cmd.')
+        raise ValueError(f'ISO not found: {iso}\nPut your game dump beside README.md and name it melee.iso, then run your platform setup launcher.')
     if extract_only:
         run_step([sys.executable, '-m', 'tools.melee_anim.extract_iso', str(iso)], repo, 'Checking and extracting the ISO')
-        print('Extraction complete. Run the full Import Melee Iso launcher to prepare the UI.', flush=True)
+        print('Extraction complete. Run the full platform setup launcher to prepare the UI.', flush=True)
         return
     # Reject incompatible images before installing packages or rendering.
     steps = preparation_steps(sys.executable, iso, jobs)
     label, command = steps[0]
     run_step(command, repo, label)
     python = environment_python(repo)
+    if sys.platform != 'win32':
+        print('\nmacOS/Linux use the portable Python renderer. Full-roster preparation and HD exports can be very slow; '
+              'Windows uses the faster native OpenGL backend.', flush=True)
     for label, command in preparation_steps(python, iso, jobs)[1:]:
         run_step(command, repo, label)
-    print('\nImport complete. Double-click Open Melee Decomp Animation UI.cmd.', flush=True)
+    opener = {'win32': 'Open Melee Decomp Animation UI.cmd',
+              'darwin': 'Mac Open Melee Decomp Animation UI.command',
+              'linux': 'Linux Open Melee Decomp Animation UI.sh'}[sys.platform]
+    print(f'\nImport complete. Run {opener}.', flush=True)
 
 
 def server_status(port, root):
@@ -114,7 +126,7 @@ def server_status(port, root):
 def open_ui(repo, python, port=8765, browser=True):
     root = repo/'build/melee_anim/preview'
     if not (root/'player.html').is_file() or not (repo/'build/melee_anim/motions.json').is_file():
-        raise ValueError('The animations are not prepared yet. Run Import Melee Iso.cmd first.')
+        raise ValueError('The animations are not prepared yet. Run your platform setup launcher first.')
     # Do not install or regenerate anything merely to reopen an existing UI.
     process = None
     if not server_status(port, root):
@@ -123,6 +135,7 @@ def open_ui(repo, python, port=8765, browser=True):
             process = subprocess.Popen([python, '-m', 'tools.melee_anim.player_server', '--root', str(root), '--port', str(port)],
                                        cwd=repo, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
+                                       start_new_session=os.name != 'nt',
                                        env={**os.environ, 'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1'})
         deadline = time.monotonic()+60
         try:
@@ -166,10 +179,10 @@ def main():
             if not 1024 <= args.port <= 65535:
                 raise ValueError('Port must be 1024-65535')
             if not packages_ready():
-                raise ValueError('NumPy/Pillow are not ready in this Python environment. Run Import Melee Iso.cmd first, or install requirements.txt as described in README.md.')
+                raise ValueError('NumPy/Pillow are not ready in this Python environment. Run your platform setup launcher first, or install requirements.txt as described in README.md.')
             open_ui(REPO, sys.executable, args.port, not args.no_browser)
         else:
-            print(f'Python: {sys.version.split()[0]} (64-bit Windows)\nRequired packages ready: {packages_ready()}\n'
+            print(f'Python: {sys.version.split()[0]} (64-bit, {sys.platform})\nRequired packages ready: {packages_ready()}\n'
                   f'ISO: {(REPO / "melee.iso").is_file()}\nPlayer: {(REPO / "build/melee_anim/preview/player.html").is_file()}')
     except (OSError, ValueError, RuntimeError) as error:
         parser.exit(1, f'\n{error}\n')

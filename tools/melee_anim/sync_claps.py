@@ -10,7 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from .render_settings import RESULTS_SIZE
+from .render_settings import RESULTS_SIZE, default_backend
 import subprocess
 import sys
 
@@ -210,7 +210,7 @@ def main():
     def render(job):
         folder, model, companion, timeline = job
         command = [sys.executable, '-m', 'tools.melee_anim.preview', '--model', str(model), '--action', 'results-clap',
-                   '--output', str(folder), '--size', str(RESULTS_SIZE), '--backend', 'native', '--timeline', str(timeline)]
+                   '--output', str(folder), '--size', str(RESULTS_SIZE), '--backend', default_backend(), '--timeline', str(timeline)]
         if companion:
             command += ['--companion', str(companion)]
         with (folder/'render.log').open('w') as log:

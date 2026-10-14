@@ -1,6 +1,6 @@
 # Melee Decomp Animation UI
 
-Turn Super Smash Bros. Melee animations into transparent GIFs and PNGs. This Windows tool builds on the Melee decompilation: import assets from your own game ISO, choose a character and costume, play an animation, rotate the view, and download the animation or a single paused frame.
+Turn Super Smash Bros. Melee animations into transparent GIFs and PNGs. This tool builds on the Melee decompilation: import assets from your own game ISO, choose a character and costume, play an animation, rotate the view, and download the animation or a single paused frame. Setup launchers are available for Windows, macOS and Linux. Windows uses a fast native renderer; Mac and Linux use the slower portable Python renderer and have not yet been verified on those operating systems.
 
 > [!WARNING]
 > **Plan for roughly 69 GB — SIXTY-NINE GIGABYTES — of local project data.** That is the author's reported checkout size after the larger renders, including generated assets, rather than the size of the source download. Importing and rendering creates extracted files, PNG frames, GIFs, ZIP bundles and caches. More animations, Kirby hats, viewing angles and larger native renders increase it further. Leave additional free space for preparation and downloads.
@@ -38,17 +38,27 @@ These examples come from the actual renderer and are downsampled for this README
 
 </details>
 
-## Set up on Windows
+## Set up on Windows, Mac or Linux
 
-### 1. Download the repository and install Python
+### 1. Download the repository
 
 Download and extract the entire repository, or clone it with Git. Keep its folders together and run it from the extracted folder, rather than inside a ZIP.
 
-Install **64-bit Python 3.13** from [Python's Windows downloads](https://www.python.org/downloads/windows/), enabling **Add Python to PATH**. Setup accepts Python 3.10–3.13; Python 3.13 is the tested choice. Use a normal browser such as Edge, Chrome or Firefox.
+Use the setup launcher for your operating system:
 
-The import launcher installs **NumPy 2.2.4** and **Pillow 11.1.0** into this checkout's `.venv` if matching packages are not already available. Internet access is needed for the first package installation. Versions are pinned in [requirements.txt](tools/melee_anim/requirements.txt).
+| System | Setup/import | Reopen the player |
+| --- | --- | --- |
+| Windows | [Windows Setup - Import Melee Iso.cmd](Windows%20Setup%20-%20Import%20Melee%20Iso.cmd) | [Open Melee Decomp Animation UI.cmd](Open%20Melee%20Decomp%20Animation%20UI.cmd) |
+| Mac | [Mac Setup - Import Melee Iso.command](Mac%20Setup%20-%20Import%20Melee%20Iso.command) | [Mac Open Melee Decomp Animation UI.command](Mac%20Open%20Melee%20Decomp%20Animation%20UI.command) |
+| Linux | [Linux Setup - Import Melee Iso.sh](Linux%20Setup%20-%20Import%20Melee%20Iso.sh) | [Linux Open Melee Decomp Animation UI.sh](Linux%20Open%20Melee%20Decomp%20Animation%20UI.sh) |
 
-**Blender, Dolphin, FFmpeg, Node and a game compiler are not needed for the current UI or GIF/PNG exports.** The renderer uses Windows OpenGL. Node is only used for developer tests.
+Setup looks for **64-bit Python 3.10–3.13**, preferring 3.13. If none is available, Windows uses [Windows Package Manager](https://learn.microsoft.com/en-us/windows/package-manager/winget/install), Mac uses an existing [Homebrew installation](https://formulae.brew.sh/formula/python@3.13), and Linux supports apt-based Debian/Ubuntu and dnf-based Fedora distributions. Linux may request your administrator password to install Python/venv. The scripts do not replace your system Python or add package repositories. If the package manager or compatible packages are unavailable, setup stops with manual installation instructions. Python 3.14+ is not supported by these pinned dependencies.
+
+For manual installation, use [Python's Windows downloads](https://www.python.org/downloads/windows/) (enable **Add Python to PATH**), [Python's Mac downloads](https://www.python.org/downloads/macos/), or your Linux distribution's packages including `venv`/`ensurepip`. An existing compatible Python works on other Linux distributions too.
+
+The import launcher creates a local **`.venv`** and installs **NumPy 2.2.4** and **Pillow 11.1.0** there. Internet access is needed for initial package installation. Versions are pinned in [requirements.txt](tools/melee_anim/requirements.txt). A virtual environment cannot be shared between operating systems; create a separate checkout or rename an incompatible `.venv` before setup.
+
+**Blender, Dolphin, FFmpeg, Node and a game compiler are not needed for the current UI or GIF/PNG exports.** Windows rendering uses Windows OpenGL. Mac/Linux rendering uses the existing NumPy/Pillow backend, without an OpenGL dependency. Full-roster preparation and HD stills can be substantially slower on this backend, and pixels can differ between renderers. Node is only used for developer tests. Use a normal browser to open the player; a Linux desktop/browser is needed to open it automatically, or use `--no-browser` and the printed URL.
 
 ### 2. Put your ISO in the root folder
 
@@ -57,7 +67,9 @@ Name your own game dump **`melee.iso`** and place it beside this README:
 ```text
 melee-decomp-animations/
     README.md
-    Import Melee Iso.cmd
+    Windows Setup - Import Melee Iso.cmd
+    Mac Setup - Import Melee Iso.command
+    Linux Setup - Import Melee Iso.sh
     Open Melee Decomp Animation UI.cmd
     melee.iso                         <- your game dump
     tools/
@@ -71,9 +83,21 @@ The importer requires **NTSC-U Melee 1.02 / GALE01 revision 2**, with executable
 
 The ISO and bulk extracted/rendered assets are ignored by Git and stay on your computer. Game files are not supplied with this repository.
 
-### 3. Double-click “Import Melee Iso”
+### 3. Run your platform's setup/import launcher
 
-Open **[Import Melee Iso.cmd](Import%20Melee%20Iso.cmd)** in File Explorer. There is no separate extraction app to install or open. The progress window:
+On **Windows**, double-click **Windows Setup - Import Melee Iso.cmd** in File Explorer. On **Mac**, double-click **Mac Setup - Import Melee Iso.command** in Finder. If it is not executable after downloading, use Terminal from the repository folder:
+
+```sh
+sh './Mac Setup - Import Melee Iso.command'
+```
+
+On **Linux**, open a terminal in the repository folder and run:
+
+```sh
+sh './Linux Setup - Import Melee Iso.sh'
+```
+
+These commands work without changing executable permissions. For Mac Finder double-clicking after a ZIP download, first run `chmod +x './Mac Setup - Import Melee Iso.command' './Mac Open Melee Decomp Animation UI.command'`. There is no separate extraction app to install or open. After Python is available, setup:
 
 1. Verifies and extracts the ISO into `orig/GALE01/files` and `orig/GALE01/sys`.
 2. Prepares the Python packages and character/costume/action catalogs.
@@ -85,14 +109,14 @@ Open **[Import Melee Iso.cmd](Import%20Melee%20Iso.cmd)** in File Explorer. Ther
 To extract only, open PowerShell in the repository folder and run:
 
 ```powershell
-& '.\Import Melee Iso.cmd' --extract-only
+& '.\Windows Setup - Import Melee Iso.cmd' --extract-only
 ```
 
-Extraction alone does not prepare the UI. Run the full import afterward.
+On Mac/Linux, append `--extract-only` to the appropriate `sh` command instead. You can also pass a quoted ISO path and `--jobs 1` to reduce concurrent rendering. Extraction alone uses the Python standard library and does not install NumPy/Pillow or prepare the UI. Run the full import afterward.
 
-### 4. Double-click “Open Melee Decomp Animation UI”
+### 4. Open the player
 
-Open **[Open Melee Decomp Animation UI.cmd](Open%20Melee%20Decomp%20Animation%20UI.cmd)**. It starts or reuses this checkout's local server and opens **[http://127.0.0.1:8765/player.html](http://127.0.0.1:8765/player.html)** in your browser.
+On Windows, double-click **[Open Melee Decomp Animation UI.cmd](Open%20Melee%20Decomp%20Animation%20UI.cmd)**. On Mac, double-click **Mac Open Melee Decomp Animation UI.command** or run `sh './Mac Open Melee Decomp Animation UI.command'`. On Linux, run `sh './Linux Open Melee Decomp Animation UI.sh'`. Each starts or reuses this checkout's local server and opens **[http://127.0.0.1:8765/player.html](http://127.0.0.1:8765/player.html)** in your browser.
 
 Use this shortcut each time you want the UI. It opens a versioned player URL so updated controls load after the player HTML is regenerated. It does not import the ISO or rebuild the entire collection. The background server keeps running after its launcher window closes; a later launch starts it again if necessary.
 
@@ -129,7 +153,7 @@ To make a smaller collection—or spend the same space on higher native resoluti
 
 ## Troubleshooting and manual setup
 
-- **Python not found:** install 64-bit Python 3.13 with PATH enabled. Shortcuts search `.venv`, then `py -3.13`, then `python`.
+- **Python not found:** rerun setup to try your supported package manager, or manually install 64-bit Python 3.13. Windows searches `.venv`, `py -3.13`, `python` and the normal per-user Python 3.13 location. Mac/Linux search `.venv`, `python3.13` through `python3.10`, then `python3` and common Mac install locations. Set `MELEE_PYTHON` to an interpreter path for a custom Mac/Linux installation.
 - **Packages fail to install:** check your internet connection and the error in the import window. If `.venv` uses incompatible Python, rename it and run import again.
 - **ISO rejected:** check its filename, location, raw image format and revision. The importer reports the reason.
 - **Animations not prepared:** run the full import, rather than `--extract-only`.
@@ -145,7 +169,18 @@ py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m tools.melee_anim.launcher open
 ```
 
-No environment activation or execution-policy changes are required. You can supply another ISO path: `& '.\Import Melee Iso.cmd' 'D:\Game Dumps\Melee.iso'`.
+No environment activation or execution-policy changes are required. You can supply another ISO path: `& '.\Windows Setup - Import Melee Iso.cmd' 'D:\Game Dumps\Melee.iso'`.
+
+The equivalent manual setup on Mac/Linux, with a compatible Python already installed, is:
+
+```sh
+python3.13 -m venv .venv
+.venv/bin/python -m pip install --only-binary=:all: -r tools/melee_anim/requirements.txt
+.venv/bin/python -m tools.melee_anim.launcher import
+.venv/bin/python -m tools.melee_anim.launcher open
+```
+
+Use your installed compatible version in place of `python3.13` if needed. To choose a different port, append `--port 8766` to your platform's UI opener. To run the server in the foreground on Mac/Linux, use `.venv/bin/python -m tools.melee_anim.player_server --port 8766`.
 
 For a foreground server you can stop with **Ctrl+C**:
 
@@ -153,7 +188,7 @@ For a foreground server you can stop with **Ctrl+C**:
 .\.venv\Scripts\python.exe -m tools.melee_anim.player_server --port 8766
 ```
 
-Then open `http://127.0.0.1:8766/player.html`. If import reused packages in your regular Python without creating `.venv`, replace `.\.venv\Scripts\python.exe` with `py -3.13`. Closing a browser tab does not stop a background server; its PID is printed by the launcher.
+Then open `http://127.0.0.1:8766/player.html`. Closing a browser tab does not stop a background server; its PID is printed by the launcher.
 
 ## Project background
 

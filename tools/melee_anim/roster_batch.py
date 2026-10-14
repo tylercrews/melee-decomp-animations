@@ -7,7 +7,7 @@ from .catalog import CHARACTERS
 from .roster import roster
 from .export_model import export_fighter
 from .preview_batch import action_sections,completed_job
-from .render_settings import RESULTS_SIZE
+from .render_settings import RESULTS_SIZE,default_backend
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
@@ -38,7 +38,7 @@ def main():
     print(f'Render queue {len(queue)}, existing {reused}',flush=True)
     def render(job):
         slug,cid,model,paired,action,section,out=job;out.mkdir(parents=True,exist_ok=True)
-        cmd=[sys.executable,'-m','tools.melee_anim.preview','--model',str(model),'--action',action,'--section',section,'--output',str(out),'--size',str(a.size),'--backend','native']
+        cmd=[sys.executable,'-m','tools.melee_anim.preview','--model',str(model),'--action',action,'--section',section,'--output',str(out),'--size',str(a.size),'--backend',default_backend()]
         if paired:cmd+=['--companion',str(paired)]
         with (out/'render.log').open('w') as log:
             r=subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,env={**os.environ,'OPENBLAS_NUM_THREADS':'1','OMP_NUM_THREADS':'1'})
