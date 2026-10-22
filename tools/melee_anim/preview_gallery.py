@@ -114,7 +114,7 @@ If it is closed, start it from the repository with <code>python -m tools.melee_a
 <p>This prototype uses original models and motion curves with approximate shading. Common swing weapons and supported character props are included in attacks. Ground-impact effects are optional; projectiles, unsupported props, complete game scripts, dynamics and audio remain unfinished. Native seams are preserved.</p>
 <script>
 const clips=__CLIPS__, animations=__ANIMATIONS__, characters=__CHARACTERS__, powers=__POWERS__;
-const batchGroups=new Map();for(const c of clips){if(c.batch_partial)continue;let group=batchGroups.get(c.batch_family);if(!group){group={count:0,kirby:0,label:c.batch_label};batchGroups.set(c.batch_family,group)}group.count++;if(c.character==='kirby')group.kirby++}
+const batchGroups=new Map();for(const c of clips){if(c.batch_partial)continue;let group=batchGroups.get(c.batch_family);if(!group){group={count:0,sync:0,kirby:0,label:c.batch_label};batchGroups.set(c.batch_family,group)}group.count++;if(c.sync_cycle)group.sync++;if(c.character==='kirby')group.kirby++}
 const kirbymode=document.getElementById('kirbymode');let includeKirbyHats=false;kirbymode.checked=false;
 function batchHats(){return includeKirbyHats?'all':'off'}
 function hatsName(name){return includeKirbyHats?name.replace(/(\.[^.]+)$/,'-kirby-all-hats-all-colors$1'):name}
@@ -278,7 +278,7 @@ archive.href=original&&!colorHats?a.zip:exportURL('gif','colors');archive.downlo
 archive.textContent=`Download this animation — ${a.color_count*(colorHats?powers.length:1)} GIFs${colorHats?' (all Kirby hats/colors)':''}`;
 allzip.href=exportURL('gif','all');
 const group=batchGroups.get(c.batch_family);allzip.hidden=!group||group.count===0;
-const count=group?group.count+(includeKirbyHats?group.kirby*(powers.length-1):0):0;
+const count=group?(cycleMode()==='sync'?group.sync:group.count)+(includeKirbyHats?group.kirby*(powers.length-1):0):0;
 allzip.textContent=`Download all ${group?.label||'matching animations'}${cycleMode()==='sync'?' (synced)':''} — ${count} GIFs`;
 let allName='melee-all-characters-'+(group?.label||'matching').toLowerCase().replace(/[^a-z0-9]+/g,'-');
 if(cycleMode()==='sync')allName='melee-all-characters';

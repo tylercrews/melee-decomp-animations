@@ -1,4 +1,8 @@
-# Current policy update (2026-10-14)
+# Current policy update (2026-10-22)
+
+Borrowed wireframe poses are explicit presets, not game behavior. Keep joint correspondence on the game's own part table (ftPartsRemap), filling only omitted joints by base-first bind position. Copy world rotations without per-joint axis fitting; only source root parts take translation, scaled by hip height. Identical skeletons keep original tracks. Never apply a source fighter's model-part, eye or prop commands to the wireframe. Borrowed clips are lazy catalog entries under the ordinary Victory Pose / Taunt / Clapping types and batch families; claps offer Full animation only. See investigation section 65.
+
+# Policy update (2026-10-14)
 
 Setup now has separate Windows, Mac and Linux launchers; see README and investigation section64. Detect compatible64-bit Python3.10..3.13, install through available winget/Homebrew/apt/dnf when missing, and put all project dependencies in .venv. Preserve extract-only without NumPy/Pillow, failure propagation, actual ISO validation before project package installation, safe spaced paths and no-install reopening. Use the existing portable Python renderer for Mac/Linux full-roster and sync jobs as well as on-demand actions/rotations, retaining Windows native OpenGL. Do not imply the native backend is portable or claim full Mac/Linux verification:231 tests, mocked shell installers and an actual portable1024 still pass on this Windows host; native OS imports/performance remain unverified. No master/bundle/player rebuild is part of this setup change.
 

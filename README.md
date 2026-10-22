@@ -22,7 +22,7 @@ Downloads show a progress bar with animation/file counts and frame counts while 
 
 Animations share the game's results-screen light settings, so material highlights stay consistent across animation types. Materials designed to be unlit retain that appearance. Gameplay lighting varies by stage.
 
-The roster also includes Giga Bowser, both wireframes, Master Hand, Crazy Hand and Sandbag. Selected attacks include held items, character props and special effects. Multipart moves have combined playback presets, with their individual phases hidden by default. Lighting, effects and some runtime behavior remain approximate. **MP4 export is still future work.**
+The roster also includes Giga Bowser, both wireframes, Master Hand, Crazy Hand and Sandbag. The Male Wireframe can also perform Captain Falcon's, Ganondorf's and Marth's victory poses and taunts plus Falcon's clap. The Female Wireframe can perform Sheik's, Samus's and Peach's, plus Sheik's clap. These are mapped onto the wireframe skeleton; the original game never shows them. Selected attacks include held items, character props and special effects. Multipart moves have combined playback presets, with their individual phases hidden by default. Lighting, effects and some runtime behavior remain approximate. **MP4 export is still future work.**
 
 Game & Watch uses the game's original outline meshes, so his border scales with the character and remains visible in smaller exports. Kirby's Game & Watch appearance uses its own original outline meshes too.
 

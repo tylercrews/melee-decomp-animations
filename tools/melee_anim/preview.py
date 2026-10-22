@@ -328,6 +328,13 @@ def load_clip(report, action, section, files, kind=0, attack_catalog=Path('build
         actor = find_action(selection, kind, action)
         category=next(a.get('animation_type','attack') for f in selection['characters'] if f['fighter_kind']==kind or kind==11 and f['fighter_kind']==10
                       for a in f['actions'] if a['key']==action+'_source' and a['available'])
+        if actor.get('retarget'):
+            # Borrowed results/taunt pose: load the source fighter's own clip.
+            # Its model-part/eye commands address the source model, not this one.
+            r = actor['retarget']
+            motion, metadata, tracks = load_clip(report, r['action'], r['section'], files, r['fighter_kind'], attack_catalog)
+            motion = {k:v for k,v in motion.items() if k not in ('character_prop','texture_initial_scripts')}
+            return {**motion,'script':{},'animation_type':category,'retarget':r},metadata,tracks
         motion = {**actor['clip'],'animation_type':category}
         data = (files/actor['animation_file']).read_bytes()
     elif action == "taunt":
@@ -439,6 +446,12 @@ def main():
             else:
                 hat=appearance
         tracks=remap_tracks(tracks,metadata['node_count'],len(model['bones']),reserved_parts(repo),model.get('kirby_part_mask',0))
+        metadata={**metadata,'node_count':len(model['bones'])}
+    retarget=None
+    if motion.get('retarget'):
+        from .retarget import retarget_tracks
+        tracks,retarget=retarget_tracks(args.files,motion['retarget'],model,tracks,metadata['type'],Path(__file__).resolve().parents[2])
+        retarget={**motion['retarget'],**retarget,'source_node_count':metadata['node_count']}
         metadata={**metadata,'node_count':len(model['bones'])}
     if metadata["node_count"] != len(model["bones"]) or metadata["type"] not in (0, 1):
         parser.error("preview requires matching node hierarchy and supported scaling type")
@@ -845,6 +858,9 @@ def main():
         manifest['framing_policy']='whole-animation fighter and held-item geometry'
         if specification.get('behavior')=='needle-release':manifest['framing_policy']='stable fighter and emission-point fit; needles leave the image naturally'
     if bubbles:manifest['sleep_bubbles']=bubbles.provenance()
+    if retarget:
+        manifest['retarget']=retarget
+        manifest['limitations'].append('borrowed pose: source joints mapped through the game part table onto this skeleton; source props/eyes not shown')
     if model.get('lighting'):manifest['lighting']=model['lighting']
     if model['fighter_kind']==24 and args.action in ('attack-305','attack-314'):
         manifest['judge_electric']=electric is not None

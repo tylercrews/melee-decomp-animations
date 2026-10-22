@@ -9,6 +9,8 @@ def slug(value):
 def family(action):
     category=action.get('animation_type','attack');label=action.get('label',action['key'])
     if category=='taunt':return 'taunt','taunts'
+    if category=='victory':return 'victory','victory poses'
+    if category=='clapping':return 'clapping','clapping'
     if category=='attack':
         copy=re.match(r'Kirby copy: (.+?) \u2014 ((?:Neutral|Side|Up|Down) special)',label)
         if copy:return 'attack:copy-'+slug(copy[1]+' '+copy[2]),copy[1]+' copy '+copy[2]

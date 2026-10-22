@@ -710,13 +710,31 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   console.log('Movement dropdown, all-character/costume coverage, lazy jump preview and exact-frame export controls: PASS');
   servedElements.animationtype.options=['victory','taunt','clapping','attack','tech','movement','hit','other'].map(value=>({value}));
   for(const slug of ['master-hand','crazy-hand','male-wireframe','female-wireframe','giga-bowser','sandbag']){
+    // Wireframes also carry requested poses borrowed from other fighters.
+    const borrowed={'male-wireframe':[['Captain Falcon','Ganondorf','Marth'],['Captain Falcon','Ganondorf','Marth'],'Captain Falcon'],
+                    'female-wireframe':[['Sheik','Samus','Peach'],['Zelda','Sheik','Samus','Peach'],'Sheik']}[slug];
     servedElements.animationtype.value='clapping';servedElements.character.value=slug;servedElements.character.onchange();
-    assert.equal(servedElements.animationtype.value,'movement');
+    assert.equal(servedElements.animationtype.value,borrowed?'clapping':'movement');
     assert.equal(servedElements.costume.options.length,1);
     assert.equal(servedElements.powerlabel.hidden,true);
     assert(servedElements.action.options.length>0);
-    assert(servedElements.animationtype.options.find(o=>o.value==='clapping').hidden);
-    assert(servedElements.animationtype.options.find(o=>o.value==='victory').hidden);
+    assert.equal(servedElements.animationtype.options.find(o=>o.value==='clapping').hidden,!borrowed);
+    assert.equal(servedElements.animationtype.options.find(o=>o.value==='victory').hidden,!borrowed);
+    if(borrowed){
+      const [victories,taunts,clap]=borrowed;
+      assert.deepEqual(servedElements.action.options.map(o=>[o.value,o.textContent]),
+                       [[`other-${clap.toLowerCase().replace(' ','-')}-results-clap_source`,`${clap} — Clapping`]]);
+      assert.equal(servedElements.clapmodes.hidden,true,'borrowed claps offer the full animation only');
+      servedElements.animationtype.value='victory';servedElements.animationtype.onchange();
+      const labels=servedElements.action.options.map(o=>o.textContent);
+      assert.deepEqual(labels,victories.flatMap(name=>[1,2,3].flatMap(n=>[`${name} — Victory ${n}`,`${name} — Victory ${n} loop`])));
+      assert(servedElements.action.options.every(o=>/^other-[a-z-]+-victory[123](-loop)?_source$/.test(o.value)));
+      servedElements.animationtype.value='taunt';servedElements.animationtype.onchange();
+      const tauntLabels=servedElements.action.options.map(o=>o.textContent);
+      for(const name of taunts)assert(tauntLabels.includes(`${name} — Taunt`),`${slug} taunt ${name}`);
+      assert(tauntLabels.includes(`${taunts[0]} — Taunt (facing left)`));
+      assert(!tauntLabels.some(label=>/variant/.test(label)));
+    }
     const extraType=slug==='sandbag'?'hit':'other';
     assert.equal(servedElements.animationtype.options.find(o=>o.value===extraType).hidden,false);
     servedElements.animationtype.value=extraType;servedElements.animationtype.onchange();
@@ -884,15 +902,18 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
 
   // Batch scopes track the selected type/family, independently of costume and partial display.
   elements.character.value='mario';elements.character.onchange();elements.animationtype.value='victory';elements.animationtype.onchange();
-  assert.match(elements.allzip.textContent,/738 GIFs/);assert.match(elements.allzip.textContent,/victory poses/);
+  // 738 results victories plus 36 borrowed wireframe victories (18 each, one costume).
+  assert.match(elements.allzip.textContent,/774 GIFs/);assert.match(elements.allzip.textContent,/victory poses/);
   assert.equal(elements.kirbymode.checked,false);
   elements.kirbymode.checked=true;elements.kirbymode.onchange();
-  assert.match(elements.allzip.textContent,/1638 GIFs/);
+  assert.match(elements.allzip.textContent,/1674 GIFs/);
   assert.equal(new URL(elements.allzip.href).searchParams.get('hats'),'all');
   assert(!new URL(elements.gif.href).searchParams.has('hats'),'individual files keep the selected appearance');
   elements.animationtype.value='clapping';elements.animationtype.onchange();
-  assert.match(elements.allzip.textContent,/273 GIFs/);
-  elements.synccycle.checked=true;elements.synccycle.onchange();assert.match(elements.allzip.textContent,/synced/);
+  // 123 results claps, 150 Kirby hat claps and two borrowed wireframe claps;
+  // the synced batch only contains claps with a sync render.
+  assert.match(elements.allzip.textContent,/275 GIFs/);
+  elements.synccycle.checked=true;elements.synccycle.onchange();assert.match(elements.allzip.textContent,/synced\) — 273 GIFs/);
   assert.equal(new URL(elements.allzip.href).searchParams.get('cycle'),'sync');
   elements.character.value='kirby';elements.character.onchange();
   elements.scrub.value='3';elements.scrub.oninput();

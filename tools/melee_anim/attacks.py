@@ -231,6 +231,9 @@ def build_attack_catalog(repo, report):
                             'ground_effect':None,'actors':actors,'duration_ticks':duration,'available':True,'unavailable_reason':None})
         from .sequences import combined_actions
         actions.extend(combined_actions(actions, kind))
+        from .retarget import WIREFRAME_SOURCES, wireframe_actions
+        if slug in WIREFRAME_SOURCES:
+            actions.extend(wireframe_actions(repo, report, slug, kind, actions))
         counts = Counter(a['label'] for a in actions)
         used = Counter()
         for a in actions:
@@ -328,9 +331,11 @@ class AttackCache:
             if action.startswith('tech-'):
                 paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
                 paths.append(self.repo/'orig/GALE01/files/PlCo.dat')
+            from .retarget import retarget_inputs
             for source in [model]+([companion] if companion.is_file() else []):
                 data = json.loads(source.read_text()); actor = find_action(selection, data['fighter_kind'], action)
                 paths += [source, self.repo/'orig/GALE01/files'/actor['animation_file']]
+                paths += retarget_inputs(self.repo, actor)
                 paths += [self.repo/'orig/GALE01/files'/p['animation_file'] for p in actor.get('sequence',{}).get('phases',[])]
                 paths += [source.parent/t['image_file'] for m in data['materials'] for t in m['textures'] if t.get('image_file')]
             paths += list(Path(__file__).parent.glob('*.py'))

@@ -85,6 +85,8 @@ class RotationCache:
                     paths.extend([item_archive(self.repo/'orig/GALE01/files'),self.repo/'orig/GALE01/files/PlCo.dat',
                                   self.repo/'orig/GALE01/files'/table['fighter_archive']])
                 archive = actor['animation_file']
+                from .retarget import retarget_inputs
+                paths.extend(retarget_inputs(self.repo, actor))
                 paths.append(attack_catalog)
                 if action.startswith('tech-'):
                     paths.append(self.repo/'orig/GALE01/files/EfCoData.dat')
