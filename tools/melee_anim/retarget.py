@@ -301,3 +301,34 @@ def wireframe_actions(repo, report, slug, kind, own_actions):
                                                    'section':section,'model':relative,'method':method}}],
                             'held_item':None,'character_effects':[],'available':True,'unavailable_reason':None})
     return actions
+
+
+def main():
+    """Pre-render every borrowed wireframe clip into the ordinary on-demand caches.
+
+    Normal results/taunt/clap masters are prebuilt during import; borrowed
+    poses are lazy catalog clips, so render them (and each borrowed clap's
+    synced view) once here. Cache keys include tools/melee_anim/*.py, so rerun
+    this after code changes to avoid slow first views in the player.
+    """
+    import argparse, time
+    from .attacks import AttackCache, CATALOG, virtual_clips
+    from .rotations import RotationCache
+    parser=argparse.ArgumentParser(description=main.__doc__)
+    parser.add_argument('--root',type=Path,default=Path('build/melee_anim/preview'))
+    args=parser.parse_args()
+    catalog=json.loads((args.root/CATALOG).read_text())
+    keys={(f['character'],a['key']) for f in catalog['characters'] for a in f['actions']
+          if a['available'] and a['actors'][0].get('retarget')}
+    clips=[c for c in virtual_clips(args.root) if (c['character'],c['action_key']) in keys]
+    attacks,rotations=AttackCache(args.root),RotationCache(args.root)
+    for i,clip in enumerate(clips,1):
+        started=time.monotonic()
+        prepared=attacks.get(clip)
+        if clip.get('sync_cycle'):rotations.get(prepared,(0,0,0),sync=True)
+        print(f'Borrowed poses {i}/{len(clips)}: {clip["character_label"]} — {clip["action_label"]} '
+              f'({time.monotonic()-started:.1f}s)',flush=True)
+
+
+if __name__=='__main__':
+    main()

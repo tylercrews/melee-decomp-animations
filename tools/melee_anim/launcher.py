@@ -76,6 +76,7 @@ def preparation_steps(python, iso, jobs=4):
         ('Finding minimum and dirty clapping intervals', [python, '-m', 'tools.melee_anim.cycles']),
         ('Rendering 0.84-second synchronized claps',
          [python, '-m', 'tools.melee_anim.sync_claps', '--resume', '--jobs', str(jobs)]),
+        ("Pre-rendering the wireframes' borrowed poses", [python, '-m', 'tools.melee_anim.retarget']),
         ('Building the player and download bundles', [python, '-m', 'tools.melee_anim.preview_gallery', '--require-all']),
         ('Verifying the prepared animations and downloads', [python, '-m', 'tools.melee_anim.verify_previews']),
     ]

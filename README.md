@@ -6,7 +6,7 @@ Turn Super Smash Bros. Melee animations into transparent GIFs and PNGs. This too
 > **I developed and tested this project on Windows. Until I update this notice, the Mac and Linux setup scripts and UI launchers are untested on those operating systems.** The setup and launch code is straightforward and should work, but I haven't verified it on a Mac or Linux machine yet.
 
 > [!WARNING]
-> **Plan for roughly 69 GB — SIXTY-NINE GIGABYTES — of local project data.** That is the author's reported checkout size after the larger renders, including generated assets, rather than the size of the source download. Importing and rendering creates extracted files, PNG frames, GIFs, ZIP bundles and caches. More animations, Kirby hats, viewing angles and larger native renders increase it further. Leave additional free space for preparation and downloads.
+> **Plan for roughly 75 GB — SEVENTY-FIVE GIGABYTES — of local project data.** The author's checkout measured 73.7 GB (79,148,052,480 bytes) after the larger renders, including generated assets, rather than the size of the source download. Importing and rendering creates extracted files, PNG frames, GIFs, ZIP bundles and caches. More animations, Kirby hats, viewing angles and larger native renders increase it further. Leave additional free space for preparation and downloads.
 
 ![The animation player with character, costume, playback and export controls](docs/media/player.png)
 
@@ -104,7 +104,7 @@ These commands work without changing executable permissions. For Mac Finder doub
 
 1. Verifies and extracts the ISO into `orig/GALE01/files` and `orig/GALE01/sys`.
 2. Prepares the Python packages and character/costume/action catalogs.
-3. Renders the original 984 victory/taunt/clapping costume previews and 123 synchronized claps.
+3. Renders the original 984 victory/taunt/clapping costume previews and 123 synchronized claps, then pre-renders the wireframes' 43 borrowed poses.
 4. Builds the player and download bundles, then verifies the outputs.
 
 **The first build takes considerable time and disk space.** Leave the window open until **“Import complete”** appears. Additional actions and variants render on demand when selected or downloaded. If preparation fails or is interrupted, fix the reported issue and run the same launcher again; completed matching jobs are reused.
@@ -152,7 +152,7 @@ I chose **512 × 512 as the native render size for most animations** to balance 
 
 Standard downloads offer **128, 256, 512, 1024 and 2048px** square images. A **★** marks the selected type's native size: **512 for most types, 1024 for Taunt, Victory Pose and Clapping**. Smaller exports downsample. Larger standard exports upscale the native image, adding dimensions without extra detail. The separate purple HD buttons render a single PNG at native **4096px** (or **2048px**) from the model. The UI explains standard upsizing and shows a dark-yellow large-GIF warning for 2048px.
 
-To make a smaller collection—or spend the same space on higher native resolution—limit the characters, actions, colors and cached views you render. Adding all Kirby powers and colors roughly doubled my earlier storage estimate. Rendering his 25 copied appearances in all six colors adds **150 extra appearance/color variants per animation**, so omitting unneeded hats can save substantial space. The current estimate is about **67 GB**, and higher-resolution builds will increase it. CLI render commands accept `--size` for custom builds; keep custom outputs separate from the standard player collection unless you also update its resolution policy.
+To make a smaller collection—or spend the same space on higher native resolution—limit the characters, actions, colors and cached views you render. Adding all Kirby powers and colors roughly doubled my earlier storage estimate. Rendering his 25 copied appearances in all six colors adds **150 extra appearance/color variants per animation**, so omitting unneeded hats can save substantial space. The current estimate is about **75 GB**, and higher-resolution builds will increase it. CLI render commands accept `--size` for custom builds; keep custom outputs separate from the standard player collection unless you also update its resolution policy.
 
 ## Troubleshooting and manual setup
 
