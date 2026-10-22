@@ -122,8 +122,10 @@ class StillCache(RotationCache):
             manifest = json.loads(original.read_text())
         selected = manifest
         if cycle == 'sync':
-            selected = json.loads((self.root/Path(clip['sync_cycle']['gif']).parent/'preview-manifest.json').read_text())
-        short = ((clip.get('dirty_cycle') if cycle == 'dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and clip['action_key'] == 'results-clap_source' else None
+            from .sync_claps import sync_manifest
+            selected = sync_manifest(self.root, clip)
+        from .cycles import is_clapping
+        short = ((clip.get('dirty_cycle') if cycle == 'dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and is_clapping(clip['action_key']) else None
         length = short['length'] if short else len(selected['sample_source_times'])
         if not isinstance(frame, int) or not 0 <= frame < length:
             raise ValueError('Frame index is outside this animation')

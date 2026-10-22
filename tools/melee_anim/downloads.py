@@ -12,6 +12,7 @@ from zipfile import ZipFile, ZIP_STORED
 
 from PIL import Image
 from .preview_gallery import collect_clips
+from .cycles import is_clapping
 from .rotations import RotationCache, camera_angles, marked_angle
 from .render_settings import native_size
 from .hd_stills import HD_SIZES, HD_DEFAULT_SIZE, HDArtifacts, StillCache, crop_transparent_png
@@ -104,14 +105,14 @@ class DownloadCatalog:
         clip = next((c for c in self.clips if c['character'] == character and c['action_key'] == action and c['costume_id'] == costume), None)
         if clip is None:
             raise ValueError('Unknown character, animation, or costume')
-        if cycle == 'sync' and (action != 'results-clap_source' or not clip.get('sync_cycle')):
+        if cycle == 'sync' and (not is_clapping(action) or not clip.get('sync_cycle')):
             raise ValueError('Clapping-sync render is not available for this animation')
         clip = self.attacks.get(clip,effects=effects=='on',**({'electric':False} if electric=='off' else {}))
         clip = self.rotations.get(clip, angles, sync=cycle == 'sync', **({'power':power} if power!='none' else {}), **({'center':True} if centered else {}))
         if cycle == 'sync':
             frames = clip['sync_cycle']['frames']
         else:
-            short = ((clip.get('dirty_cycle') if cycle == 'dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and action == 'results-clap_source' else None
+            short = ((clip.get('dirty_cycle') if cycle == 'dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and is_clapping(action) else None
             frames = clip['frames'][short['start']:short['start']+short['length']] if short else clip['frames']
         times = clip.get('source_times', [])
         if cycle == 'sync':
@@ -146,7 +147,7 @@ class DownloadCatalog:
             raise ValueError('Ground effects require a selected Tech animation')
         if scope == 'all' and kind != 'gif':
             raise ValueError('All-character export is only available for GIFs')
-        if cycle == 'sync' and action != 'results-clap_source':
+        if cycle == 'sync' and not is_clapping(action):
             raise ValueError('Clapping-sync alteration is only available for clapping')
         from .batch_exports import select_all,slug,enrich
         if scope=='all':clips,batch_label=select_all(enrich(self.clips,self.batch_catalog),character,action)
@@ -155,7 +156,9 @@ class DownloadCatalog:
                    (scope=='colors' or c['costume_id']==costume)]
             batch_label=''
         if cycle == 'sync':
-            clips = [c for c in clips if c['action_key'] == 'results-clap_source']
+            # Original claps must all have sync renders; borrowed claps join
+            # only while their source plan is valid, as the player counts them.
+            clips = [c for c in clips if c['action_key'] == 'results-clap_source' or is_clapping(c['action_key']) and c.get('sync_cycle')]
             if any(not c.get('sync_cycle') for c in clips):
                 raise ValueError('Sync render is not ready for every requested costume')
         if not clips:
@@ -167,8 +170,8 @@ class DownloadCatalog:
             jobs.extend((c,p) for p in variants)
         # Reject bad frame requests before starting an expensive render.
         for c in clips:
-            short = ((c.get('dirty_cycle') if cycle == 'dirty' else None) or c.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and c['action_key'] == 'results-clap_source' else None
-            length = len(c['sync_cycle']['frames']) if cycle == 'sync' else short['length'] if short else c.get('frame_count',len(c['frames']))
+            short = ((c.get('dirty_cycle') if cycle == 'dirty' else None) or c.get('minimum_cycle')) if cycle in ('minimum', 'dirty') and is_clapping(c['action_key']) else None
+            length = (len(c['sync_cycle']['frames']) if c['sync_cycle'].get('frames') else c['sync_cycle']['length']) if cycle == 'sync' else short['length'] if short else c.get('frame_count',len(c['frames']))
             if kind == 'png' and not 0 <= frame < length:
                 raise ValueError('Frame index is outside this animation')
         if render=='hd':
@@ -203,7 +206,7 @@ class DownloadCatalog:
         if not clips:
             raise ValueError('Unknown character, animation, or costume')
         def selected_cycle(clip):
-            if clip['action_key'] != 'results-clap_source' or cycle in ('full', 'sync'):
+            if not is_clapping(clip['action_key']) or cycle in ('full', 'sync'):
                 return None
             return (clip.get('dirty_cycle') if cycle == 'dirty' else None) or clip.get('minimum_cycle')
         if kind == 'png' and any(not 0 <= frame < (selected_cycle(c)['length'] if selected_cycle(c) else len(c['frames'])) for c in clips):
@@ -312,7 +315,7 @@ class DownloadCatalog:
                 if variant!='none':name+=f'-power-{variant}'
                 if center:name+='-centered'
                 if electric=='off':name+='-no-electric'
-                short=((clip.get('dirty_cycle') if cycle=='dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum','dirty') and action=='results-clap_source' else None
+                short=((clip.get('dirty_cycle') if cycle=='dirty' else None) or clip.get('minimum_cycle')) if cycle in ('minimum','dirty') and is_clapping(action) else None
                 if short:name+='-dirty-loop' if short.get('dirty') else '-minimum-cycle'
                 if cycle=='sync':name+='-clapping-sync'
                 name=marked_angle(name+'.png',angles).replace('.png',f'-frame-{frame+1:04d}{"-cropped" if crop else ""}-hd-{size}px.png')

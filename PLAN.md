@@ -1,6 +1,6 @@
 # Current policy update (2026-10-22)
 
-Borrowed wireframe poses are explicit presets, not game behavior. Keep joint correspondence on the game's own part table (ftPartsRemap), filling only omitted joints by base-first bind position. Copy world rotations without per-joint axis fitting; only source root parts take translation, scaled by hip height. Identical skeletons keep original tracks. Never apply a source fighter's model-part, eye or prop commands to the wireframe. Borrowed clips are lazy catalog entries under the ordinary Victory Pose / Taunt / Clapping types and batch families; claps offer Full animation only. See investigation section 65.
+Borrowed wireframe poses are explicit presets, not game behavior. Keep joint correspondence on the game's own part table (ftPartsRemap), filling only omitted joints by base-first bind position. Copy world rotations without per-joint axis fitting; only source root parts take translation, scaled by hip height. Identical skeletons keep original tracks. Never apply a source fighter's model-part, eye or prop commands to the wireframe. Borrowed clips are lazy catalog entries under the ordinary Victory Pose / Taunt / Clapping types and batch families; borrowed claps reuse the source fighter's validated clap intervals and sync plan. See investigation section 65.
 
 # Policy update (2026-10-14)
 

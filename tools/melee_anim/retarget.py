@@ -206,6 +206,36 @@ def retarget_inputs(repo, actor):
     return [Path(repo)/actor['retarget']['model'],Path(repo)/'orig/GALE01/files/PlCo.dat',Path(__file__)]
 
 
+def borrowed_clap_cycles(root, retarget, times):
+    """The source fighter's validated clap intervals and 42-frame sync plan.
+
+    A borrowed clap samples the same source clip at the same source times, so
+    the source character's minimum/dirty frame interval and fractional sync
+    schedule apply unchanged. Each is accepted only while its fingerprint still
+    matches the source character's clapping masters, as for the original clip.
+    """
+    if retarget['action']!='results-clap':return {}
+    from .catalog import CHARACTERS
+    from .cycles import input_fingerprint, read_cycles
+    root=Path(root);slug=retarget['character']
+    manifests=sorted((root/slug).glob('costume_*/results-clap_source/preview-manifest.json'))
+    if not manifests:return {}
+    source_times=json.loads(manifests[0].read_text())['sample_source_times']
+    if len(source_times)!=len(times) or not np.allclose(source_times,times,atol=1e-9,rtol=0):
+        return {}
+    fingerprint=input_fingerprint(manifests);label=dict(CHARACTERS)[slug];result={}
+    for report_key,clip_key in (('characters','minimum_cycle'),('dirty_characters','dirty_cycle')):
+        cycle=read_cycles(root,report_key).get(slug)
+        if cycle and cycle.get('input_fingerprint')==fingerprint and cycle['full_length']==len(times):
+            result[clip_key]={**{k:v for k,v in cycle.items() if k!='input_fingerprint'},'timing_from':label}
+    path=root/'clapping-sync.json'
+    plan=json.loads(path.read_text())['characters'].get(slug) if path.is_file() else None
+    if plan and plan['input_fingerprint']==fingerprint:
+        plan={k:v for k,v in plan.items() if k!='input_fingerprint'}
+        result['sync_cycle']={**{k:v for k,v in plan.items() if k!='fit_source_times'},'plan':plan,'timing_from':label}
+    return result
+
+
 def clip_tracks(files, actor):
     blob=(Path(files)/actor['animation_file']).read_bytes()
     return read_figatree(read_exact_motion(blob,actor['clip'],actor['animation_file']),actor['clip']['symbol'])[1]

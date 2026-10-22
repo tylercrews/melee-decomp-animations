@@ -49,7 +49,8 @@ class RotationCache:
         manifest = manifest_override if manifest_override is not None else json.loads(original.read_text())
         selected = manifest
         if sync:
-            selected = json.loads((self.root/Path(clip['sync_cycle']['gif']).parent/'preview-manifest.json').read_text())
+            from .sync_claps import sync_manifest
+            selected = sync_manifest(self.root, clip)
         action, section = clip['action_key'].rsplit('_', 1)
         paths = [original, model, self.repo/'build/melee_anim/motions.json']
         lights = next((self.repo/'orig/GALE01/files'/name for name in ('GmRst.usd','GmRst.dat')
@@ -62,7 +63,7 @@ class RotationCache:
             if desc['body']:paths.append(desc['body'])
             data=json.loads(appearance.read_text())
             paths.extend(appearance.parent/t['image_file'] for m in data['materials'] for t in m['textures'] if t.get('image_file'))
-        if sync:
+        if sync and clip['sync_cycle'].get('gif'):
             paths.append(self.root/Path(clip['sync_cycle']['gif']).parent/'preview-manifest.json')
         report = json.loads(paths[2].read_text())
         for source in (model, companion) if companion.is_file() else (model,):
@@ -131,7 +132,8 @@ class RotationCache:
         validate_power(clip['character'],power)
         from .movement import centered_jump_setting
         centered_jump_setting(clip['action_key'],'on' if center else 'off')
-        if not any(angles) and power=='none' and not center:
+        # Borrowed claps have a sync plan but no prebuilt sync render.
+        if not any(angles) and power=='none' and not center and not (sync and not clip['sync_cycle'].get('gif')):
             return clip
         with self.lock:
             key, settings, model, companion = self._inputs(clip, angles, sync, power, center)

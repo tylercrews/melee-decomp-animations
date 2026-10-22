@@ -142,7 +142,8 @@ Updated 2026-10-11 after Tech/ground-motion playback and optional core impact ef
 ## Current workflow and remaining work
 
 - [x] Let the wireframes perform other fighters' results poses: Male ← Captain Falcon/Ganondorf/Marth victories+loops and taunts plus Falcon's clap; Female ← Sheik/Samus/Peach plus Sheik's clap. Use the game's ftPartsRemap correspondence, base-first bind-position fill, world-rotation copy and hip-scaled root motion. Relabel the wireframes' own taunts as Falcon's/Zelda's. Verified 235 Python tests / Node controls, 43 reviewed comparison clips and 43 live 1024 renders/exports; see investigation section 65.
-- [ ] Optionally attach the source fighter's props to borrowed poses (Marth's/Ganondorf's sword through the remapped hand joint) and offer minimum/sync clap modes by reusing the source character's clap timeline.
+- [x] Offer clap modes for borrowed claps by reusing the source fighter's validated clap timing: Falcon's dirty loop and sync for the Male Wireframe, Sheik's sync for the Female (no minimum cycle exists for either source).
+- [ ] Optionally attach the source fighter's props to borrowed poses (Marth's/Ganondorf's sword through the remapped hand joint).
 - [ ] Add further borrowed-pose pairs only on request (for example Zelda's victories on the Female Wireframe, which shares her part table); add the pair to `retarget.WIREFRAME_SOURCES` and regenerate the catalog.
 
 - [x] Group combined animations beside their parts and add checked-by-default Hide partial animations. Reorder selectors into Character / Kirby Power / Costume, Animation Type / Animation / filter, then Pause / Restart / Repeat preview. Preserve independent actions, actual source keys, colors/powers/angles, paused state when still selected, explicit partial links and UI handoff preferences. Node controls and served HTML checks pass; regenerate player only. See investigation section 48.

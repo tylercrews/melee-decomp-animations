@@ -132,6 +132,11 @@ def find_dirty_cycle(samples, approved=None):
     return None
 
 
+def is_clapping(action):
+    """Results claps and borrowed wireframe claps share the clap modes."""
+    return action == 'results-clap_source' or action.endswith('-results-clap_source')
+
+
 def read_cycles(root, key='characters'):
     path = Path(root)/'minimum-cycles.json'
     return json.loads(path.read_text()).get(key, {}) if path.is_file() else {}

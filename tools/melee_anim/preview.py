@@ -483,7 +483,8 @@ def main():
             parser.error('invalid saved sample timing')
     if args.timeline:
         sync_plan = json.loads(args.timeline.read_text())
-        if args.action != 'results-clap' or args.section != 'source' or args.max_frames:
+        clapping = args.action == 'results-clap' or motion.get('retarget',{}).get('action') == 'results-clap'
+        if not clapping or args.section != 'source' or args.max_frames:
             parser.error('sync timelines require complete clapping exports')
         source_times = sync_plan['source_times']
         fit_times = sync_plan['fit_source_times']

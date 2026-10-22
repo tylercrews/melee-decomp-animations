@@ -162,6 +162,14 @@ def attach_sync(root, clips):
                               'gif': (folder/'preview.gif').relative_to(root).as_posix()}
 
 
+def sync_manifest(root, clip):
+    """Rendered sync manifest, or a borrowed clap's source plan before its render."""
+    cycle = clip['sync_cycle']
+    if cycle.get('gif'):
+        return json.loads((Path(root)/Path(cycle['gif']).parent/'preview-manifest.json').read_text())
+    return {'sample_source_times': cycle['plan']['source_times'], 'sync_plan': cycle['plan'], 'fps': cycle['plan']['fps']}
+
+
 def main():
     from .preview_gallery import collect_clips
     parser = argparse.ArgumentParser(description=__doc__)

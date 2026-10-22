@@ -1,13 +1,19 @@
 """Borrowed wireframe poses: synthetic rigs only, no game fixtures."""
+import json
 import math
+from pathlib import Path
+import shutil
 import unittest
+import uuid
 
 import numpy as np
 
 from tools.melee_anim.batch_exports import family
+from tools.melee_anim.cycles import input_fingerprint, is_clapping
 from tools.melee_anim.export_model import local_matrix, world_matrices
 from tools.melee_anim.preview import pose_matrices
-from tools.melee_anim.retarget import PoseRetarget, correspondence, euler, identical_skeleton, rotation
+from tools.melee_anim.retarget import PoseRetarget, borrowed_clap_cycles, correspondence, euler, identical_skeleton, rotation
+from tools.melee_anim.sync_claps import sync_manifest
 
 
 class Curve:
@@ -85,6 +91,35 @@ class RetargetTests(unittest.TestCase):
                                  'label':'Ganondorf — Victory 1'}),('victory','victory poses'))
         self.assertEqual(family({'key':'other-sheik-results-clap_source','animation_type':'clapping',
                                  'label':'Sheik — Clapping'}),('clapping','clapping'))
+
+    def test_borrowed_clap_reuses_only_current_source_clap_timing(self):
+        build = Path('build/melee_anim_tests').resolve()
+        root = build/f'borrowed_{uuid.uuid4().hex}'
+        folder = root/'captain-falcon'/'costume_00'/'results-clap_source'
+        folder.mkdir(parents=True)
+        self.addCleanup(shutil.rmtree, root)
+        times = [i*1.2 for i in range(5)]
+        (folder/'preview-manifest.json').write_text(json.dumps({'sample_source_times':times}))
+        for i in range(5):(folder/f'frame_{i:04d}.png').write_bytes(b'png')
+        fingerprint = input_fingerprint([folder/'preview-manifest.json'])
+        dirty = {'start':1,'length':3,'full_length':5,'dirty':True,'input_fingerprint':fingerprint}
+        (root/'minimum-cycles.json').write_text(json.dumps({'characters':{},'dirty_characters':{'captain-falcon':dirty}}))
+        plan = {'length':42,'fps':50,'repeats':2,'source_times':[.5]*42,'fit_source_times':times,'input_fingerprint':fingerprint}
+        (root/'clapping-sync.json').write_text(json.dumps({'characters':{'captain-falcon':plan}}))
+        clap = {'character':'captain-falcon','action':'results-clap'}
+        cycles = borrowed_clap_cycles(root, clap, times)
+        self.assertEqual(set(cycles), {'dirty_cycle','sync_cycle'})
+        self.assertEqual((cycles['dirty_cycle']['start'],cycles['dirty_cycle']['timing_from']), (1,'Captain Falcon'))
+        self.assertNotIn('frames', cycles['sync_cycle'])
+        selected = sync_manifest(root, {'sync_cycle':cycles['sync_cycle']})
+        self.assertEqual(selected['sample_source_times'], [.5]*42)
+        self.assertEqual(selected['sync_plan']['fit_source_times'], times)
+        self.assertEqual(borrowed_clap_cycles(root, {**clap,'action':'victory1'}, times), {})
+        self.assertEqual(borrowed_clap_cycles(root, clap, times[:4]), {})
+        (folder/'frame_0002.png').write_bytes(b'regenerated master')
+        self.assertEqual(borrowed_clap_cycles(root, clap, times), {})
+        self.assertTrue(is_clapping('other-sheik-results-clap_source') and is_clapping('results-clap_source'))
+        self.assertFalse(is_clapping('other-sheik-taunt_source'))
 
 
 if __name__ == '__main__':

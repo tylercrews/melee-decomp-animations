@@ -264,6 +264,9 @@ def virtual_clips(root):
             if not action['available']:
                 continue
             clip = action['actors'][0]['clip']
+            from .retarget import borrowed_clap_cycles
+            retarget = action['actors'][0].get('retarget')
+            cycles = borrowed_clap_cycles(root, retarget, sample_times(action.get('duration_ticks',clip['frames']), clip['effective_loop'])) if retarget else {}
             for costume in fighter['costumes']:
                 cid = costume['costume_id']; slug = fighter['character']
                 color = color_label(costume, fighter['fighter_kind'])
@@ -279,7 +282,7 @@ def virtual_clips(root):
                                'costume_id':cid, 'costume_label':color, 'fps':50, 'period':period,
                                'authored_loop':clip['effective_loop'], 'symbol':clip['symbol'],
                                'frame_count':len(times), 'download_name':filename, 'frames':[], 'source_times':[],
-                               'gif':'', 'lazy':True})
+                               'gif':'', 'lazy':True, **cycles})
     return result
 
 

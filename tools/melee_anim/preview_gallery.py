@@ -239,7 +239,7 @@ function framePath(){if(rotated)return rotated.frames[index];let short=activeCyc
 function sourceTime(){let c=clips[current];let short=activeCycle();return short&&short.frames?short.source_times[index]:c.lazy?(rotated&&rotated.source_times?rotated.source_times[index]:c.period*index/Math.max(1,Math.ceil(c.period/60*c.fps))):c.source_times[sourceIndex()]}
 function markedName(name){name=centeredName(powerName(name));if(isJudgeNine()&&!judgeElectricEnabled)name=name.replace(/(\.[^.]+)$/,'-no-electric$1');let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
-function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
+function isClap(c){return c.action_key==='results-clap_source'||c.action_key.endsWith('-results-clap_source')} function updateCycleInfo(){if(current<0)return;let c=clips[current];minimumcycle.disabled=!c.minimum_cycle;dirtycycle.disabled=!c.dirty_cycle;
 electriccontrols.hidden=!isJudgeNine();judgeelectric.checked=judgeElectricEnabled;
 document.getElementById('movementhint').hidden=!c.action_key.startsWith('movement-');
 document.getElementById('sequencehint').hidden=!c.sequence;
@@ -252,12 +252,12 @@ document.getElementById('itemhint').textContent=c.held_item?`${c.held_item.name}
 jumpcontrols.hidden=!isHop();centerjump.checked=centerJumpEnabled;
 techcontrols.hidden=!c.action_key.startsWith('tech-');groundeffects.disabled=!c.ground_effect;
 techhint.textContent=c.ground_effect?"Towards/away follow the character's facing. With impacts on, the whole effect fits; turning them off zooms in on the character. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.":'Lying animations have no ground-impact effect.';
-synccycle.disabled=!c.sync_cycle;document.getElementById('clapmodes').hidden=c.action_key!=='results-clap_source';
+synccycle.disabled=!c.sync_cycle;document.getElementById('clapmodes').hidden=!isClap(c);
 if(cycleMode()==='full')checkMode('full');
 let short=activeCycle()||c.minimum_cycle||c.dirty_cycle;
 cyclehint.textContent=cycleMode()==='sync'?`42 frames / 0.84s. ${short.repeats} repeats; ${short.hold_frames_per_cycle} held frames per repeat; moving speed ${short.moving_rate.toFixed(2)}x. ${short.selection}.`:
-short?`${short.length} frames / ${(short.length/c.fps).toFixed(2)}s instead of ${c.frames.length} frames. ${short.dirty?'Dirty review: '+short.failed_checks.join('; '):'Edited repeat; subtle motion may differ.'}`:
-(c.action_key==='results-clap_source'?'No shorter repeat passed the checks.':'Minimum cycle is available for repeating claps.');
+short?`${short.length} frames / ${(short.length/c.fps).toFixed(2)}s instead of ${c.lazy?c.frame_count:c.frames.length} frames. ${short.dirty?'Dirty review: '+short.failed_checks.join('; '):'Edited repeat; subtle motion may differ.'}`:
+(isClap(c)?'No shorter repeat passed the checks.':'Minimum cycle is available for repeating claps.'); if(short&&short.timing_from)cyclehint.textContent+=` Uses ${short.timing_from}'s original clap timing.`;
 scrub.max=frameCount()-1;
 document.getElementById('meta').textContent=`${c.symbol} / ${frameCount()} frames at ${c.fps} fps / ${(frameCount()/c.fps).toFixed(2)}s / ${cycleMode()==='sync'?'clapping-sync alteration':cycleMode()==='dirty'?'minimum loop (dirty/jittery)':useMinimum()?'minimum cycle (edited loop)':c.authored_loop?'full authored loop':'one-shot action'}`}
 function exportURL(kind,scope,hd=false){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,
@@ -349,7 +349,7 @@ cropborder.onchange=()=>{cropTransparentBorder=cropborder.checked;show()};
 kirbymode.onchange=()=>{includeKirbyHats=kirbymode.checked;show()};
 groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[current].ground_effect)loadRotation()};
 centerjump.onchange=()=>{centerJumpEnabled=centerjump.checked;if(isHop())loadRotation()};
-function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle()||hasPower())loadRotation();else show()}
+function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle()||hasPower()||clips[current].lazy)loadRotation();else show()}
 [fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.onchange=()=>{if(r.checked){checkMode(['full','minimum','dirty','sync'][i]);changeCycle()}});
 play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
 restart.onclick=()=>{if(current<0)return;index=0;last=performance.now();carry=0;playing=true;play.textContent='Pause';show()};

@@ -190,7 +190,7 @@ elements.action.value='taunt_source';elements.action.onchange();
 assert.equal(elements.minimumcycle.disabled,true);
 assert.equal(elements.minimumcycle.checked,false);
 assert(!html.includes('Dirty loop candidates to review'));assert(!html.includes('dirtylist'));
-const dirtyCharacters=data('characters.filter(ch=>clips.some(c=>c.character===ch.slug&&c.dirty_cycle))');
+const dirtyCharacters=data("characters.filter(ch=>clips.some(c=>c.character===ch.slug&&c.action_key==='results-clap_source'&&c.dirty_cycle))");
 assert(dirtyCharacters.length>0,'dirty loop choices must remain available after source texture changes');
 for (const ch of dirtyCharacters) {
   elements.character.value=ch.slug;elements.character.onchange();
@@ -213,7 +213,7 @@ for (const ch of dirtyCharacters) {
   assert.equal(elements.gif.href,data('clips[current].gif'));
 }
 assert.equal((html.match(/type="radio" name="clapmode"/g)||[]).length,4);
-for (const clip of data('clips.filter(c=>c.sync_cycle)')) {
+for (const clip of data('clips.filter(c=>c.sync_cycle&&!c.lazy)')) {
   elements.character.value=clip.character;elements.character.onchange();
   elements.action.value='results-clap_source';elements.action.onchange();
   elements.costume.value=String(clip.costume_id);elements.costume.onchange();
@@ -724,7 +724,21 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
       const [victories,taunts,clap]=borrowed;
       assert.deepEqual(servedElements.action.options.map(o=>[o.value,o.textContent]),
                        [[`other-${clap.toLowerCase().replace(' ','-')}-results-clap_source`,`${clap} — Clapping`]]);
-      assert.equal(servedElements.clapmodes.hidden,true,'borrowed claps offer the full animation only');
+      // Borrowed claps reuse the source fighter's validated clap timing.
+      assert.equal(servedElements.clapmodes.hidden,false);
+      assert.equal(servedElements.synccycle.disabled,false);assert.equal(servedElements.minimumcycle.disabled,true);
+      assert.equal(servedElements.dirtycycle.disabled,clap!=='Captain Falcon');
+      servedElements.synccycle.checked=true;servedElements.synccycle.onchange();
+      const syncRequest=new URL(requests.at(-1).url,'http://localhost').searchParams;
+      assert.equal(syncRequest.get('cycle'),'sync');assert.equal(syncRequest.get('character'),slug);
+      assert.equal(vm.runInContext('frameCount()',servedContext),42);
+      assert.match(servedElements.cyclehint.textContent,new RegExp(`Uses ${clap}'s original clap timing`));
+      requests.at(-1).resolve({ok:true,json:async()=>({frames:Array.from({length:42},(_,i)=>`sync/${slug}-${i}.png`),source_times:[]})});await settle();
+      assert.match(servedElements.frame.src,new RegExp(`sync/${slug}-0.png$`));
+      assert.equal(new URL(servedElements.gif.href,'http://localhost').searchParams.get('cycle'),'sync');
+      assert.match(servedElements.gif.download,/-clapping-sync-1024px\.gif$/);
+      servedElements.fullcycle.checked=true;servedElements.fullcycle.onchange();
+      assert.equal(new URL(requests.at(-1).url,'http://localhost').searchParams.get('cycle'),'full');
       servedElements.animationtype.value='victory';servedElements.animationtype.onchange();
       const labels=servedElements.action.options.map(o=>o.textContent);
       assert.deepEqual(labels,victories.flatMap(name=>[1,2,3].flatMap(n=>[`${name} — Victory ${n}`,`${name} — Victory ${n} loop`])));
@@ -910,10 +924,10 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.equal(new URL(elements.allzip.href).searchParams.get('hats'),'all');
   assert(!new URL(elements.gif.href).searchParams.has('hats'),'individual files keep the selected appearance');
   elements.animationtype.value='clapping';elements.animationtype.onchange();
-  // 123 results claps, 150 Kirby hat claps and two borrowed wireframe claps;
-  // the synced batch only contains claps with a sync render.
+  // 123 results claps, 150 Kirby hat claps and two borrowed wireframe claps,
+  // which also have synced versions from their source fighters' plans.
   assert.match(elements.allzip.textContent,/275 GIFs/);
-  elements.synccycle.checked=true;elements.synccycle.onchange();assert.match(elements.allzip.textContent,/synced\) — 273 GIFs/);
+  elements.synccycle.checked=true;elements.synccycle.onchange();assert.match(elements.allzip.textContent,/synced\) — 275 GIFs/);
   assert.equal(new URL(elements.allzip.href).searchParams.get('cycle'),'sync');
   elements.character.value='kirby';elements.character.onchange();
   elements.scrub.value='3';elements.scrub.oninput();
@@ -921,7 +935,7 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.match(elements.animationzip.textContent,/156 GIFs/);
   const retainedIndex=data('index');elements.kirbymode.checked=false;elements.kirbymode.onchange();
   assert.equal(data('index'),retainedIndex);assert.equal(data('playing'),false);
-  assert.match(elements.allzip.textContent,/123 GIFs/);
+  assert.match(elements.allzip.textContent,/125 GIFs/);
   elements.character.value='fox';elements.character.onchange();elements.animationtype.value='attack';elements.animationtype.onchange();
   elements.action.value='attack-295-combined_source';elements.action.onchange();
   const family=data('clips[current].batch_family');
