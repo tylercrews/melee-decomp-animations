@@ -72,6 +72,23 @@ class RetargetTests(unittest.TestCase):
             # Root motion is the source delta from bind, scaled by hip height.
             np.testing.assert_allclose(out[1][:3,3], [.75*frame,12-.375*frame,0], atol=1e-9)
 
+    def test_feet_keep_their_own_rest_angle_and_follow_source_motion(self):
+        # Heeled source foot rests 0.6 rad tipped; the target foot rests flat.
+        source = rig(1, [(None,[0,0,0],[0,0,0]), (0,[0,8,0],[0,0,0]), (1,[0,-7,0],[0,0,.6]), (2,[1,0,0],[0,0,0])])
+        target = rig(2, [(None,[0,0,0],[0,0,0]), (0,[0,8,0],[0,0,0]), (1,[0,-7,0],[0,0,0]), (2,[1,0,0],[0,0,0])])
+        class FootParts(Parts):
+            def joint(self, kind, part):
+                return {0:0, 1:1, 9:2}.get(part)
+        parts = FootParts({0:0, 1:1, 2:2, 3:3}, {1:8., 2:8.})
+        tracks = [Curve(2,3,lambda t:.6+.25*t)]
+        solver = PoseRetarget(parts, source, target, tracks, 1)
+        for frame in (0., 1.):
+            src = pose_matrices(source['bones'], tracks, frame)
+            out = pose_matrices(target['bones'], solver.tracks(), frame)
+            delta = rotation(src[2])@rotation(source['bones'][2]['world_bind_matrix']).T
+            for joint in (2, 3):  # the foot and its toe
+                np.testing.assert_allclose(rotation(out[joint]), delta@rotation(target['bones'][joint]['world_bind_matrix']), atol=1e-9)
+
     def test_unmapped_chain_is_filled_from_its_base_not_by_nearest_child(self):
         # Ganondorf-like head: the tip would steal the head joint if matched first.
         source = rig(1, [(None,[0,0,0],[0,0,0]), (0,[0,10,0],[0,0,0]), (1,[0,2.8,-.2],[0,0,0]),

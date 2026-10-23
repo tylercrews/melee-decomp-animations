@@ -36,6 +36,9 @@ WIREFRAME_CLAPS = {'male-wireframe':'captain-falcon','female-wireframe':'sheik'}
 CLAP = ('results-clap','source','Clapping')
 ROOT_PARTS = (0,1,2,3,4,52)  # TopN, TransN, XRotN, YRotN, HipN, TransN2
 HIP_PART = 4
+# LFootJA, LFootJ, RFootJA, RFootJ: rest angle is footwear (Sheik/Samus heels),
+# not pose, so these and their toes transfer rotation relative to bind.
+FOOT_PARTS = (9,10,14,15)
 MATCH_TOLERANCE = .15  # fraction of target hip height for bind-position matches
 
 
@@ -156,6 +159,11 @@ class PoseRetarget:
         self.mapping,self.filled=correspondence(parts,source,target)
         self.ratio=parts.hip_height(target)/parts.hip_height(source)
         self.roots={parts.joint(target['fighter_kind'],p) for p in ROOT_PARTS}&set(self.mapping)
+        feet={parts.joint(target['fighter_kind'],p) for p in FOOT_PARTS}-{None}
+        for bone in target['bones']:
+            if bone['parent'] in feet:feet.add(bone['index'])
+        self.rest={j:rotation(source['bones'][self.mapping[j]]['world_bind_matrix']).T@rotation(target['bones'][j]['world_bind_matrix'])
+                   for j in feet&set(self.mapping)}
         self.bind_rotations=[local_matrix(b['rotation'],[1,1,1],[0,0,0])[:3,:3] for b in target['bones']]
         self.cache=(None,None)
 
@@ -175,6 +183,7 @@ class PoseRetarget:
                 rotations.append(above@self.bind_rotations[joint]);continue
             other=self.mapping[joint]
             desired=rotation(world[other])
+            if joint in self.rest:desired=desired@self.rest[joint]
             position=list(bone['position'])
             if joint in self.roots:
                 up=self.source['bones'][other]['parent']
