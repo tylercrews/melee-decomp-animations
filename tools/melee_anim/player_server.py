@@ -96,7 +96,7 @@ def make_server(root, port=8765, catalog=None):
                 self.end_headers()
                 self.wfile.write(data)
                 return
-            if url.path not in ('/export', '/prepare-export', '/rotation'):
+            if url.path not in ('/export', '/prepare-export', '/rotation', '/angle-preview'):
                 target = Path(self.translate_path(self.path)).resolve()
                 if not target.is_relative_to(root):
                     self.send_error(403)
@@ -109,6 +109,7 @@ def make_server(root, port=8765, catalog=None):
                 if url.path in ('/export','/prepare-export'):
                     allowed |= {'size', 'kind', 'scope', 'frame', 'view','hats','render','crop'}
                 if url.path == '/prepare-export':allowed.add('progress')
+                if url.path == '/angle-preview':allowed.add('frame')
                 if set(values)-allowed or any(len(v) != 1 for v in values.values()):
                     raise ValueError('Unknown or repeated download option')
                 options = {k: v[0] for k, v in values.items()}
@@ -130,6 +131,8 @@ def make_server(root, port=8765, catalog=None):
                 try:
                     if url.path == '/rotation':
                         data = json.dumps(catalog.preview(**options)).encode()
+                    elif url.path == '/angle-preview':
+                        data = json.dumps({'url': catalog.angle_preview(**options)}).encode()
                     else:
                         callback = None
                         if requested_progress is not None:
@@ -154,7 +157,7 @@ def make_server(root, port=8765, catalog=None):
                 self.log_error('Export failed: %s', error)
                 self.send_error(500, 'Export failed; see the player service log')
                 return
-            if url.path in ('/rotation','/prepare-export'):
+            if url.path in ('/rotation','/prepare-export','/angle-preview'):
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Content-Length', str(len(data)))

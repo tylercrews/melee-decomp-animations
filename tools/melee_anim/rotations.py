@@ -10,6 +10,19 @@ import threading
 from .render_settings import native_size
 
 
+_catalogs = {}
+
+
+def parsed_catalog(path):
+    """Parsed attack catalog, reused until the file changes (it is ~11 MB)."""
+    stat = Path(path).stat()
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    if key not in _catalogs:
+        _catalogs.clear()
+        _catalogs[key] = json.loads(Path(path).read_text())
+    return _catalogs[key]
+
+
 def camera_angles(pitch=0, yaw=0, roll=0):
     values = tuple(float(v) for v in (pitch, yaw, roll))
     if any(not math.isfinite(v) or abs(v) > 180 for v in values):
@@ -73,7 +86,7 @@ class RotationCache:
             if action.startswith(('attack-','tech-','movement-','other-')):
                 from .attacks import CATALOG, find_action
                 attack_catalog = self.root/CATALOG
-                actor = find_action(json.loads(attack_catalog.read_text()), data['fighter_kind'], action)
+                actor = find_action(parsed_catalog(attack_catalog), data['fighter_kind'], action)
                 from .character_effects import effect_archives
                 paths.extend(self.repo/'orig/GALE01/files'/archive for archive in effect_archives(actor))
                 from .sequences import prop_archives

@@ -17,6 +17,10 @@ from .export_progress import render_progress
 
 HD_SIZES = (2048, 4096)
 HD_DEFAULT_SIZE = 4096
+# Quick angle previews: one low-resolution frame, framed from a subsample of
+# the clip's poses (whole-clip framing dominates a single still's cost).
+ANGLE_PREVIEW_SIZE = 384
+ANGLE_PREVIEW_FIT_SAMPLES = 24
 
 
 def crop_transparent_png(source, source_key):
@@ -132,8 +136,8 @@ class StillCache(RotationCache):
         return manifest, (short['start'] if short else 0)+frame
 
     def get(self, clip, angles, size, frame=0, cycle='full', power='none', center=False,
-            effects=False, electric=True, progress=None):
-        if size not in HD_SIZES:
+            effects=False, electric=True, progress=None, quick=False):
+        if size not in ((ANGLE_PREVIEW_SIZE,) if quick else HD_SIZES):
             raise ValueError('HD PNG size must be 2048 or 4096')
         with self.lock:
             manifest, sample_index = self.selection(clip, frame, cycle)
@@ -142,6 +146,16 @@ class StillCache(RotationCache):
                 clip, angles, cycle == 'sync', power, center, manifest_override=manifest)
             settings = {**settings, 'version': 'hd-png-v1', 'size': size, 'selected_sample_index': sample_index,
                         'resource_key': resource_key}
+            if quick:
+                fit = settings['fit_source_times']
+                step = -(-len(fit)//ANGLE_PREVIEW_FIT_SAMPLES)
+                selected = settings['source_times'][sample_index]
+                settings = {**settings, 'version': 'angle-preview-v1',
+                            'fit_source_times': sorted(set(fit[::step]) | {selected})}
+                if settings.get('sync_plan'):
+                    plan_fit = settings['sync_plan']['fit_source_times']
+                    settings['sync_plan'] = {**settings['sync_plan'], 'fit_source_times':
+                                             sorted(set(plan_fit[::-(-len(plan_fit)//ANGLE_PREVIEW_FIT_SAMPLES)]) | {selected})}
             key = hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest()
             folder = self.output_root/key
             marker = folder/'complete.json'
@@ -166,6 +180,7 @@ class StillCache(RotationCache):
                 if center:command += ['--center-jump', 'on']
                 if settings['action'].startswith(('attack-', 'tech-', 'movement-', 'other-')):
                     command += ['--attack-catalog', str(self.root/'attack-catalog.json')]
+                if quick:command += ['--quick-framing']
                 if settings['action'].startswith('tech-'):
                     command += ['--ground-effects', 'on' if effects else 'off']
                 if clip['character'] == 'game-and-watch' and settings['action'] in ('attack-305', 'attack-314'):

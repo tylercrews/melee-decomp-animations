@@ -121,6 +121,42 @@ class DownloadCatalog:
             times = times[short['start']:short['start']+short['length']]
         return {'frames': frames, 'angles': angles, 'source_times': times}
 
+    def angle_preview(self, *, character, action, costume=0, frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', electric='on'):
+        """One quick low-resolution frame at a candidate angle, before Apply.
+
+        Stored with the short-lived HD artifacts outside the project; the full
+        animation still renders only when the angle is applied.
+        """
+        from .movement import centered_jump_setting
+        centered = centered_jump_setting(action,center)
+        from .kirby_powers import validate_power
+        validate_power(character,power)
+        angles = camera_angles(pitch, yaw, roll)
+        from .electric_burst import is_judge9
+        if electric not in ('on','off') or electric=='off' and not is_judge9(character,action):raise ValueError('Electric explosion toggle requires Judgment9')
+        if cycle not in ('full', 'minimum', 'dirty', 'sync'):
+            raise ValueError('Unsupported clapping mode')
+        if effects not in ('on','off') or effects=='on' and not action.startswith('tech-'):
+            raise ValueError('Ground effects are only available for Tech animations')
+        clip = next((c for c in self.clips if c['character'] == character and c['action_key'] == action and c['costume_id'] == costume), None)
+        if clip is None:
+            raise ValueError('Unknown character, animation, or costume')
+        if cycle == 'sync' and (not is_clapping(action) or not clip.get('sync_cycle')):
+            raise ValueError('Clapping-sync render is not available for this animation')
+        from .hd_stills import ANGLE_PREVIEW_SIZE
+        artifacts = self.hd_artifacts
+        artifacts.begin()
+        try:
+            with self.render_lock:
+                if self.hd_stills is None:
+                    self.hd_stills = StillCache(self.root, artifacts.root/'renders')
+                    self.hd_stills.lock = self.render_lock
+            target, _ = self.hd_stills.get(clip, angles, ANGLE_PREVIEW_SIZE, frame, cycle, power, centered,
+                                           effects == 'on', electric == 'on', quick=True)
+            return artifacts.publish(target, 'angle-preview.png')
+        finally:
+            artifacts.end()
+
     def export(self, *, character, action, costume=0, size=None, kind='gif', scope='costume', frame=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', hats='off', electric='on', render='standard', crop=None, progress=None):
         if render not in ('standard','hd') or render=='hd' and (kind!='png' or scope not in ('costume','colors')):
             raise ValueError('HD rendering requires a single-frame PNG or all-color PNG ZIP')

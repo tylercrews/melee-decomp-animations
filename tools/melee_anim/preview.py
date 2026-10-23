@@ -407,11 +407,14 @@ def main():
     parser.add_argument("--backend", choices=("python","native"), default="python")
     parser.add_argument("--max-frames", type=int, help="diagnostic truncation, not a complete export")
     parser.add_argument("--still-frame", type=int, help="render only this zero-based sample as PNG, retaining whole-clip framing")
+    parser.add_argument("--quick-framing", action="store_true", help="still previews: frame from the saved fit samples only, without posing every animation frame")
     args = parser.parse_args()
     if args.size is not None and not 64 <= args.size <= (4096 if args.still_frame is not None else 2048) or args.ticks_per_second <= 0:
         parser.error("size must be 64..2048 (4096 for single PNGs) and ticks-per-second positive")
     if args.still_frame is not None and (args.still_frame < 0 or args.max_frames):
         parser.error('still-frame must be nonnegative and cannot truncate the animation')
+    if args.quick_framing and (args.still_frame is None or not (args.samples or args.timeline)):
+        parser.error('quick framing requires a still frame and saved fit samples')
     if args.max_frames is not None and args.max_frames <= 0:
         parser.error("max-frames must be positive")
     if args.section == "wait" and not args.action.startswith("victory"):
@@ -690,7 +693,9 @@ def main():
                 effect_matrices[key]=(fm,cfm)
         cache[key] = (posed, mask)
         return posed, mask
-    sampled = [evaluate_pose(frame) for frame in source_times]
+    # Quick angle previews pose only the selected frame; fit samples frame it.
+    sampled = [evaluate_pose(frame) for frame in ([source_times[args.still_frame]] if args.quick_framing else source_times)]
+    framing_samples = [evaluate_pose(frame) for frame in fit_times] if args.quick_framing else sampled
     poses = [p for p, _ in sampled]
     visibility = [v for _, v in sampled]
     fitted = [evaluate_pose(frame)[0] for frame in fit_times] if fit_times else poses
@@ -730,7 +735,7 @@ def main():
     framing = fitted if jump_scenes else fitted+poses if fit_times else poses
     knockdown = args.action.startswith('tech-')
     if sequence_scene:
-        cloud=np.concatenate([p for frame,mask in sampled for (p,_),shown,fit in zip(frame,mask,sequence_fit_mask) if shown and fit])
+        cloud=np.concatenate([p for frame,mask in framing_samples for (p,_),shown,fit in zip(frame,mask,sequence_fit_mask) if shown and fit])
         emitted=sequence_props.emission_geometry(view)
         if companion_sequence_props:emitted.extend(p+np.array([2.8,0,0]) for p in companion_sequence_props.emission_geometry(view))
         if emitted:cloud=np.concatenate([cloud]+emitted)
@@ -788,10 +793,11 @@ def main():
             flash = TechFlash(args.files,args.action,motion)
     original_source_times = source_times
     if args.still_frame is not None:
+        selected = 0 if args.quick_framing else args.still_frame
         source_times = [source_times[args.still_frame]]
-        poses = [poses[args.still_frame]]
-        visibility = [visibility[args.still_frame]]
-        sampled = [sampled[args.still_frame]]
+        poses = [poses[selected]]
+        visibility = [visibility[selected]]
+        sampled = [sampled[selected]]
     images = []
     raster=None
     if args.backend=="native":

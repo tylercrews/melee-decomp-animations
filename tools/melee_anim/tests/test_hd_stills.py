@@ -72,6 +72,23 @@ class StillCacheTests(unittest.TestCase):
             Image.new('RGBA',(8,8),'red').save(self.model.parent/'color.png')
             self.assertNotEqual(self.cache.get(self.clip,(20,43,10),2048,frame=2)[1],key)
 
+    def test_quick_angle_preview_frames_from_subsample_including_selected_frame(self):
+        times=[i*1.2 for i in range(60)]
+        (self.root/'synthetic/costume_00/results-clap_source/preview-manifest.json').write_text(json.dumps({'sample_source_times':times,'fps':50}))
+        with patch('tools.melee_anim.hd_stills.subprocess.run',side_effect=self.render):
+            target,key=self.cache.get(self.clip,(0,30,0),384,frame=37,quick=True)
+            command=self.calls[-1]
+            settings=json.loads((target.parent/'timeline.json').read_text())
+            self.assertIn('--quick-framing',command);self.assertEqual(command[command.index('--size')+1],'384')
+            self.assertEqual(settings['source_times'],times)
+            self.assertLessEqual(len(settings['fit_source_times']),25)
+            self.assertIn(times[37],settings['fit_source_times'])
+            self.assertEqual(settings['fit_source_times'],sorted(settings['fit_source_times']))
+            hd,_=self.cache.get(self.clip,(0,30,0),2048,frame=37)
+            self.assertNotIn('--quick-framing',self.calls[-1]);self.assertNotEqual(hd.parent,target.parent)
+            with self.assertRaises(ValueError):self.cache.get(self.clip,(0,30,0),2048,frame=37,quick=True)
+            with self.assertRaises(ValueError):self.cache.get(self.clip,(0,30,0),384,frame=37)
+
     def test_short_cycles_use_source_offsets_and_frame_changes_invalidate(self):
         with patch('tools.melee_anim.hd_stills.subprocess.run',side_effect=self.render):
             minimum,key=self.cache.get(self.clip,(0,0,0),2048,frame=1,cycle='minimum')

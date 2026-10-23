@@ -41,6 +41,8 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 [hidden]{display:none!important}small{color:#b5c0ce}
 #sizewarning{color:#b59a19}
 .controls .angle-control{flex:1 1 280px}.angle-control input[type="range"]{flex:1;width:160px;min-width:80px}.angle-control input[type="number"]{width:4.5em;padding:5px;border:1px solid #445368;border-radius:4px;background:#263243;color:inherit}#anglehint,#rotationstatus{flex-basis:100%}
+.axis-x{color:#ef5b5b;font-weight:700}.axis-y{color:#5cc46a;font-weight:700}.axis-z{color:#5b9cf0;font-weight:700}
+.anglepreview{margin:0;display:flex;flex-direction:column;align-items:center;gap:6px}.anglepreview figcaption{font-weight:600}.anglepreviewwrap{position:relative;width:220px;height:220px;border:1px solid #354151;border-radius:8px}#anglepreview{width:100%;height:100%;object-fit:contain}.anglepreviewwrap svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;font:700 8px system-ui}#anglepreviewstatus{max-width:260px;text-align:center}
 #downloadprogress{margin:12px 0}#downloadbar{width:100%;height:18px;accent-color:#3878cb}#downloadcount{display:block;margin-top:6px}
 </style><h1>Melee animation preview</h1>
 <p>Choose a character and costume color, then an animation type and animation. Save its GIF or download a bundle of colors.</p>
@@ -75,10 +77,11 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <label><input id="groundeffects" type="checkbox" checked> Ground-impact effects</label>
 <small id="techhint">Towards/away follow the character's facing. With impacts on, the whole effect fits; turning them off zooms in on the character. Fighter flashes remain with impacts off. Extra dust/sparkle particles are not included yet.</small></div>
 <fieldset class="controls"><legend>Viewing angle</legend>
-<label class="angle-control">X tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" list="anglestops" autocomplete="off" aria-label="X tilt" aria-describedby="anglehint"><input id="pitchvalue" type="number" min="-180" max="180" step="1" value="0" required autocomplete="off" aria-label="Exact X tilt degrees">°</label>
-<label class="angle-control">Y turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" list="anglestops" autocomplete="off" aria-label="Y turn" aria-describedby="anglehint"><input id="yawvalue" type="number" min="-180" max="180" step="1" value="0" required autocomplete="off" aria-label="Exact Y turn degrees">°</label>
-<label class="angle-control">Z roll <input id="roll" type="range" min="-180" max="180" step="1" value="0" list="anglestops" autocomplete="off" aria-label="Z roll" aria-describedby="anglehint"><input id="rollvalue" type="number" min="-180" max="180" step="1" value="0" required autocomplete="off" aria-label="Exact Z roll degrees">°</label>
+<label class="angle-control"><span class="axis-x">X</span> tilt <input id="pitch" type="range" min="-180" max="180" step="1" value="0" list="anglestops" autocomplete="off" aria-label="X tilt" aria-describedby="anglehint"><input id="pitchvalue" type="number" min="-180" max="180" step="1" value="0" required autocomplete="off" aria-label="Exact X tilt degrees">°</label>
+<label class="angle-control"><span class="axis-y">Y</span> turn <input id="yaw" type="range" min="-180" max="180" step="1" value="0" list="anglestops" autocomplete="off" aria-label="Y turn" aria-describedby="anglehint"><input id="yawvalue" type="number" min="-180" max="180" step="1" value="0" required autocomplete="off" aria-label="Exact Y turn degrees">°</label>
+<label class="angle-control"><span class="axis-z">Z</span> roll <input id="roll" type="range" min="-180" max="180" step="1" value="0" list="anglestops" autocomplete="off" aria-label="Z roll" aria-describedby="anglehint"><input id="rollvalue" type="number" min="-180" max="180" step="1" value="0" required autocomplete="off" aria-label="Exact Z roll degrees">°</label>
 <datalist id="anglestops"><option value="-180"></option><option value="-135"></option><option value="-90"></option><option value="-45"></option><option value="0"></option><option value="45"></option><option value="90"></option><option value="135"></option><option value="180"></option></datalist>
+<figure id="anglepreviewpanel" class="anglepreview"><figcaption>Viewing Angle Preview</figcaption><div class="anglepreviewwrap"><img id="anglepreview" alt="Selected frame at the chosen viewing angle"><svg viewBox="0 0 100 100" aria-hidden="true"><defs><marker id="axisx" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ef5b5b"/></marker><marker id="axisy" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5cc46a"/></marker><marker id="axisz" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b9cf0"/></marker></defs><path d="M14 60A36 7 0 0 1 86 60" fill="none" stroke="#5cc46a" stroke-width="1.2" stroke-dasharray="2 2" opacity=".5"/><path d="M86 60A36 7 0 0 1 14 60" fill="none" stroke="#5cc46a" stroke-width="1.6" marker-end="url(#axisy)"/><text x="89" y="67" fill="#5cc46a">Y</text><path d="M93 80A5 22 0 0 1 93 36" fill="none" stroke="#ef5b5b" stroke-width="1.6" marker-end="url(#axisx)"/><path d="M93 36A5 22 0 0 1 93 80" fill="none" stroke="#ef5b5b" stroke-width="1.2" stroke-dasharray="2 2" opacity=".5"/><text x="90" y="32" fill="#ef5b5b">X</text><path d="M10.2 27A46 46 0 0 1 89.8 27" fill="none" stroke="#5b9cf0" stroke-width="1.6" marker-end="url(#axisz)"/><text x="47" y="8" fill="#5b9cf0">Z</text></svg></div><small id="anglepreviewstatus" role="status" aria-live="polite"></small></figure>
 <small id="anglehint">Sliders snap near each 45° mark. Enter any exact degree in the number boxes, or use the slider's arrow keys for 1° steps.</small>
 <button id="applyangle">Apply</button><button id="resetangle">Reset</button>
 <small id="rotationstatus" role="status" aria-live="polite">Angles apply to previews and every GIF/PNG download. New angles need rendering.</small></fieldset>
@@ -172,9 +175,9 @@ input.onpointerup=input.onpointercancel=input.onblur=()=>{dragging=false};
 input.onkeydown=()=>{dragging=false};
 input.oninput=()=>{let value=Number(input.value),stop=Math.round(value/45)*45;
 if(dragging&&Math.abs(value-stop)<=3)input.value=String(stop);
-angleValues[i].value=input.value};
+angleValues[i].value=input.value;refreshAnglePreview()};
 angleValues[i].oninput=()=>{let value=Number(angleValues[i].value);
-if(angleValues[i].value!==''&&Number.isInteger(value)&&Math.abs(value)<=180)input.value=String(value)};
+if(angleValues[i].value!==''&&Number.isInteger(value)&&Math.abs(value)<=180){input.value=String(value);refreshAnglePreview()}};
 });
 if(location.protocol!=='http:')rotationstatus.textContent='Choose an angle. Apply opens the local rendering player with your current selections.';
 function hasAngle(){return angles.some(v=>v!==0)}
@@ -186,7 +189,7 @@ function previewUnavailable(){return rotationBusy||rotationFailed}
 function updateRotationState(){frame.hidden=previewUnavailable();saveimage.hidden=previewUnavailable();play.disabled=previewUnavailable();scrub.disabled=previewUnavailable();
 document.getElementById('downloadpanel').hidden=previewUnavailable();hdcontrols.hidden=previewUnavailable()||playing}
 async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
-if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();runPendingBatch();return}
+if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();refreshAnglePreview();runPendingBatch();return}
 if(location.protocol!=='http:'){location.href=playerHandoff();return}
 rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
 updateRotationState();
@@ -200,9 +203,38 @@ let result=await response.json();if(generation!==rotationGeneration)return;
 if(result.frames.length!==frameCount())throw Error('Rendered frame count differs from this animation.');
 rotated=result;rotationBusy=false;last=performance.now();carry=0;
 rotationstatus.textContent=`Viewing angle: X ${angles[0]}°, Y ${angles[1]}°, Z ${angles[2]}°. Preview and downloads use this angle.`;
-result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotationState();show();runPendingBatch();
+result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotationState();show();refreshAnglePreview();runPendingBatch();
 }catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
-rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState()}}
+rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState();refreshAnglePreview()}}
+// Viewing Angle Preview: the applied angle shows the current frame directly;
+// pending slider values request one quick low-resolution frame from the service.
+const anglepreview=document.getElementById('anglepreview'),anglepreviewstatus=document.getElementById('anglepreviewstatus');
+let anglePreviewTimer=null,anglePreviewBusy=false,anglePreviewQueued=false,anglePreviewGeneration=0;
+function pendingAngles(){return angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value})}
+function pendingDiffers(){return pendingAngles().some((value,i)=>value!==angles[i])}
+function previewFrameIndex(){return playing?0:index}
+function setAnglePreviewImage(src){if(src&&(anglepreview.getAttribute?anglepreview.getAttribute('src')!==src:anglepreview.src!==src))anglepreview.src=src}
+function refreshAnglePreview(){if(!anglepreview||current<0)return;
+if(pendingDiffers()){anglepreviewstatus.textContent=location.protocol==='http:'?'Rendering preview…':'Angle previews need the local player service. Apply opens it with these angles.';
+if(location.protocol==='http:'&&typeof setTimeout==='function'){clearTimeout(anglePreviewTimer);anglePreviewTimer=setTimeout(requestAnglePreview,200)}return}
+anglePreviewGeneration++;
+if(previewUnavailable()){anglepreviewstatus.textContent=rotationFailed?'The applied angle failed to render.':'Rendering the applied angle…';return}
+setAnglePreviewImage(framePath(previewFrameIndex()));
+anglepreviewstatus.textContent=`Current angle: X ${angles[0]}°, Y ${angles[1]}°, Z ${angles[2]}° · frame ${previewFrameIndex()+1}. Adjust X, Y or Z to preview a new angle.`}
+async function requestAnglePreview(){if(current<0||!pendingDiffers())return refreshAnglePreview();
+if(anglePreviewBusy){anglePreviewQueued=true;return}
+anglePreviewBusy=true;const generation=++anglePreviewGeneration,pending=pendingAngles(),frameIndex=previewFrameIndex();
+try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(frameIndex),pitch:String(pending[0]),yaw:String(pending[1]),roll:String(pending[2])});
+if(isJudgeNine())query.set('electric',electricSetting());
+if(hasPower())query.set('power',powerSetting());
+if(isHop())query.set('center',centerSetting());
+if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
+let response=await fetch(`/angle-preview?${query}`);if(!response.ok)throw Error(response.status===503?'The renderer is busy; adjust again to retry the preview.':'The preview failed to render.');
+let result=await response.json();
+if(generation===anglePreviewGeneration&&pendingDiffers()){setAnglePreviewImage(result.url);
+anglepreviewstatus.textContent=`Preview: X ${pending[0]}°, Y ${pending[1]}°, Z ${pending[2]}° · frame ${frameIndex+1}. Apply renders the full animation at this angle.`}}
+catch(error){if(generation===anglePreviewGeneration)anglepreviewstatus.textContent=error.message||'Cannot reach the local player service.'}
+finally{anglePreviewBusy=false;if(anglePreviewQueued){anglePreviewQueued=false;requestAnglePreview()}}}
 applyangle.onclick=()=>{for(const input of angleValues){if(input.checkValidity&&!input.checkValidity()){input.reportValidity();return}}angles=angleInputs.map(input=>{let value=Number(input.value);return value===180?-180:value});loadRotation()};
 function syncAngleInputs(){angleInputs.forEach((input,i)=>{input.value=String(angles[i]);input.oninput()});groundeffects.checked=groundEffectsEnabled;kirbypower.value=kirbyPower;centerjump.checked=centerJumpEnabled;hidepartials.checked=partialsHidden;kirbymode.checked=includeKirbyHats;cropborder.checked=cropTransparentBorder}
 resetangle.onclick=()=>{angles=[0,0,0];syncAngleInputs();loadRotation()};
@@ -235,7 +267,7 @@ function activeCycle(){let c=clips[current];return cycleMode()==='sync'?c.sync_c
 function useMinimum(){return current>=0&&Boolean(activeCycle())}
 function frameCount(){let c=clips[current];let short=activeCycle();return short?short.length:c.lazy?c.frame_count:c.frames.length}
 function sourceIndex(){let short=activeCycle();return index+(short&&!short.frames?short.start:0)}
-function framePath(){if(rotated)return rotated.frames[index];let short=activeCycle();return short&&short.frames?short.frames[index]:clips[current].frames[sourceIndex()]}
+function framePath(i=index){if(rotated)return rotated.frames[i];let short=activeCycle();return short&&short.frames?short.frames[i]:clips[current].frames[i+(short&&!short.frames?short.start:0)]}
 function sourceTime(){let c=clips[current];let short=activeCycle();return short&&short.frames?short.source_times[index]:c.lazy?(rotated&&rotated.source_times?rotated.source_times[index]:c.period*index/Math.max(1,Math.ceil(c.period/60*c.fps))):c.source_times[sourceIndex()]}
 function markedName(name){name=centeredName(powerName(name));if(isJudgeNine()&&!judgeElectricEnabled)name=name.replace(/(\.[^.]+)$/,'-no-electric$1');let suffix=cycleMode()==='sync'?'-clapping-sync':cycleMode()==='dirty'?'-dirty-loop':'-minimum-cycle';return useMinimum()?name.replace(/(\.[^.]+)$/,`${suffix}$1`):name}
 function sizedName(name){return name.replace(/(\.[^.]+)$/,`-${downloadsize.value}px$1`)}
@@ -351,9 +383,9 @@ groundeffects.onchange=()=>{groundEffectsEnabled=groundeffects.checked;if(clips[
 centerjump.onchange=()=>{centerJumpEnabled=centerjump.checked;if(isHop())loadRotation()};
 function changeCycle(){if(current<0)return;index=0;carry=0;last=performance.now();updateCycleInfo();let short=activeCycle();if(short&&short.frames)short.frames.forEach(src=>{let image=new Image();image.src=src});if(hasAngle()||hasPower()||clips[current].lazy)loadRotation();else show()}
 [fullcycle,minimumcycle,dirtycycle,synccycle].forEach((r,i)=>r.onchange=()=>{if(r.checked){checkMode(['full','minimum','dirty','sync'][i]);changeCycle()}});
-play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show()};
-restart.onclick=()=>{if(current<0)return;index=0;last=performance.now();carry=0;playing=true;play.textContent='Pause';show()};
-scrub.oninput=()=>{if(current<0)return;index=Number(scrub.value);playing=false;play.textContent='Play';show()};
+play.onclick=()=>{if(current<0)return;playing=!playing;play.textContent=playing?'Pause':'Play';last=performance.now();carry=0;show();refreshAnglePreview()};
+restart.onclick=()=>{if(current<0)return;index=0;last=performance.now();carry=0;playing=true;play.textContent='Pause';show();refreshAnglePreview()};
+scrub.oninput=()=>{if(current<0)return;index=Number(scrub.value);playing=false;play.textContent='Play';show();refreshAnglePreview()};
 function tick(now){if(current>=0&&playing&&!previewUnavailable()){let c=clips[current];carry+=Math.min(now-last,250);let step=1000/c.fps;
 while(carry>=step){carry-=step;if(index+1<frameCount())index++;else if(loop.checked)index=0;else{playing=false;play.textContent='Play';break}}show()}
 last=now;requestAnimationFrame(tick)}

@@ -31,7 +31,7 @@ for(const id of ['pitch','yaw','roll']){
 const stops=html.match(/<datalist id="anglestops">([\s\S]*?)<\/datalist>/)[1];
 assert.deepEqual([...stops.matchAll(/value="(-?\d+)"/g)].map(match=>Number(match[1])),[-180,-135,-90,-45,0,45,90,135,180]);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['hdcroplabel','cropborder','hdstill','hdcolors','hdsize','hdcontrols','downloadprogress','downloadbar','downloadcount','electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['anglepreview','anglepreviewstatus','hdcroplabel','cropborder','hdstill','hdcolors','hdsize','hdcontrols','downloadprogress','downloadbar','downloadcount','electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -989,4 +989,54 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   console.log('Selector rows, default partial filter, all-character choices, contiguous families, fallback, paused retention and handoff: PASS');
   console.log('Animation Type filtering, hidden single-choice menus, attack loading/stills/colors and stale selection protection: PASS');
   console.log('Rotation Apply/Reset, pending/error states, stale responses, exact paused frames, mode/costume retention and sized downloads: PASS');
+})().catch(error=>{console.error(error);process.exitCode=1});
+
+(async()=>{
+  // Viewing Angle Preview: always present, current frame at the applied
+  // angle, then one debounced low-resolution render per pending angle.
+  const panel=html.match(/<fieldset class="controls"><legend>Viewing angle<\/legend>([\s\S]*?)<\/fieldset>/)[1];
+  assert.match(panel,/<figcaption>Viewing Angle Preview<\/figcaption>/);
+  assert.deepEqual([...panel.matchAll(/<button id="(\w+)"/g)].map(m=>m[1]),['applyangle','resetangle']);
+  for(const axis of ['x','y','z']){assert.match(panel,new RegExp(`<marker id="axis${axis}"`));assert.match(panel,new RegExp(`<span class="axis-${axis}">${axis.toUpperCase()}</span>`))}
+  const settle=()=>new Promise(resolve=>setImmediate(resolve));
+  const els=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
+  const fetched=[],timers=new Map();let timerId=0;
+  const ctx=vm.createContext({document:{getElementById:id=>els[id],createElement:()=>({})},location:{protocol:'http:',hash:''},URLSearchParams,
+    performance:context.performance,Image:context.Image,requestAnimationFrame(){},addEventListener(){},
+    setTimeout(callback){timers.set(++timerId,callback);return timerId},clearTimeout(id){timers.delete(id)},
+    fetch:url=>new Promise(resolve=>fetched.push({url,resolve}))});
+  vm.runInContext(script,ctx);
+  const run=expression=>vm.runInContext(expression,ctx);
+  const fire=()=>{const pending=[...timers.values()];timers.clear();pending.forEach(callback=>callback())};
+  els.character.value='mario';els.character.onchange();els.animationtype.value='victory';els.animationtype.onchange();
+  els.action.value='victory3_source';els.action.onchange();els.scrub.value='5';els.scrub.oninput();
+  assert.equal(els.anglepreview.src,run('clips[current].frames[5]'),'applied angle shows the selected frame without rendering');
+  assert.match(els.anglepreviewstatus.textContent,/Current angle: X 0°, Y 0°, Z 0° · frame 6/);
+  assert.equal(fetched.length,0);
+  els.yaw.value='45';els.yaw.oninput();els.yaw.value='50';els.yaw.oninput();
+  assert.equal(timers.size,1,'slider input is debounced');assert.match(els.anglepreviewstatus.textContent,/Rendering preview/);
+  fire();assert.equal(fetched.length,1);
+  let query=new URL(fetched[0].url,'http://localhost');
+  assert.equal(query.pathname,'/angle-preview');
+  for(const [key,value] of Object.entries({character:'mario',action:'victory3_source',frame:'5',pitch:'0',yaw:'50',roll:'0',cycle:'full'}))assert.equal(query.searchParams.get(key),value);
+  fetched[0].resolve({ok:true,json:async()=>({url:'/hd-export/first.png'})});await settle();
+  assert.equal(els.anglepreview.src,'/hd-export/first.png');
+  assert.match(els.anglepreviewstatus.textContent,/Preview: X 0°, Y 50°, Z 0° · frame 6\. Apply renders/);
+  assert.equal(run('angles.join()'),'0,0,0','previews never apply the angle');
+  // Only one request at a time; the newest pending angle follows.
+  els.pitchvalue.value='30';els.pitchvalue.oninput();fire();
+  els.roll.value='-90';els.roll.oninput();fire();
+  assert.equal(fetched.length,2);
+  fetched[1].resolve({ok:true,json:async()=>({url:'/hd-export/second.png'})});await settle();
+  assert.equal(fetched.length,3);
+  query=new URL(fetched[2].url,'http://localhost').searchParams;
+  assert.deepEqual(['pitch','yaw','roll'].map(k=>query.get(k)),['30','50','-90']);
+  fetched[2].resolve({ok:false,status:503});await settle();
+  assert.match(els.anglepreviewstatus.textContent,/busy/);
+  // Reset returns to the applied frame preview without another render.
+  els.resetangle.onclick();
+  assert.equal(els.anglepreview.src,run('clips[current].frames[5]'));
+  assert.match(els.anglepreviewstatus.textContent,/Current angle: X 0°/);
+  assert.equal(fetched.length,3);
+  console.log('Viewing Angle Preview panel, axis guides, debounced single-flight previews and reset: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});
