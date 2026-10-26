@@ -31,7 +31,7 @@ for(const id of ['pitch','yaw','roll']){
 const stops=html.match(/<datalist id="anglestops">([\s\S]*?)<\/datalist>/)[1];
 assert.deepEqual([...stops.matchAll(/value="(-?\d+)"/g)].map(match=>Number(match[1])),[-180,-135,-90,-45,0,45,90,135,180]);
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const elements = Object.fromEntries(['anglepreview','anglepreviewstatus','hdcroplabel','cropborder','hdstill','hdcolors','hdsize','hdcontrols','downloadprogress','downloadbar','downloadcount','electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
+const elements = Object.fromEntries(['loading','loadingframe','anglepreview','anglepreviewstatus','hdcroplabel','cropborder','hdstill','hdcolors','hdsize','hdcontrols','downloadprogress','downloadbar','downloadcount','electriccontrols','judgeelectric','kirbymode','upsizenotice','downloadstatus','hidepartials','effecthint','sequencehint','itemhint','centerjump','jumpcontrols','movementhint','kirbypower','powerlabel','groundeffects','techcontrols','techhint','sizewarning','saveimage','animationtype','actionlabel','pitch','yaw','roll','pitchvalue','yawvalue','rollvalue','rotationstatus','applyangle','resetangle','downloadpanel','fullcycle','synccycle','clapmodes','dirtycycle','minimumcycle','cyclehint','downloadsize', 'servicehint', 'character', 'still', 'framezip', 'action', 'costume', 'frame', 'play', 'restart', 'loop', 'scrub', 'time', 'gif', 'animationzip', 'allzip', 'open', 'meta']
   .map(id => [id, {value: '0', textContent: '', checked: false, options: id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[], append(option) {this.options.push(option);}}]));
 const context = vm.createContext({document: {getElementById: id => elements[id], createElement: () => ({})},
   location: {protocol:'file:'}, URLSearchParams,
@@ -1039,4 +1039,59 @@ console.log('Playback, color/frame retention, sized GIF/PNG downloads, ZIP links
   assert.match(els.anglepreviewstatus.textContent,/Current angle: X 0°/);
   assert.equal(fetched.length,3);
   console.log('Viewing Angle Preview panel, axis guides, debounced single-flight previews and reset: PASS');
+})().catch(error=>{console.error(error);process.exitCode=1});
+// Loading placeholder: a quick middle frame under a spinner while a render is
+// pending, and new animations start at the default viewing angle.
+(async()=>{
+  const settle=()=>new Promise(resolve=>setImmediate(resolve));
+  const els=Object.fromEntries(Object.keys(elements).map(id=>[id,{value:'0',textContent:'',checked:false,options:id==='downloadsize'?[128,256,512,1024,2048].map(value=>({value:String(value),textContent:''})):[],append(option){this.options.push(option)}}]));
+  const fetched=[],timers=new Map();let timerId=0;
+  const ctx=vm.createContext({document:{getElementById:id=>els[id],createElement:()=>({})},location:{protocol:'http:',hash:''},URLSearchParams,
+    performance:context.performance,Image:context.Image,requestAnimationFrame(){},addEventListener(){},
+    setTimeout(callback){timers.set(++timerId,callback);return timerId},clearTimeout(id){timers.delete(id)},
+    fetch:url=>new Promise(resolve=>fetched.push({url:new URL(url,'http://localhost'),resolve}))});
+  vm.runInContext(script,ctx);
+  const run=expression=>vm.runInContext(expression,ctx);
+  const fire=()=>{const pending=[...timers.values()];timers.clear();pending.forEach(callback=>callback())};
+  const take=pathname=>{const i=fetched.findIndex(f=>f.url.pathname===pathname);assert(i>=0,`expected ${pathname} request`);return fetched.splice(i,1)[0]};
+  const complete=(request,label)=>request.resolve({ok:true,json:async()=>({frames:Array.from({length:run('frameCount()')},(_,i)=>`rotations/${label}/frame_${String(i).padStart(4,'0')}.png`)})});
+  els.character.value='mario';els.character.onchange();els.animationtype.value='victory';els.animationtype.onchange();
+  els.action.value='victory3_source';els.action.onchange();
+  assert.equal(els.loading.hidden,true,'prebuilt default view needs no loading frame');
+  // Apply an angle: spinner first, then the middle frame at that angle.
+  els.yawvalue.value='45';els.yawvalue.oninput();els.applyangle.onclick();fire();
+  assert.equal(els.loading.hidden,false);assert.equal(els.frame.hidden,true);assert.equal(els.loadingframe.hidden,true);
+  const rotation=take('/rotation');assert.equal(rotation.url.searchParams.get('yaw'),'45');
+  const placeholder=take('/angle-preview');
+  assert.equal(placeholder.url.searchParams.get('frame'),String(Math.floor(run('frameCount()')/2)),'middle frame while playing');
+  assert.equal(placeholder.url.searchParams.get('yaw'),'45');
+  placeholder.resolve({ok:true,json:async()=>({url:'/hd-export/middle.png'})});await settle();
+  assert.equal(els.loadingframe.src,'/hd-export/middle.png');assert.equal(els.loadingframe.hidden,true,'shown once decoded');
+  els.loadingframe.onload();assert.equal(els.loadingframe.hidden,false);
+  complete(rotation,'yaw45');await settle();
+  assert.equal(els.loading.hidden,true);assert.equal(els.loadingframe.hidden,true);assert.equal(els.frame.hidden,false);
+  // Another animation resets the view, so the prebuilt clip shows at once.
+  els.action.value='victory1_source';els.action.onchange();
+  assert.equal(run('angles.join()'),'0,0,0');assert.equal(els.yaw.value,'0');assert.equal(els.yawvalue.value,'0');
+  assert.match(els.rotationstatus.textContent,/reset to default/);
+  assert.equal(fetched.filter(f=>f.url.pathname==='/rotation').length,0);assert.equal(els.loading.hidden,true);
+  assert.match(els.frame.src,/victory1_source\/frame_0000\.png$/);
+  // A lazy attack renders at the default angle with a loading frame; a
+  // finished render wins over a late placeholder.
+  els.animationtype.value='attack';els.animationtype.onchange();
+  assert.equal(els.loading.hidden,false);
+  const attack=take('/rotation');assert.equal(attack.url.searchParams.get('yaw'),'0');
+  fire();const late=take('/angle-preview');
+  assert.equal(late.url.searchParams.get('frame'),String(Math.floor(run('frameCount()')/2)));
+  complete(attack,'attack');await settle();
+  late.resolve({ok:true,json:async()=>({url:'/hd-export/late.png'})});await settle();
+  assert.equal(els.loading.hidden,true);assert.notEqual(els.loadingframe.src,'/hd-export/late.png');
+  // A cached render that returns before the delay never asks for a placeholder.
+  els.yawvalue.value='30';els.yawvalue.oninput();fire();fetched.length=0;els.applyangle.onclick();
+  complete(take('/rotation'),'yaw30');await settle();fire();
+  assert.equal(fetched.length,0);
+  // Changing only the costume keeps the applied angle.
+  els.costume.value='1';els.costume.onchange();
+  assert.equal(take('/rotation').url.searchParams.get('yaw'),'30');assert.equal(run('angles.join()'),'0,30,0');
+  console.log('Loading frame placeholder and default view for new animations: PASS');
 })().catch(error=>{console.error(error);process.exitCode=1});

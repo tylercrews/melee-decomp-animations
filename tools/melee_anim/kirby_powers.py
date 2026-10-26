@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import threading
 
 import numpy as np
 
@@ -94,7 +95,16 @@ def remap_tracks(tracks, source_count, target_count, parts, target_mask=0):
     return [replace(t,joint_index=by_slot[source[t.joint_index]]) for t in tracks if source[t.joint_index] in by_slot]
 
 
+_model_lock=threading.Lock()
+
+
 def model_for_power(repo, power, costume):
+    # Quick previews and full renders can both prepare the same copy model.
+    with _model_lock:
+        return _model_for_power(repo, power, costume)
+
+
+def _model_for_power(repo, power, costume):
     from .export_model import export_fighter
     d=descriptor(repo,power,costume)
     folder=repo/'build/melee_anim/kirby-powers'/power/f'costume_{costume:02d}'

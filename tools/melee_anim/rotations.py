@@ -17,10 +17,13 @@ def parsed_catalog(path):
     """Parsed attack catalog, reused until the file changes (it is ~11 MB)."""
     stat = Path(path).stat()
     key = (str(path), stat.st_mtime_ns, stat.st_size)
-    if key not in _catalogs:
+    catalog = _catalogs.get(key)
+    if catalog is None:
+        # Quick previews and full renders can parse concurrently.
+        catalog = json.loads(Path(path).read_text())
         _catalogs.clear()
-        _catalogs[key] = json.loads(Path(path).read_text())
-    return _catalogs[key]
+        _catalogs[key] = catalog
+    return catalog
 
 
 def camera_angles(pitch=0, yaw=0, roll=0):

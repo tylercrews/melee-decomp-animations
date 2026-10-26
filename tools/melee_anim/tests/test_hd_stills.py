@@ -216,6 +216,25 @@ class HDExportTests(unittest.TestCase):
         self.assertEqual([e['percent'] for e in events],sorted(e['percent'] for e in events))
         self.assertFalse(list(self.root.rglob('*.png')))
 
+    def test_quick_preview_renders_beside_a_full_render(self):
+        # A full animation render holds the render lock; the loading frame or
+        # angle preview must not queue behind it.
+        holding,release=threading.Event(),threading.Event()
+        def full_render():
+            with self.catalog.render_lock:holding.set();release.wait(5)
+        worker=threading.Thread(target=full_render);worker.start();holding.wait(5)
+        result={}
+        def request():
+            result['url']=self.catalog.angle_preview(character='synthetic',action='taunt_source',frame=1,yaw=30)
+        with patch('tools.melee_anim.hd_stills.StillCache.get',side_effect=lambda clip,angles,size,frame,cycle,power,center,effects,electric,quick:
+                   self.render(clip,angles,size,frame,cycle,power,center,effects,electric,None)):
+            preview=threading.Thread(target=request);preview.start();preview.join(5)
+        try:
+            self.assertFalse(preview.is_alive(),'quick preview waited behind the full render')
+            self.assertTrue(result['url'].startswith('/hd-export/'))
+            self.assertEqual(self.calls,[(0,(0.,30.,0.),384,1,'full','none',False,False,True)])
+        finally:release.set();worker.join()
+
     def test_crop_default_all_colors_uses_individual_bounds_and_off_keeps_canvas(self):
         def bordered(clip,angles,size,*args):
             folder=self.catalog.hd_artifacts.root/'renders'/str(clip['costume_id']);folder.mkdir(parents=True,exist_ok=True)

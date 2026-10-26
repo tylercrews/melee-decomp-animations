@@ -89,6 +89,10 @@ class DownloadCatalog:
         self.rotations.lock=self.render_lock
         self.hd_artifacts=HDArtifacts()
         self.hd_stills=None
+        # Quick 384px stills (angle previews, loading frames) take their own
+        # lock so one renders beside a full animation instead of behind it.
+        self.preview_lock=threading.RLock()
+        self.quick_stills=None
 
     def preview(self, *, character, action, costume=0, cycle='full', pitch=0, yaw=0, roll=0, effects='off', power='none', center='off', electric='on'):
         from .movement import centered_jump_setting
@@ -147,12 +151,12 @@ class DownloadCatalog:
         artifacts = self.hd_artifacts
         artifacts.begin()
         try:
-            with self.render_lock:
-                if self.hd_stills is None:
-                    self.hd_stills = StillCache(self.root, artifacts.root/'renders')
-                    self.hd_stills.lock = self.render_lock
-            target, _ = self.hd_stills.get(clip, angles, ANGLE_PREVIEW_SIZE, frame, cycle, power, centered,
-                                           effects == 'on', electric == 'on', quick=True)
+            with self.preview_lock:
+                if self.quick_stills is None:
+                    self.quick_stills = StillCache(self.root, artifacts.root/'renders')
+                    self.quick_stills.lock = self.preview_lock
+            target, _ = self.quick_stills.get(clip, angles, ANGLE_PREVIEW_SIZE, frame, cycle, power, centered,
+                                              effects == 'on', electric == 'on', quick=True)
             return artifacts.publish(target, 'angle-preview.png')
         finally:
             artifacts.end()

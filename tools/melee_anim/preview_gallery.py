@@ -36,7 +36,10 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 .download[aria-disabled="true"]{opacity:.65;cursor:wait}.download.busy::before{content:"";display:inline-block;width:1em;height:1em;margin-right:8px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 .stage{background:transparent;border:1px solid #354151;border-radius:12px;display:flex;justify-content:center;min-height:400px;align-items:center}
 .framewrap{position:relative;width:min(100%,512px)}#saveimage{position:absolute;inset:0;width:100%;height:100%;opacity:0}
-#frame{width:min(100%,512px);height:auto}.timeline{display:flex;gap:12px;align-items:center;margin:20px 0}
+#frame{width:min(100%,512px);height:auto}
+.loading{position:relative;width:min(100%,512px);aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}#loadingframe{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:.5}
+.loading .spinner{position:relative;width:56px;height:56px;border:5px solid rgba(255,255,255,.25);border-top-color:#81baff;border-radius:50%;animation:spin .8s linear infinite}#loadingtext{position:relative;color:#e5ebf2;text-shadow:0 1px 3px #000}
+.timeline{display:flex;gap:12px;align-items:center;margin:20px 0}
 #scrub{flex:1}a{color:#81baff}.meta{background:#202a36;padding:16px;border-radius:8px}
 [hidden]{display:none!important}small{color:#b5c0ce}
 #sizewarning{color:#b59a19}
@@ -85,7 +88,7 @@ select,button,.download{padding:10px;border:1px solid #445368;border-radius:6px;
 <small id="anglehint">Sliders snap near each 45° mark. Enter any exact degree in the number boxes, or use the slider's arrow keys for 1° steps.</small>
 <button id="applyangle">Apply</button><button id="resetangle">Reset</button>
 <small id="rotationstatus" role="status" aria-live="polite">Angles apply to previews and every GIF/PNG download. New angles need rendering.</small></fieldset>
-<div class="stage"><div class="framewrap"><img id="frame" alt="Animated character costume preview"><img id="saveimage" aria-hidden="true" alt="" title="Right-click to save"></div></div>
+<div class="stage"><div id="loading" class="loading" role="status" aria-live="polite" hidden><img id="loadingframe" alt="" hidden><span class="spinner"></span><small id="loadingtext">Loading animation…</small></div><div class="framewrap"><img id="frame" alt="Animated character costume preview"><img id="saveimage" aria-hidden="true" alt="" title="Right-click to save"></div></div>
 <small>Right-click the character to save its transparent GIF while playing or its transparent PNG while paused.</small>
 <div class="timeline"><input id="scrub" type="range" min="0" value="0" step="1" aria-label="Animation frame"><span id="time"></span></div>
 <div class="controls"><label>Download size <select id="downloadsize" aria-label="Download size">
@@ -187,25 +190,49 @@ function angleSuffix(){return hasAngle()?'-view-'+angles.map((v,i)=>'xyz'[i]+v).
 function angleName(name){return name.replace(/(\.[^.]+)$/,`${angleSuffix()}$1`)}
 function previewUnavailable(){return rotationBusy||rotationFailed}
 function updateRotationState(){frame.hidden=previewUnavailable();saveimage.hidden=previewUnavailable();play.disabled=previewUnavailable();scrub.disabled=previewUnavailable();
-document.getElementById('downloadpanel').hidden=previewUnavailable();hdcontrols.hidden=previewUnavailable()||playing}
-async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
-if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.';updateRotationState();show();refreshAnglePreview();runPendingBatch();return}
-if(location.protocol!=='http:'){location.href=playerHandoff();return}
-rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
-updateRotationState();
-try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),pitch:String(angles[0]),yaw:String(angles[1]),roll:String(angles[2])});
+document.getElementById('downloadpanel').hidden=previewUnavailable();hdcontrols.hidden=previewUnavailable()||playing;
+loading.hidden=!rotationBusy;if(!rotationBusy){loadingframe.hidden=true;if(typeof clearTimeout==='function')clearTimeout(loadingTimer)}}
+// Render options shared by the full animation, angle previews and loading frames.
+function renderQuery(view,frameIndex=null){let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode()});
+if(frameIndex!==null)query.set('frame',String(frameIndex));
+['pitch','yaw','roll'].forEach((key,i)=>query.set(key,String(view[i])));
 if(isJudgeNine())query.set('electric',electricSetting());
 if(hasPower())query.set('power',powerSetting());
 if(isHop())query.set('center',centerSetting());
-if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
-let response=await fetch(`/rotation?${query}`);if(!response.ok)throw Error(response.status===503?'Renderer is busy; try Apply again shortly.':'Render failed. Check the player service log, then try Apply again or Reset.');
+if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());return query}
+// A new animation starts at the default view, which is prebuilt or the
+// quickest render; Apply renders another angle on request.
+let angleResetNotice=false;
+function resetViewForNewAnimation(){if(hasAngle())angleResetNotice=true;angles=[0,0,0];syncAngleInputs()}
+function resetNotice(text){if(!angleResetNotice)return text;angleResetNotice=false;return `Viewing angle reset to default for this animation. ${text}`}
+async function loadRotation(){const generation=++rotationGeneration;rotated=null;rotationBusy=false;rotationFailed=false;
+if(!hasAngle()&&!hasPower()&&!clips[current].lazy){rotationstatus.textContent=resetNotice(location.protocol==='http:'?'Default angle. Angles apply to previews and every GIF/PNG download.':'Choose an angle. Apply opens the local rendering player with your current selections.');updateRotationState();show();refreshAnglePreview();runPendingBatch();return}
+if(location.protocol!=='http:'){location.href=playerHandoff();return}
+rotationBusy=true;rotationstatus.textContent=clips[current].lazy?'Preparing this animation… Each color is rendered and saved when needed.':'Rendering this viewing angle… Downloads will be ready with the preview. All-color downloads render additional costumes as needed.';
+updateRotationState();scheduleLoadingFrame();
+try{let response=await fetch(`/rotation?${renderQuery(angles)}`);if(!response.ok)throw Error(response.status===503?'Renderer is busy; try Apply again shortly.':'Render failed. Check the player service log, then try Apply again or Reset.');
 let result=await response.json();if(generation!==rotationGeneration)return;
 if(result.frames.length!==frameCount())throw Error('Rendered frame count differs from this animation.');
 rotated=result;rotationBusy=false;last=performance.now();carry=0;
-rotationstatus.textContent=`Viewing angle: X ${angles[0]}°, Y ${angles[1]}°, Z ${angles[2]}°. Preview and downloads use this angle.`;
+rotationstatus.textContent=resetNotice(`Viewing angle: X ${angles[0]}°, Y ${angles[1]}°, Z ${angles[2]}°. Preview and downloads use this angle.`);
 result.frames.forEach(src=>{let image=new Image();image.src=src});updateRotationState();show();refreshAnglePreview();runPendingBatch();
-}catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;
+}catch(error){if(generation!==rotationGeneration)return;rotationBusy=false;rotationFailed=true;angleResetNotice=false;
 rotationstatus.textContent=error.message||'Cannot reach the local player service. Try Apply again or Reset.';updateRotationState();refreshAnglePreview()}}
+// Loading placeholder: while the full animation renders, one quick
+// low-resolution frame (the middle frame, or the paused frame) shows under
+// the spinner. The short delay skips it when the render is already cached.
+const loading=document.getElementById('loading'),loadingframe=document.getElementById('loadingframe');
+let loadingTimer=null,loadingBusy=false,loadingQueued=false;
+function loadingFrameIndex(){return playing?Math.floor(frameCount()/2):index}
+function scheduleLoadingFrame(){loadingframe.hidden=true;if(typeof setTimeout!=='function')return;clearTimeout(loadingTimer);loadingTimer=setTimeout(requestLoadingFrame,300)}
+async function requestLoadingFrame(){if(!rotationBusy)return;
+if(loadingBusy){loadingQueued=true;return}
+loadingBusy=true;const generation=rotationGeneration;
+try{let response=await fetch(`/angle-preview?${renderQuery(angles,loadingFrameIndex())}`);
+if(response.ok){let result=await response.json();
+if(generation===rotationGeneration&&rotationBusy){loadingframe.onload=()=>{if(generation!==rotationGeneration||!rotationBusy)return;loadingframe.hidden=false;if(!pendingDiffers())setAnglePreviewImage(result.url)};loadingframe.src=result.url}}}
+catch(error){}
+finally{loadingBusy=false;if(loadingQueued){loadingQueued=false;requestLoadingFrame()}}}
 // Viewing Angle Preview: the applied angle shows the current frame directly;
 // pending slider values request one quick low-resolution frame from the service.
 const anglepreview=document.getElementById('anglepreview'),anglepreviewstatus=document.getElementById('anglepreviewstatus');
@@ -224,12 +251,7 @@ anglepreviewstatus.textContent=`Current angle: X ${angles[0]}°, Y ${angles[1]}�
 async function requestAnglePreview(){if(current<0||!pendingDiffers())return refreshAnglePreview();
 if(anglePreviewBusy){anglePreviewQueued=true;return}
 anglePreviewBusy=true;const generation=++anglePreviewGeneration,pending=pendingAngles(),frameIndex=previewFrameIndex();
-try{let c=clips[current];let query=new URLSearchParams({character:c.character,action:c.action_key,costume:String(c.costume_id),cycle:cycleMode(),frame:String(frameIndex),pitch:String(pending[0]),yaw:String(pending[1]),roll:String(pending[2])});
-if(isJudgeNine())query.set('electric',electricSetting());
-if(hasPower())query.set('power',powerSetting());
-if(isHop())query.set('center',centerSetting());
-if(c.action_key.startsWith('tech-'))query.set('effects',effectSetting());
-let response=await fetch(`/angle-preview?${query}`);if(!response.ok)throw Error(response.status===503?'The renderer is busy; adjust again to retry the preview.':'The preview failed to render.');
+try{let response=await fetch(`/angle-preview?${renderQuery(pending,frameIndex)}`);if(!response.ok)throw Error(response.status===503?'The renderer is busy; adjust again to retry the preview.':'The preview failed to render.');
 let result=await response.json();
 if(generation===anglePreviewGeneration&&pendingDiffers()){setAnglePreviewImage(result.url);
 anglepreviewstatus.textContent=`Preview: X ${pending[0]}°, Y ${pending[1]}°, Z ${pending[2]}° · frame ${frameIndex+1}. Apply renders the full animation at this angle.`}}
@@ -369,10 +391,10 @@ loop.checked=true;playing=true;play.textContent='Pause';
 gif.href=c.gif;gif.download=c.download_name;gif.textContent=`Download GIF / ${c.costume_label}`;open.href=c.gif;
 updateCycleInfo();
 c.frames.forEach(src=>{let image=new Image();image.src=src});updateDownloads();if(render)loadRotation()}
-character.onchange=()=>{colors();actions();select()};animationtype.onchange=()=>{actions();select()};
+character.onchange=()=>{resetViewForNewAnimation();colors();actions();select()};animationtype.onchange=()=>{resetViewForNewAnimation();actions();select()};
 kirbypower.onchange=()=>{kirbyPower=kirbypower.value;loadRotation()};
-action.onchange=()=>{animationtype.value=typeForAction(action.value);actions();select()};costume.onchange=select;
-hidepartials.onchange=()=>{let old=action.value;partialsHidden=hidepartials.checked;actions();if(action.value!==old)select()};
+action.onchange=()=>{resetViewForNewAnimation();animationtype.value=typeForAction(action.value);actions();select()};costume.onchange=select;
+hidepartials.onchange=()=>{let old=action.value;partialsHidden=hidepartials.checked;actions();if(action.value!==old){resetViewForNewAnimation();select()}};
 function updateNativeSize(keep=false){const size=['victory','taunt','clapping'].includes(typeForAction(action.value))?1024:512;if(!keep&&Number(downloadsize.value)===nativeDefaultSize)downloadsize.value=String(size);nativeDefaultSize=size;const names={128:'Extra small',256:'Small',512:'Medium',1024:'Large',2048:'X-Large'};for(const option of downloadsize.options){const n=Number(option.value);option.textContent=`${n===size?'★ ':n===2048?'⚠ ':''}${names[n]} (${n} × ${n}${n===size?', native render':''})`}updateSizeWarning()}
 function updateSizeWarning(){document.getElementById('sizewarning').hidden=downloadsize.value!=='2048';const notice=document.getElementById('upsizenotice');notice.hidden=Number(downloadsize.value)<=nativeDefaultSize;notice.textContent=`Upsized from the ${nativeDefaultSize} × ${nativeDefaultSize} render; no additional detail.`}
 downloadsize.onchange=()=>{updateSizeWarning();show()};
